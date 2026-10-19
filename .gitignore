@@ -1,0 +1,22 @@
+# Footage and generated output - large, and reproducible from the source files
+media/
+out/
+games/
+.scout-cache/
+
+# Trained model: keep it, it is small and is the thing that took the work
+!models/
+!models/*.pkl
+
+# Weights fetched by ultralytics on first run
+yolo*.pt
+
+.venv/
+__pycache__/
+*.egg-info/
+
+# Build and test artifacts
+build/
+dist/
+.pytest_cache/
+*.pyc
