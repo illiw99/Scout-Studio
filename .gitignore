@@ -20,3 +20,6 @@ build/
 dist/
 .pytest_cache/
 *.pyc
+
+# Local agent task ledgers
+.codex/runs/
