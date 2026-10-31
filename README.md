@@ -4,6 +4,69 @@ Scout finds plays in flag-football recordings. Set up the field for each video,
 generate a Shotcut review, correct its range markers, then export clips or
 statistics. The saved `review.mlt` is the source of truth.
 
+## Scout Studio — native desktop app
+
+Scout Studio provides a native desktop window for the complete match workflow.
+Open **Scout Studio** from the Linux Applications menu after the one-time setup
+below. Day-to-day use needs no terminal or Python knowledge.
+
+- Browse and search matches in a local library, or create a new match.
+- Import camera videos with the file picker or drag them into the window.
+  Imports copy the originals, report progress, and reject filename collisions.
+- Select each video, scrub to a reference frame, and click around its field.
+  Drag corners to adjust, right-click to remove, then **Save field**.
+- Click **Find plays**. The processing queue runs one match at a time while you
+  keep browsing. It also observes an existing W3 batch and waits for it to finish.
+- Watch the **entire match** in **Review & export**, including all footage between
+  detected plays. Playback automatically continues into the next camera file.
+  Scrub anywhere on the full-match slider or marker timeline. The timeline shows
+  a sliding 60-second window by default; selecting a play focuses on its range
+  with context so the handles stay easy to grab. **Scroll** slides through time;
+  **Ctrl+scroll** zooms around the pointer. Choose 15s/30s/60s/2min/5min windows,
+  drag the scrollbar, or use **Fit match** for the overview.
+- Click a marker to jump to it. Adjust start/end times and labels, drag the
+  selected marker's timeline edges (snapped to source frames), add missing plays,
+  or delete proposals. Playback previews a dragged boundary, pauses during a
+  scrub, and resumes afterward only if it was playing beforehand.
+  **Save play changes** writes the authoritative
+  `review.mlt`; the original is backed up as `review.before-studio.mlt`.
+- To mark a missed play, press **N** at its start, use **I** / **O** to set in/out
+  points at the cursor, and press **Ctrl+S** to save. **Space** plays/pauses,
+  **Left/Right** skip five seconds, and **comma/period** step one frame while
+  paused. Film Hub's local-player behavior is adapted in Python/Qt: **R** replays,
+  **L** repeats the selected play (or whole match), **M** mutes, **F** opens native
+  fullscreen (Esc exits), and speeds range from 0.25× to 3×. Shortcuts except
+  Ctrl+S are inactive while typing. Unsaved edits prompt before leaving a marker.
+  Film Hub's shared navy, gray and lavender palette is available in **Light mode**
+  and **Dark mode**, remembered between launches. No Film Hub server is required.
+- Playback, marker and timeline controls use compact SVG symbols with accessible
+  names and shortcut tooltips. Press **?** or **F1** for the shortcut guide.
+  **Page Up/Down** jump between plays, **Shift+Left/Right** skip one second,
+  **+/−** zoom, **Ctrl+0** fits the match, **C** centers on the cursor, and **[ / ]**
+  slide half a window. Exact position, window length and marker bounds stay visible.
+- Use **Undo/Redo** (Ctrl+Z / Ctrl+Shift+Z) for marker additions, deletions,
+  boundary changes and label edits. Saves and undo/redo preserve your viewing
+  position and playback. Undo history lasts until you reload or change matches.
+- **Export play clips** creates MP4s from the saved review. **Open output folder**
+  takes you to the result. Shotcut is optional; the review workflow is built in.
+
+One-time setup for a source checkout:
+
+```bash
+.venv/bin/python -m pip install -e '.[desktop]'
+.venv/bin/python scripts/install_studio.py
+```
+
+You can also launch with `./start-studio.sh` or `scout-studio`. Select another
+library with **Change library**; the app remembers your choice. A library is a
+folder containing `media/`, `fields/`, `out/`, and optional `scout.json` settings.
+New libraries use this checkout's included play model. The first detection run
+may download YOLO weights. Large imports need space for a copy of the footage.
+
+The desktop dependency is optional; existing command-line usage is unchanged.
+The Linux menu launcher uses this checkout's installed environment. This is not
+a standalone installer for other computers; those need the one-time setup too.
+
 ## Install
 
 Python 3.10+ is required. Run from this repository:
@@ -15,7 +78,7 @@ pip install -e .
 scout --help
 ```
 
-Install Shotcut separately for reviewing. Scout uses system FFmpeg when available,
+Install Shotcut separately if you prefer it for reviewing. Scout uses system FFmpeg when available,
 otherwise the binary supplied by `imageio-ffmpeg`. Detection runs on CPU or CUDA;
 the first detection run may download YOLO weights. The included play model is at
 `models/play.pkl`. Keep that file with this checkout; a wheel does not bundle it.
@@ -65,9 +128,9 @@ scout --match Match-01 run
 ```
 
 Detection is cached. The only review deliverable is
-`out/Match-01/review.mlt`: no automatic MP4 export, second MLT, or internal review
-application. Open it in Shotcut and add, delete, rename, or adjust **range
-markers**, then save. Review the entire match: unmarked footage becomes negative
+`out/Match-01/review.mlt`: no automatic MP4 export or second MLT. Review it inside
+Scout Studio's **Review & export** tab, or open it in Shotcut and add, delete,
+rename, or adjust **range markers**, then save. Review the entire match: unmarked footage becomes negative
 training data. Point markers are treated as notes and ignored.
 
 Keep the original footage timeline intact. Trimming/splitting clips, gaps,

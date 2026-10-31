@@ -1,0 +1,178 @@
+"""Native UI integration, including field edits and a real queued MP4 export."""
+import importlib.util
+import os
+from pathlib import Path
+import tempfile
+import time
+import unittest
+from unittest.mock import patch
+
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+HAS_QT = importlib.util.find_spec('PySide6') is not None
+
+
+@unittest.skipUnless(HAS_QT, 'install the desktop extra to test the native UI')
+class DesktopIntegrationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtWidgets import QApplication
+        from scout.desktop.theme import STYLE
+        cls.app = QApplication.instance() or QApplication([])
+        cls.app.setStyleSheet(STYLE)
+
+    def wait_for(self, condition, seconds=15):
+        from PySide6.QtTest import QTest
+        deadline = time.monotonic()+seconds
+        while not condition() and time.monotonic() < deadline:
+            self.app.processEvents()
+            QTest.qWait(20)
+        self.assertTrue(condition(), 'Timed out waiting for desktop operation')
+
+    def test_import_field_edit_preview_and_queued_export(self):
+        from PySide6.QtCore import QPoint, Qt, QSettings
+        from PySide6.QtTest import QTest
+        from scout import groundtruth, shotcut
+        from scout.media import ffmpeg_exe, probe, run
+        from scout.timeline import Clip
+        from scout.desktop import library
+        from scout.desktop.app import Studio
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sources = []
+            for i, color in enumerate(['red', 'blue']):
+                path = root/f'camera{i}.mp4'
+                run([ffmpeg_exe(), '-v', 'error', '-f', 'lavfi', '-i',
+                     f'color=c={color}:s=160x90:r=25:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(path)])
+                sources.append(path)
+            library.import_videos(root, 'Demo', sources)
+            preferences = QSettings(str(root/'preferences.ini'), QSettings.Format.IniFormat)
+            with patch('scout.desktop.app.QSettings', return_value=preferences):
+                studio = Studio(root)
+            errors = []
+            studio.show_error = errors.append
+            studio.show()
+            self.wait_for(lambda: bool(studio.data) and studio.frame_ready)
+            # Draw a field with real native mouse events.
+            rect = studio.canvas.image_rect()
+            for x, y in [(.1, .2), (.9, .2), (.9, .8), (.1, .8)]:
+                QTest.mouseClick(studio.canvas, Qt.MouseButton.LeftButton,
+                    pos=QPoint(int(rect.x()+x*rect.width()), int(rect.y()+y*rect.height())))
+            self.assertTrue(studio.dirty)
+            self.assertTrue(studio.save_current())
+            self.assertFalse(studio.dirty)
+            studio.next_video()
+            self.wait_for(lambda: studio.frame_ready and studio.video_index == 1)
+            studio.canvas.points = [[.1, .2], [.9, .2], [.9, .8], [.1, .8]]
+            studio.field_changed()
+            self.assertTrue(studio.save_current())
+            self.assertTrue(studio.run_button.isEnabled())
+            # Supply a review across a camera-file boundary, then edit it natively.
+            clips = [Clip(probe(root/'media/Demo'/p.name), i*2., 0) for i, p in enumerate(sources)]
+            cfg = library.configuration(root, 'Demo')
+            review = root/'out/Demo/review.mlt'
+            shotcut.write_review(cfg, clips, groundtruth.to_plays([groundtruth.Marked(1, .5, 3.5)]), review)
+            studio.reload_match()
+            self.wait_for(lambda: studio.data is not None and bool(studio.data['plays']) and studio.frame_ready)
+            studio.plays.setCurrentRow(0)
+            self.assertEqual(len(studio.transport.clips), 2)
+            self.assertEqual(studio.transport.duration, 4.)
+            studio.transport.pause()
+            studio.play_name.setText('Touchdown')
+            studio.play_in.setValue(1.)
+            studio.play_out.setValue(3.)
+            # Import completion must not switch away from an unsaved editor.
+            before_data = studio.data
+            studio.import_complete('Imported', 1, studio.load_token)
+            self.assertIs(studio.data, before_data)
+            self.assertTrue(studio.marker_dirty)
+            studio.save_play()
+            studio.transport.pause()
+            self.assertEqual(groundtruth.load(review)[0].text, 'Touchdown')
+            # Saving during a drag can reorder markers. Preserve the dragged
+            # marker's identity and its opposite, separately edited boundary.
+            studio.commit_plays([*studio.data['plays'], groundtruth.Marked(2, 3.2, 3.8, 'Other')], selected=0)
+            studio.play_in.setValue(3.3)
+            studio.play_out.setValue(3.9)
+            from PySide6.QtWidgets import QMessageBox
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Save):
+                studio.drag_marker(0, .8, 3.)
+            by_name = {p.text: p for p in groundtruth.load(review)}
+            self.assertEqual((by_name['Other'].start, by_name['Other'].end), (3.2, 3.8))
+            self.assertEqual((by_name['Touchdown'].start, by_name['Touchdown'].end), (.8, 3.9))
+            for _ in range(3):
+                studio.undo_marker()
+            self.assertEqual(len(groundtruth.load(review)), 1)
+            # Mark a missed play in footage outside the detected range.
+            studio.transport.seek(.1, play=False)
+            studio.add_play()
+            studio.set_boundary('in')
+            studio.transport.seek(.4, play=False)
+            studio.set_boundary('out')
+            self.assertTrue(studio.marker_dirty)
+            self.assertTrue(studio.save_play())
+            self.assertEqual(len(groundtruth.load(review)), 2)
+            self.assertAlmostEqual(groundtruth.load(review)[0].start, .1)
+            studio.undo_marker()
+            self.assertEqual(len(groundtruth.load(review)), 1)
+            studio.redo_marker()
+            self.assertEqual(len(groundtruth.load(review)), 2)
+            studio.plays.setCurrentRow(0)
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
+                studio.delete_play()
+            self.assertEqual(len(groundtruth.load(review)), 1)
+            # Drag the remaining play's left edge, then undo that edit.
+            studio.timeline.fit()
+            QTest.mousePress(studio.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(studio.timeline.x(1.)), 55))
+            QTest.mouseMove(studio.timeline, QPoint(round(studio.timeline.x(.8)), 55))
+            QTest.mouseRelease(studio.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(studio.timeline.x(.8)), 55))
+            self.assertAlmostEqual(groundtruth.load(review)[0].start, .8, places=1)
+            studio.undo_marker()
+            self.assertAlmostEqual(groundtruth.load(review)[0].start, 1.)
+            # Real playback automatically enters the next camera file and keeps
+            # running past the marker's end through previously unmarked footage.
+            studio.tabs.setCurrentIndex(1)
+            self.assertEqual(studio.play_button.text(), '')
+            self.assertFalse(studio.play_button.icon().isNull())
+            self.assertIn('Space', studio.play_button.toolTip())
+            # Keyboard actions remain available without text-heavy toolbars.
+            studio.timeline.setFocus()
+            QTest.keyClick(studio.timeline, Qt.Key.Key_C)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_M)
+            self.assertTrue(studio.audio.isMuted())
+            self.assertEqual(studio.mute_button.symbol, 'muted')
+            QTest.keyClick(studio.timeline, Qt.Key.Key_M)
+            self.assertFalse(studio.audio.isMuted())
+            studio.transport.seek(1.8, play=True)
+            self.wait_for(lambda: studio.transport.index == 1 and studio.transport.position > 2.1)
+            self.wait_for(lambda: studio.transport.position > 3.5)
+            self.wait_for(lambda: not studio.transport.want_play and studio.transport.position >= 3.99)
+            # Paused scrubbing must decode a frame too, rather than requiring play.
+            studio.transport.seek(.25, play=False)
+            self.wait_for(lambda: studio.transport.index == 0 and studio.transport.pending is None
+                          and studio.video_widget.videoSink().videoFrame().isValid())
+            self.assertFalse(studio.transport.want_play)
+            studio.toggle_fullscreen()
+            self.assertTrue(studio.fullscreen_dialog.isFullScreen())
+            studio.toggle_fullscreen()
+            self.assertIsNone(studio.fullscreen_dialog)
+            self.assertEqual(studio.player_layout.indexOf(studio.video_widget), 0)
+            studio.toggle_theme()
+            self.assertEqual(self.app.property('studioTheme'), 'light')
+            studio.toggle_theme()
+            self.assertEqual(self.app.property('studioTheme'), 'dark')
+            studio.enqueue('cut')
+            self.wait_for(lambda: bool(studio.jobs.history) and studio.jobs.current is None, seconds=25)
+            self.assertEqual(studio.jobs.history[-1][2], 'Finished')
+            exports = list((root/'out/Demo/clips').glob('*.mp4'))
+            self.assertEqual(len(exports), 1)
+            self.assertAlmostEqual(probe(exports[0]).duration, 2., places=1)
+            self.wait_for(lambda: not studio.tasks)
+            self.assertEqual(errors, [])
+            studio.close()
+            self.app.processEvents()
+
+
+if __name__ == '__main__':
+    unittest.main()

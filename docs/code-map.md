@@ -19,15 +19,15 @@ when moving responsibilities; read only paths relevant to the task.
 | Tables, timelines, filmstrips and annotations | `scout/report.py` |
 | Collection, merging and clip renaming | `scout/collect.py`, `scout/merge.py`, `scout/rename_clips.py` |
 | Native app entry, window, field/review editing and shortcuts | `scout/desktop/app.py` |
-| Qt task runners and field canvas | `scout/desktop/widgets.py` |
+| Qt task runners, click-to-seek slider and field canvas | `scout/desktop/widgets.py` |
 | Native match playback and marker timeline | `scout/desktop/review.py` |
 | Library imports, fields and conflict-safe review saves | `scout/desktop/library.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
-| Native theme and app icon | `scout/desktop/theme.py`, `scout/desktop/scout.svg` |
+| Native theme and app icon | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/scout.svg` |
 | Packaging, console entry points and optional Qt dependencies | `pyproject.toml` |
 | Studio launcher and desktop installation | `start-studio.sh`, `scripts/install_studio.py` |
 | Pipeline/export/decode regression tests | `tests/test_workflow.py`, `tests/test_export.py`, `tests/test_decode.py` |
-| Native library, playback and UI checks | `tests/test_desktop_library.py`, `tests/test_desktop_review.py`, `tests/test_desktop_ui.py` |
+| Native library, playback and UI checks | `tests/test_desktop_library.py`, `tests/test_desktop_review.py`, `tests/test_desktop_ui.py`, `tests/test_desktop_jobs.py` |
 | Rename regression checks | `tests/test_rename_clips.py` |
 | Agent workflow and local checks | `AGENTS.md`, `.codex/config.toml`, `.codex/agents/`, `scripts/check-agents.py`, `scripts/check.sh` |
 
