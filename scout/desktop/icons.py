@@ -32,6 +32,11 @@ PATHS = {
     'undo': 'M3 10h11a6 6 0 0 1 0 12H9M3 10l5-5m-5 5 5 5',
     'redo': 'M21 10H10a6 6 0 0 0 0 12h5m6-12-5-5m5 5-5 5',
     'help': 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4m.1 3h.01',
+    'popout': 'M14 3h7v7m0-7L10 14M10 3H3v18h18v-7',
+    'sidebar': 'M3 3h18v18H3ZM9 3v18',
+    'inspector': 'M3 3h18v18H3ZM15 3v18',
+    'more': 'M5 12h.01M12 12h.01M19 12h.01',
+    'queue': 'M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1',
 }
 
 

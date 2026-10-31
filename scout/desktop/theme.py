@@ -25,9 +25,14 @@ _SHEET = Template('''
 QWidget { background: $bg; color: $text; font-family: "Inter", "DejaVu Sans"; font-size: 13px; }
 QFrame#sidebar { background: $surface; border-right: 1px solid $border; }
 QFrame#card { background: $surface; border: 1px solid $border; border-radius: 14px; }
+QFrame#inspector { background: $surface; border: 1px solid $border; border-radius: 10px; }
+QFrame#videoSurface, QFrame#videoPlaceholder { background: #000000; border-radius: 8px; }
+QLabel#videoMessage { color: #cbd2dc; font-size: 16px; }
+QSplitter::handle { background: transparent; width: 6px; }
+QSplitter::handle:hover { background: $border; }
 QLabel { background: transparent; }
 QLabel#brand { font-size: 27px; font-weight: 800; color: $accent; letter-spacing: 3px; }
-QLabel#title { font-size: 27px; font-weight: 700; }
+QLabel#title { font-size: 22px; font-weight: 700; }
 QLabel#muted { color: $muted; }
 QLabel#eyebrow { color: $accent; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
 QLabel#metric { font-size: 26px; font-weight: 700; }
@@ -46,6 +51,8 @@ QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { padding: 12px; margin: 3px 0; border-radius: 8px; color: $text; }
 QListWidget::item:selected { background: $selected; color: $accent; }
 QListWidget::item:hover { background: $raised; }
+QListWidget#playList::item { padding: 7px 6px; margin: 1px 0; font-size: 12px; }
+QDockWidget::title { background: $raised; color: $text; padding: 8px; }
 QTabWidget::pane { border: none; }
 QTabBar::tab { background: transparent; color: $muted; padding: 13px 18px; border-bottom: 2px solid $border; }
 QTabBar::tab:selected { color: $accent; border-bottom: 2px solid $focus; }

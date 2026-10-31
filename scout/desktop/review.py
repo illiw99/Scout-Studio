@@ -180,6 +180,7 @@ class MarkerTimeline(QWidget):
     seekRequested = Signal(float)
     markerSelected = Signal(int)
     rangeEdited = Signal(int, float, float)
+    rangeCreated = Signal(float, float)
     viewChanged = Signal()
     scrubStarted = Signal()
     scrubFinished = Signal()
@@ -195,15 +196,19 @@ class MarkerTimeline(QWidget):
         self.selected = -1
         self.draft = None
         self.drag = None
+        self.create_anchor = None
+        self.create_origin_x = None
+        self.create_moved = False
         self.scrubbing = False
         self.editable = True
         self.setMinimumHeight(115)
         self.setMaximumHeight(150)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
-        self.setToolTip('Click to seek. Click a play to select it. Scroll to slide through time; Ctrl + scroll to zoom. Drag marker edges for fine adjustment.')
+        self.setToolTip('Click to seek or select a play. Shift + drag to create a play. Drag selected play handles to adjust by source frames. Esc cancels a drag. Scroll to pan; Ctrl + scroll to zoom.')
 
     def set_match(self, clips, markers):
+        self.cancel_gesture()
         self.clips = clips
         self.duration = clips[-1].end if clips else 0.
         self.markers = list(markers)
@@ -293,10 +298,12 @@ class MarkerTimeline(QWidget):
             if rect.width() > 30:
                 p.setPen(QColor(colors['text']))
                 p.drawText(rect.adjusted(6, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter, str(i+1))
-            if i == self.selected and rect.width() >= 12:
-                p.setPen(QPen(QColor(colors['accent']), 3))
-                for x in [rect.left()+3, rect.right()-3]:
-                    p.drawLine(QPointF(x, 49), QPointF(x, 63))
+            if i == self.selected and marker.end > marker.start:
+                p.setPen(QPen(QColor(colors['accent']), 2))
+                p.setBrush(QColor(colors['raised']))
+                for x in [self.x(marker.start), self.x(marker.end)]:
+                    p.drawRoundedRect(QRectF(x-4, 44, 8, 24), 2, 2)
+                    p.drawLine(QPointF(x, 50), QPointF(x, 62))
         if self.draft:
             a, b = self.draft
             p.setPen(QPen(QColor(colors['cursor']), 2, Qt.PenStyle.DashLine))
@@ -309,21 +316,74 @@ class MarkerTimeline(QWidget):
             p.setPen(QPen(QColor(colors['cursor']), 2))
             p.drawLine(QPointF(self.x(self.position), 27), QPointF(self.x(self.position), 86))
         p.setPen(QColor(colors['muted']))
-        p.drawText(QRectF(12, 88, self.width()-24, 22), f'{timecode(self.start)[:8]} – {timecode(self.start+self.span)[:8]}  ·  {self.span:g}s window  ·  Scroll: slide  ·  Ctrl + scroll: zoom')
+        caption = (f'{timecode(self.draft[0])} – {timecode(self.draft[1])}  ·  '
+                   f'{self.draft[1]-self.draft[0]:.2f}s  ·  Esc: cancel') if self.draft else (
+                   f'{timecode(self.start)[:8]} – {timecode(self.start+self.span)[:8]}  ·  '
+                   f'{self.span:g}s window  ·  Shift + drag: new play  ·  Scroll: pan  ·  Ctrl + scroll: zoom')
+        p.drawText(QRectF(12, 88, self.width()-24, 22), caption)
+
+    def frame_at(self, seconds):
+        clip = next((c for c in self.clips if c.start <= seconds < c.end), self.clips[-1])
+        return 1/(clip.info.fps or 25.)
+
+    def snap_time(self, seconds):
+        clip = next((c for c in self.clips if c.start <= seconds < c.end), self.clips[-1])
+        frame = self.frame_at(seconds)
+        return max(clip.start, min(clip.end, clip.start+round((seconds-clip.start)/frame)*frame))
+
+    def selected_edge(self, point):
+        if not self.editable or not 0 <= self.selected < len(self.markers) or not 35 <= point.y() <= 78:
+            return None
+        marker = self.markers[self.selected]
+        if marker.end <= marker.start:
+            return None
+        distance, edge = min((abs(point.x()-self.x(seconds)), edge)
+                             for edge, seconds in [('start', marker.start), ('end', marker.end)])
+        return edge if distance <= 8 else None
+
+    def cancel_gesture(self):
+        active = self.drag is not None or self.create_anchor is not None or self.scrubbing
+        self.drag = None
+        self.create_anchor = None
+        self.create_origin_x = None
+        self.create_moved = False
+        self.scrubbing = False
+        self.draft = None
+        self.unsetCursor()
+        self.update()
+        if active:
+            self.scrubFinished.emit()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape and (self.drag is not None or self.create_anchor is not None or self.scrubbing):
+            self.cancel_gesture()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() != Qt.MouseButton.LeftButton or not self.duration:
             return
         self.setFocus()
         point = event.position()
-        if self.editable and 0 <= self.selected < len(self.markers) and 35 <= point.y() <= 78:
+        # Creation takes priority over marker selection and handle hit testing.
+        if self.editable and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+            self.create_anchor = self.snap_time(self.seconds(point.x()))
+            self.create_origin_x = point.x()
+            self.create_moved = False
+            self.draft = (self.create_anchor, self.create_anchor)
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.scrubStarted.emit()
+            self.seekRequested.emit(self.create_anchor)
+            self.update()
+            return
+        edge = self.selected_edge(point)
+        if edge:
             marker = self.markers[self.selected]
-            if self.marker_rect(marker).width() >= 12:
-                for edge, seconds in [('start', marker.start), ('end', marker.end)]:
-                    if abs(point.x()-self.x(seconds)) <= 7:
-                        self.drag = (self.selected, edge, marker.start, marker.end)
-                        self.scrubStarted.emit()
-                        return
+            self.drag = (self.selected, edge, marker.start, marker.end)
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            self.scrubStarted.emit()
+            return
         if 35 <= point.y() <= 78:
             for i in reversed(range(len(self.markers))):
                 if self.marker_rect(self.markers[i]).contains(point):
@@ -333,32 +393,57 @@ class MarkerTimeline(QWidget):
         self.scrubStarted.emit()
         self.seekRequested.emit(self.seconds(point.x()))
 
-    def mouseMoveEvent(self, event):
-        if self.drag:
+    def update_gesture(self, point):
+        if self.create_anchor is not None:
+            at = self.snap_time(self.seconds(point.x()))
+            self.create_moved = abs(point.x()-self.create_origin_x) >= 5
+            self.draft = tuple(sorted((self.create_anchor, at)))
+            self.seekRequested.emit(at)
+            self.update()
+        elif self.drag:
             index, edge, a, b = self.drag
-            at = self.seconds(event.position().x())
-            clip = next((c for c in self.clips if c.start <= at < c.end), self.clips[-1])
-            frame = 1/clip.info.fps
-            at = clip.start+round((at-clip.start)/frame)*frame
+            at = self.snap_time(self.seconds(point.x()))
+            frame = self.frame_at(at)
             self.draft = (max(0., min(at, b-frame)), b) if edge == 'start' else (a, min(self.duration, max(at, a+frame)))
             self.seekRequested.emit(self.draft[0] if edge == 'start' else self.draft[1])
             self.update()
         elif self.scrubbing:
-            self.seekRequested.emit(self.seconds(event.position().x()))
+            self.seekRequested.emit(self.seconds(point.x()))
+
+    def mouseMoveEvent(self, event):
+        if self.drag is not None or self.create_anchor is not None or self.scrubbing:
+            self.update_gesture(event.position())
+        else:
+            edge = self.selected_edge(event.position())
+            if self.editable and event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                self.setCursor(Qt.CursorShape.CrossCursor)
+            elif edge:
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+            else:
+                self.unsetCursor()
 
     def mouseReleaseEvent(self, event):
-        was_active = self.drag is not None or self.scrubbing
-        if self.drag and self.draft:
-            index = self.drag[0]
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        active = self.drag is not None or self.create_anchor is not None or self.scrubbing
+        if not active:
+            return
+        self.update_gesture(event.position())
+        created = None
+        edited = None
+        if self.create_anchor is not None and self.draft and self.create_moved:
             a, b = self.draft
-            self.drag = None
-            self.draft = None
-            self.rangeEdited.emit(index, max(0., a), min(self.duration, b))
-            self.update()
-        self.drag = None
-        self.scrubbing = False
-        if was_active:
-            self.scrubFinished.emit()
+            if b-a >= self.frame_at(a)-1e-9:
+                created = (a, b)
+        elif self.drag and self.draft:
+            edited = (self.drag[0], *self.draft)
+        # Clear the transient state before notifying the owner, which may refresh
+        # the markers synchronously. Finish the scrub exactly once.
+        self.cancel_gesture()
+        if created:
+            self.rangeCreated.emit(*created)
+        elif edited:
+            self.rangeEdited.emit(*edited)
 
     def wheelEvent(self, event):
         angle = event.angleDelta()

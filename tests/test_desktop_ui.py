@@ -88,6 +88,14 @@ class DesktopIntegrationTests(unittest.TestCase):
             studio.save_play()
             studio.transport.pause()
             self.assertEqual(groundtruth.load(review)[0].text, 'Touchdown')
+            studio.play_name.setFocus()
+            self.app.processEvents()
+            studio.play_name.selectAll()
+            QTest.keyClicks(studio.play_name, 'Play action pass')
+            self.assertEqual(studio.play_name.text(), 'Play action pass')
+            studio.play_name.selectAll()
+            QTest.keyClicks(studio.play_name, 'Touchdown')
+            studio.save_play()
             # Saving during a drag can reorder markers. Preserve the dragged
             # marker's identity and its opposite, separately edited boundary.
             studio.commit_plays([*studio.data['plays'], groundtruth.Marked(2, 3.2, 3.8, 'Other')], selected=0)
@@ -120,6 +128,19 @@ class DesktopIntegrationTests(unittest.TestCase):
             with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
                 studio.delete_play()
             self.assertEqual(len(groundtruth.load(review)), 1)
+            # Shift-drag inserts a variable-length, time-labelled play directly.
+            studio.timeline.fit()
+            QTest.mousePress(studio.timeline, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier,
+                pos=QPoint(round(studio.timeline.x(.12)), 55))
+            QTest.mouseMove(studio.timeline, QPoint(round(studio.timeline.x(.44)), 55))
+            QTest.mouseRelease(studio.timeline, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier,
+                pos=QPoint(round(studio.timeline.x(.44)), 55))
+            self.assertEqual(len(groundtruth.load(review)), 2)
+            created = groundtruth.load(review)[0]
+            self.assertAlmostEqual(created.duration, .32, places=2)
+            self.assertEqual(created.text, 'Play 00:00:00.120')
+            studio.undo_marker()
+            studio.plays.setCurrentRow(0)
             # Drag the remaining play's left edge, then undo that edit.
             studio.timeline.fit()
             QTest.mousePress(studio.timeline, Qt.MouseButton.LeftButton,
@@ -133,6 +154,15 @@ class DesktopIntegrationTests(unittest.TestCase):
             # Real playback automatically enters the next camera file and keeps
             # running past the marker's end through previously unmarked footage.
             studio.tabs.setCurrentIndex(1)
+            self.app.processEvents()
+            normal_height = studio.video_widget.height()
+            self.assertGreater(normal_height, 500)
+            self.assertTrue(studio.sidebar.isHidden())
+            studio.toggle_focus()
+            self.app.processEvents()
+            self.assertTrue(studio.inspector_panel.isHidden())
+            self.assertGreater(studio.video_widget.height(), normal_height)
+            studio.toggle_focus()
             self.assertEqual(studio.play_button.text(), '')
             self.assertFalse(studio.play_button.icon().isNull())
             self.assertIn('Space', studio.play_button.toolTip())
@@ -153,16 +183,62 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.wait_for(lambda: studio.transport.index == 0 and studio.transport.pending is None
                           and studio.video_widget.videoSink().videoFrame().isValid())
             self.assertFalse(studio.transport.want_play)
+            self.assertEqual(studio.tabs.count(), 2)
+            for rate in [.1, 10.]:
+                studio.speed.setCurrentIndex(studio.speed.findData(rate))
+                self.assertAlmostEqual(studio.player.playbackRate(), rate)
+            studio.reset_speed()
+            self.assertAlmostEqual(studio.player.playbackRate(), 1.)
+            # The normal pop-out is resizable independently of fullscreen.
+            studio.toggle_popout()
+            window = studio.fullscreen_dialog
+            self.assertFalse(window.isFullScreen())
+            window.activateWindow()
+            self.app.processEvents()
+            QTest.keyClick(window, Qt.Key.Key_Q, Qt.KeyboardModifier.ControlModifier)
+            self.wait_for(lambda: studio.queue_dock.isVisible())
+            studio.show_queue()
+            # An already-open window follows a newly selected match's duration.
+            import shutil
+            longer = root/'media/Longer'
+            longer.mkdir()
+            longer_clips = []
+            for i in range(3):
+                path = longer/f'camera{i}.mp4'
+                shutil.copyfile(sources[0], path)
+                longer_clips.append(Clip(probe(path), i*2., 0))
+            shotcut.write_review(library.configuration(root, 'Longer'), longer_clips, [], root/'out/Longer/review.mlt')
+            studio.select_match('Longer')
+            self.assertEqual(studio.fullscreen_slider.maximum(), 0)
+            self.wait_for(lambda: bool(studio.data) and studio.frame_ready)
+            self.assertEqual(studio.fullscreen_slider.maximum(), 6000)
+            self.assertIn('Longer', window.windowTitle())
+            studio.select_match('Demo')
+            self.wait_for(lambda: bool(studio.data) and studio.frame_ready)
+            self.assertEqual(studio.fullscreen_slider.maximum(), 4000)
+            window.resize(900, 600)
+            self.app.processEvents()
+            small_height = studio.video_widget.height()
+            window.resize(1200, 800)
+            self.wait_for(lambda: studio.video_widget.height() > small_height+100)
+            studio.toggle_popout()
             studio.toggle_fullscreen()
             self.assertTrue(studio.fullscreen_dialog.isFullScreen())
             studio.toggle_fullscreen()
+            self.assertFalse(studio.fullscreen_dialog.isFullScreen())
+            studio.toggle_popout()
             self.assertIsNone(studio.fullscreen_dialog)
             self.assertEqual(studio.player_layout.indexOf(studio.video_widget), 0)
             studio.toggle_theme()
             self.assertEqual(self.app.property('studioTheme'), 'light')
             studio.toggle_theme()
             self.assertEqual(self.app.property('studioTheme'), 'dark')
+            studio.show_queue()
+            self.assertTrue(studio.queue_dock.isVisible())
+            studio.show_queue()
+            current_tab = studio.tabs.currentIndex()
             studio.enqueue('cut')
+            self.assertEqual(studio.tabs.currentIndex(), current_tab)
             self.wait_for(lambda: bool(studio.jobs.history) and studio.jobs.current is None, seconds=25)
             self.assertEqual(studio.jobs.history[-1][2], 'Finished')
             exports = list((root/'out/Demo/clips').glob('*.mp4'))

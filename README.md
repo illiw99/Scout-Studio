@@ -17,6 +17,8 @@ below. Day-to-day use needs no terminal or Python knowledge.
   Drag corners to adjust, right-click to remove, then **Save field**.
 - Click **Find plays**. The processing queue runs one match at a time while you
   keep browsing. It also observes an existing W3 batch and waits for it to finish.
+  **Queue** (Ctrl+Q) opens the single app-wide queue in a separate, nonblocking
+  panel; starting a job keeps you on the match you are viewing.
 - Watch the **entire match** in **Review & export**, including all footage between
   detected plays. Playback automatically continues into the next camera file.
   Scrub anywhere on the full-match slider or marker timeline. The timeline shows
@@ -24,6 +26,14 @@ below. Day-to-day use needs no terminal or Python knowledge.
   with context so the handles stay easy to grab. **Scroll** slides through time;
   **Ctrl+scroll** zooms around the pointer. Choose 15s/30s/60s/2min/5min windows,
   drag the scrollbar, or use **Fit match** for the overview.
+- Review puts the video first, with a compact play inspector at the side.
+  **V** hides the inspector for more viewing space; **Ctrl+B** toggles the match
+  library. The video retains its aspect ratio as the workspace resizes.
+- **Shift + drag** on the timeline creates and saves a play at the length you
+  select, in either direction and across camera-file boundaries. A live preview
+  shows its bounds and duration; **Esc** cancels. Default labels use the start
+  time, such as `Play 00:12:34.560`, and follow boundary changes. Custom names
+  are kept. Click a play and drag either handle to resize it; undo is available.
 - Click a marker to jump to it. Adjust start/end times and labels, drag the
   selected marker's timeline edges (snapped to source frames), add missing plays,
   or delete proposals. Playback previews a dragged boundary, pauses during a
@@ -34,8 +44,12 @@ below. Day-to-day use needs no terminal or Python knowledge.
   points at the cursor, and press **Ctrl+S** to save. **Space** plays/pauses,
   **Left/Right** skip five seconds, and **comma/period** step one frame while
   paused. Film Hub's local-player behavior is adapted in Python/Qt: **R** replays,
-  **L** repeats the selected play (or whole match), **M** mutes, **F** opens native
-  fullscreen (Esc exits), and speeds range from 0.25× to 3×. Shortcuts except
+  **L** repeats the selected play (or whole match), **M** mutes, and speeds range
+  from **0.1× to 10×**. **< / >** slow down / speed up; **0** resets to 1×.
+  **P** opens a normal, resizable video window (or brings it back). **F** toggles
+  fullscreen; **Esc** returns to the normal window. Double-click the video for
+  fullscreen. Speeds and the current match stay synchronized between windows.
+  Shortcuts except
   Ctrl+S are inactive while typing. Unsaved edits prompt before leaving a marker.
   Film Hub's shared navy, gray and lavender palette is available in **Light mode**
   and **Dark mode**, remembered between launches. No Film Hub server is required.
@@ -47,8 +61,8 @@ below. Day-to-day use needs no terminal or Python knowledge.
 - Use **Undo/Redo** (Ctrl+Z / Ctrl+Shift+Z) for marker additions, deletions,
   boundary changes and label edits. Saves and undo/redo preserve your viewing
   position and playback. Undo history lasts until you reload or change matches.
-- **Export play clips** creates MP4s from the saved review. **Open output folder**
-  takes you to the result. Shotcut is optional; the review workflow is built in.
+- **Export clips** creates MP4s from the saved review. The **…** menu holds
+  refresh, output-folder and optional Shotcut actions. The review workflow is built in.
 
 One-time setup for a source checkout:
 

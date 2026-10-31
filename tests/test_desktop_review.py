@@ -205,6 +205,93 @@ class TimelineWindowTests(unittest.TestCase):
         self.assertAlmostEqual(edits[0][2], 1806.)
         self.timeline.close()
 
+    def shift_drag(self, start, end, cancel=False):
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        self.timeline.show()
+        before = []
+        after = []
+        created = []
+        edits = []
+        seeks = []
+        self.timeline.scrubStarted.connect(lambda: before.append(True))
+        self.timeline.scrubFinished.connect(lambda: after.append(True))
+        self.timeline.rangeCreated.connect(lambda a, b: created.append((a, b)))
+        self.timeline.rangeEdited.connect(lambda *args: edits.append(args))
+        self.timeline.seekRequested.connect(seeks.append)
+        first = QPoint(round(self.timeline.x(start)), 55)
+        last = QPoint(round(self.timeline.x(end)), 55)
+        QTest.mousePress(self.timeline, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, first)
+        QTest.mouseMove(self.timeline, last)
+        if cancel:
+            QTest.keyClick(self.timeline, Qt.Key.Key_Escape)
+        QTest.mouseRelease(self.timeline, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, last)
+        self.assertEqual(before, [True])
+        self.assertEqual(after, [True])
+        self.assertTrue(seeks)
+        self.assertEqual(edits, [])
+        self.assertIsNone(self.timeline.draft)
+        self.assertIsNone(self.timeline.create_anchor)
+        self.timeline.close()
+        return created
+
+    def test_shift_drag_reverse_creates_sorted_range_over_existing_marker(self):
+        self.timeline.selected = 0
+        self.timeline.focus_range(1800., 1806.)
+        original = list(self.timeline.markers)
+        created = self.shift_drag(1805., 1801.)
+        self.assertEqual(len(created), 1)
+        a, b = created[0]
+        self.assertLess(a, b)
+        self.assertAlmostEqual(a, 1801., delta=.04)
+        self.assertAlmostEqual(b, 1805., delta=.04)
+        self.assertEqual(self.timeline.markers, original)
+        for value in (a, b):
+            self.assertAlmostEqual(value*25, round(value*25))
+
+    def test_shift_drag_snaps_to_each_source_clock_across_join(self):
+        from scout.media import MediaInfo
+        from scout.timeline import Clip
+        clips = [Clip(MediaInfo(Path('/one.mp4'), 10.01, 160, 90, 25., None), 0., 0),
+                 Clip(MediaInfo(Path('/two.mp4'), 12., 160, 90, 30., None), 10.01, 0)]
+        self.timeline.set_match(clips, [])
+        self.timeline.set_window(10., 10.)
+        created = self.shift_drag(11.18, 9.13)
+        self.assertEqual(len(created), 1)
+        a, b = created[0]
+        self.assertLess(a, 10.01)
+        self.assertGreater(b, 10.01)
+        self.assertAlmostEqual(a*25, round(a*25))
+        self.assertAlmostEqual((b-10.01)*30, round((b-10.01)*30))
+
+    def test_escape_cancels_creation_and_click_does_not_create(self):
+        self.timeline.focus_range(1800., 1806.)
+        self.assertEqual(self.shift_drag(1801., 1804., cancel=True), [])
+        self.assertEqual(self.shift_drag(1801., 1801.), [])
+
+    def test_subframe_shift_drag_does_not_create(self):
+        self.timeline.set_window(.2, 1801.)
+        self.assertEqual(self.shift_drag(1801., 1801.005), [])
+
+    def test_escape_cancels_selected_edge_without_edit(self):
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        self.timeline.show()
+        self.timeline.selected = 0
+        self.timeline.focus_range(1800., 1806.)
+        edits, finished = [], []
+        self.timeline.rangeEdited.connect(lambda *args: edits.append(args))
+        self.timeline.scrubFinished.connect(lambda: finished.append(True))
+        first = QPoint(round(self.timeline.x(1800.)), 55)
+        last = QPoint(round(self.timeline.x(1799.)), 55)
+        QTest.mousePress(self.timeline, Qt.MouseButton.LeftButton, pos=first)
+        QTest.mouseMove(self.timeline, last)
+        QTest.keyClick(self.timeline, Qt.Key.Key_Escape)
+        QTest.mouseRelease(self.timeline, Qt.MouseButton.LeftButton, pos=last)
+        self.assertEqual(edits, [])
+        self.assertEqual(finished, [True])
+        self.timeline.close()
+
     def test_normal_scroll_slides_and_control_scroll_zooms_at_pointer(self):
         from PySide6.QtCore import QPoint, QPointF, Qt
         from PySide6.QtGui import QWheelEvent
