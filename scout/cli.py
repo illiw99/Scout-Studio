@@ -375,6 +375,23 @@ def cmd_rename(args) -> int:
     return 0
 
 
+def cmd_rename_clips(args) -> int:
+    from .rename_clips import rename
+    cfg = _load(args)
+    if not cfg.match:
+        raise ValueError('rename-clips requires --match')
+    folder = cfg.path(cfg.out_dir) / 'clips'
+    if not folder.is_dir():
+        raise ValueError(f'clips folder not found: {folder}. Export the reviewed clips first '
+                         f'with scout --match {cfg.match} cut')
+    paths = [folder]
+    if args.clips:
+        if any(Path(name).name != name or '\\' in name for name in args.clips):
+            raise ValueError('clip names must be filenames within the match clips folder')
+        paths = [folder / name for name in args.clips]
+    return rename(paths, args.pattern, args.start, args.pad, args.dry_run)
+
+
 def cmd_gt(args) -> int:
     """Write the hand-marked plays out as a CSV, for reference and for tuning."""
     import csv as _csv
@@ -631,6 +648,14 @@ def main(argv=None) -> int:
     s.add_argument("--prefix", required=True, help="e.g. NT17_SAI")
     s.add_argument("--out", default="games")
     s.set_defaults(fn=cmd_rename)
+
+    s = sub.add_parser('rename-clips', help='rename match clips with a custom <N> pattern')
+    s.add_argument('--pattern', required=True, help='e.g. "xyz_<N>_abc"')
+    s.add_argument('--start', type=int, default=1, help='first number (default: 1)')
+    s.add_argument('--pad', type=int, help='number width (default: automatic from clip count)')
+    s.add_argument('--clips', nargs='+', help='specific clip filenames, in desired order')
+    s.add_argument('--dry-run', action='store_true', help='preview without renaming')
+    s.set_defaults(fn=cmd_rename_clips)
 
     s = sub.add_parser("stats", aliases=["gt"], help="export marked plays from a .mlt as CSV")
     s.add_argument("--mlt", required=True)

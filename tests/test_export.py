@@ -34,6 +34,14 @@ class ExportIntegrationTests(unittest.TestCase):
             blue=grab_frame(exports[0],1.5).mean(axis=(0,1))
             self.assertGreater(red[0],red[2]+100)
             self.assertGreater(blue[2],blue[0]+100)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(['--match', 'Match', '--out-dir', str(root),
+                                           'rename-clips', '--pattern', '<N>_reviewed',
+                                           '--start', '42']), 0)
+            renamed = root / 'clips' / '42_reviewed.mp4'
+            self.assertTrue(renamed.exists())
+            self.assertEqual(json.loads((root/'clips'/'exports.json').read_text()),
+                             ['42_reviewed.mp4'])
             (root/'clips'/'personal.txt').write_text('keep')
             shotcut.write_review(Config(),clips,[],review)
             with contextlib.redirect_stdout(io.StringIO()):

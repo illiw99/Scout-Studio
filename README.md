@@ -245,6 +245,30 @@ names, plus `stats.json` with play count and total/mean duration. These are timi
 statistics; team/player attribution and scoring are not inferred. Empty reviews
 produce zero clips and valid empty statistics.
 
+### Rename exported clips
+
+Rename exported match clips with a custom pattern and starting number:
+
+```bash
+scout --match W2_SAI-CON rename-clips --pattern 'xyz_<N>_abc' --start 7 --dry-run
+scout --match W2_SAI-CON rename-clips --pattern 'xyz_<N>_abc' --start 7
+```
+
+This renames MP4s in `out/W2_SAI-CON/clips` in natural filename order to
+`xyz_07_abc.mp4`, `xyz_08_abc.mp4`, etc. for a two-digit clip count. Numbers
+automatically use leading zeros based on the clip count (and the highest number
+when using `--start`). Use `--pad 3` to override the width with `007`. To rename
+individual clips, supply their current filenames with `--clips`:
+
+```bash
+scout --match W2_SAI-CON rename-clips --pattern '<N>_abc' --start 42 \
+  --clips play_007_06m11s.mp4
+```
+
+Existing destination files are protected. Scout updates `clips/exports.json`
+so later full exports still replace the tracked clips; re-exporting restores
+the standard export filenames.
+
 ## Improve the model from corrected reviews
 
 ```bash
