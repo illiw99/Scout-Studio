@@ -29,7 +29,7 @@ from .widgets import FieldCanvas, Task, SeekSlider
 from .review import MatchPlayer, MarkerTimeline, timecode
 from .icons import IconButton
 from .labels import label_for, time_label
-from .player_window import PlayerWindow
+from .player_window import PlayerWindow, PlayFrame
 
 PLAYBACK_RATES = [.1, .2, .25, .5, .75, 1., 1.25, 1.5, 2., 3., 4., 5., 7.5, 8., 10.]
 
@@ -324,7 +324,8 @@ class Studio(QMainWindow):
         self.video_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.video_widget.setAspectRatioMode(Qt.AspectRatioMode.KeepAspectRatio)
         self.video_widget.installEventFilter(self)
-        self.player_layout.addWidget(self.video_widget, 1)
+        self.video_frame = PlayFrame(self.video_widget)
+        self.player_layout.addWidget(self.video_frame, 1)
         self.video_placeholder = QFrame()
         self.video_placeholder.setObjectName('videoPlaceholder')
         placeholder = QVBoxLayout(self.video_placeholder)
@@ -1155,6 +1156,7 @@ class Studio(QMainWindow):
                 self.redo_stack.clear()
             self.timeline.markers = list(self.data['plays'])
             self.load_marker_editor(selected)
+            self.update_play_frame(self.transport.position)
             self.update_metrics()
             self.statusBar().showMessage('Review saved. The original is kept as review.before-studio.mlt.', 8000)
             return True
@@ -1328,6 +1330,7 @@ class Studio(QMainWindow):
 
     def play_position(self, seconds):
         self.refresh_play_icons()
+        self.update_play_frame(seconds)
         self.play_time.setText(f'{timecode(seconds)} / {timecode(self.transport.duration)[:8]}')
         if not self.play_slider.isSliderDown():
             self.play_slider.setValue(round(seconds*1000))
@@ -1338,6 +1341,11 @@ class Studio(QMainWindow):
             self.fullscreen_time.setText(f'{timecode(seconds)} / {timecode(self.transport.duration)[:8]}')
         if self.transport.want_play and not self.transport.scrubbing and not self.timeline.drag and seconds > self.timeline.start+self.timeline.span*.85:
             self.timeline.pan(seconds-self.timeline.span*.4)
+
+    def update_play_frame(self, seconds):
+        active = bool(self.transport.clips and self.data and any(
+            marker.start <= seconds < marker.end for marker in self.data['plays']))
+        self.video_frame.set_in_play(active)
 
     def review_source_changed(self, index):
         clip = self.transport.clips[index]
@@ -1517,9 +1525,11 @@ class Studio(QMainWindow):
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        self.player_layout.removeWidget(self.video_widget)
+        self.player_layout.removeWidget(self.video_frame)
+        self.video_frame.setParent(dialog)
         self.video_placeholder.show()
-        layout.addWidget(self.video_widget, 1)
+        layout.addWidget(self.video_frame, 1)
+        self.video_frame.show()
         self.video_widget.show()
         slider = SeekSlider(Qt.Orientation.Horizontal)
         slider.setRange(0, round(self.transport.duration*1000))
@@ -1567,8 +1577,10 @@ class Studio(QMainWindow):
             shortcut.activated.connect(callback)
         def restore(_):
             self.settings.setValue('videoWindowGeometry', dialog.saveGeometry())
-            layout.removeWidget(self.video_widget)
-            self.player_layout.insertWidget(0, self.video_widget, 1)
+            layout.removeWidget(self.video_frame)
+            self.video_frame.setParent(self.video_surface)
+            self.player_layout.insertWidget(0, self.video_frame, 1)
+            self.video_frame.show()
             self.video_placeholder.hide()
             self.video_widget.show()
             self.fullscreen_dialog = None

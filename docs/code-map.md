@@ -22,7 +22,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Native app entry, window, field/review editing and shortcuts | `scout/desktop/app.py` |
 | Qt task runners, click-to-seek slider and field canvas | `scout/desktop/widgets.py` |
 | Native match playback and marker timeline | `scout/desktop/review.py` |
-| Resizable video window and fullscreen transitions | `scout/desktop/player_window.py` |
+| Resizable video window, fullscreen transitions and subtle in-play video frame | `scout/desktop/player_window.py` |
 | Timestamp play labels and custom-name preservation | `scout/desktop/labels.py` |
 | Library imports, fields and conflict-safe review saves | `scout/desktop/library.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
