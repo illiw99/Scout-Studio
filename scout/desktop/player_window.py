@@ -12,8 +12,8 @@ class PlayFrame(QFrame):
         super().__init__()
         self.setObjectName('videoSurface')
         layout = QVBoxLayout(self)
-        # Reserve the same slim rim in both states so playback never resizes.
-        layout.setContentsMargins(3, 3, 3, 3)
+        # Reserve space for the ring and its glow so playback never resizes.
+        layout.setContentsMargins(6, 6, 6, 6)
         layout.addWidget(video)
         self.in_play = False
         self.strength = 0.
@@ -41,11 +41,13 @@ class PlayFrame(QFrame):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        color = QColor(active_colors()['accent'])
-        color.setAlphaF(.55*self.strength)
-        painter.setPen(QPen(color, 1.5))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), 7, 7)
+        rim = self.rect().adjusted(3, 3, -3, -3)
+        for width, opacity in [(6., .18), (4.5, .28), (3., .95)]:
+            color = QColor(active_colors()['accent'])
+            color.setAlphaF(opacity*self.strength)
+            painter.setPen(QPen(color, width))
+            painter.drawRoundedRect(rim, 8, 8)
 
 
 class PlayerWindow(QDialog):
