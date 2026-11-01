@@ -41,6 +41,8 @@ plan. Long tasks may use ignored `.codex/runs/<task>.md` ledgers without secrets
 footage or personal data. If delegation is unavailable, work sequentially and
 report that limitation. The coordinator makes focused local commits after coherent
 changes and relevant checks, preserves unrelated edits, and reports hashes.
+Commit regularly after each finished change using the configured Git author;
+do not add `Co-authored-by` trailers or assistant attribution.
 Workers never stage or commit. Pushing/publishing still needs user authorization.
 
 ## Validation

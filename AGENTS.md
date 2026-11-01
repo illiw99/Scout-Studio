@@ -13,6 +13,10 @@ Read `docs/code-map.md` first; open README sections and source only as needed.
 - Keep commits focused and descriptive so the history forms a useful timeline.
   Split independent changes into separate commits; keep tightly coupled changes
   together so each commit leaves the project in a usable state.
+- Commit regularly after each completed, checked change instead of collecting
+  an entire task in one final commit. Describe the behavior and validation.
+- Use the configured Git author. Do not add `Co-authored-by` trailers, agent
+  coauthors, or assistant attribution to commit messages.
 - Workers never stage or commit; the coordinator owns integration and commits.
 - Stage only files belonging to the change. Preserve unrelated user edits and
   exclude secrets, local state, generated files, and footage.
