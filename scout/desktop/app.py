@@ -505,7 +505,10 @@ class Studio(QMainWindow):
                 ('?', self.show_shortcuts), ('F1', self.show_shortcuts),
                 ('Ctrl+Z', self.undo_marker), ('Ctrl+Shift+Z', self.redo_marker)]:
             shortcut = QShortcut(QKeySequence(key), page)
-            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            # Transport must also win over a focused header button's native
+            # Space activation (for example the match-library toggle).
+            shortcut.setContext(Qt.ShortcutContext.WindowShortcut if key == 'Space'
+                                else Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.setProperty('allowTyping', key == 'Ctrl+S')
             shortcut.activated.connect(callback)
             self.review_shortcuts.append(shortcut)

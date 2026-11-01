@@ -166,6 +166,24 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertEqual(studio.play_button.text(), '')
             self.assertFalse(studio.play_button.icon().isNull())
             self.assertIn('Space', studio.play_button.toolTip())
+            # Space controls playback even after clicking a header control,
+            # rather than activating that focused button again.
+            studio.activateWindow()
+            studio.library_toggle.setFocus()
+            self.app.processEvents()
+            library_hidden = studio.sidebar.isHidden()
+            with patch.object(studio.transport, 'toggle') as toggle:
+                QTest.keyClick(studio.library_toggle, Qt.Key.Key_Space)
+                QTest.keyClick(studio.library_toggle, Qt.Key.Key_Space)
+                self.assertEqual(toggle.call_count, 2)
+            self.assertEqual(studio.sidebar.isHidden(), library_hidden)
+            # Text fields still accept spaces without starting playback.
+            studio.play_name.setFocus()
+            self.app.processEvents()
+            with patch.object(studio.transport, 'toggle') as toggle:
+                QTest.keyClick(studio.play_name, Qt.Key.Key_Space)
+                toggle.assert_not_called()
+            studio.play_name.undo()
             # Keyboard actions remain available without text-heavy toolbars.
             studio.timeline.setFocus()
             QTest.keyClick(studio.timeline, Qt.Key.Key_C)
