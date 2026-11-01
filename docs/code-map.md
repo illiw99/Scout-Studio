@@ -15,6 +15,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Heuristic play segmentation | `scout/segment.py` |
 | Trained classifier, evaluation and parameter tuning | `scout/model.py`, `scout/evaluate.py`, `scout/tune.py` |
 | MP4 cuts, cross-source clips, audio and encoding | `scout/cut.py` |
+| Export filename patterns and native naming preview | `scout/clip_names.py`, `scout/desktop/export_dialog.py` |
 | Shotcut review/playlist writing and marker parsing | `scout/shotcut.py`, `scout/groundtruth.py` |
 | Explicit source reordering with marker remapping and backups | `scout/review_order.py` |
 | Tables, timelines, filmstrips and annotations | `scout/report.py` |
@@ -30,6 +31,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Packaging, console entry points and optional Qt dependencies | `pyproject.toml` |
 | Studio launcher and desktop installation | `start-studio.sh`, `scripts/install_studio.py` |
 | Pipeline/export/decode regression tests | `tests/test_workflow.py`, `tests/test_export.py`, `tests/test_decode.py` |
+| Custom clip names, collision handling and export dialog checks | `tests/test_clip_names.py`, `tests/test_desktop_export_dialog.py` |
 | Camera filename order and review marker migration checks | `tests/test_review_order.py` |
 | Native library, playback and UI checks | `tests/test_desktop_library.py`, `tests/test_desktop_review.py`, `tests/test_desktop_ui.py`, `tests/test_desktop_jobs.py`, `tests/test_desktop_labels.py` |
 | Rename regression checks | `tests/test_rename_clips.py` |

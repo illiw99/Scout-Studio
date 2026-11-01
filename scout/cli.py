@@ -494,14 +494,22 @@ def cmd_segment(args) -> int:
 
 
 def cmd_cut(args) -> int:
+    import hashlib
     cfg = _load(args)
     source = Path(args.mlt) if args.mlt else cfg.path(cfg.out_dir) / "review.mlt"
+    def check_review():
+        if args.review_hash is not None and hashlib.sha256(source.read_bytes()).hexdigest() != args.review_hash:
+            raise ValueError('The review changed since the export preview. Reopen Export clips and try again.')
+    check_review()
     clips = groundtruth.project_clips(source)
     plays = groundtruth.to_plays(groundtruth.load(source))
+    check_review()
     if args.only:
         wanted = {int(x) for x in args.only.split(",")}
         plays = [p for p in plays if p.index in wanted]
-    paths = cut.cut_all(cfg, clips, plays, partial=bool(args.only))
+    paths = cut.cut_all(cfg, clips, plays, partial=bool(args.only),
+                        name_pattern=args.name_pattern, start_number=args.start_number,
+                        number_width=args.number_width)
     print(f"  {len(paths)} clips -> {cfg.path(cfg.out_dir) / 'clips'}")
     return 0
 
@@ -658,6 +666,10 @@ def main(argv=None) -> int:
     s.add_argument("--only", help="comma separated play numbers")
     s.add_argument("--mlt", help="cut the plays marked in this Shotcut project "
                                  "instead of the detected ones")
+    s.add_argument("--name-pattern", help='filename pattern containing one <N>, e.g. "game_<N>"')
+    s.add_argument("--start-number", type=int, default=1, help="first clip number (default: 1)")
+    s.add_argument("--number-width", type=int, help="number width (default: automatic)")
+    s.add_argument("--review-hash", help=argparse.SUPPRESS)
     s.set_defaults(fn=cmd_cut)
 
     s = sub.add_parser("shotcut", help="write Shotcut .mlt projects")

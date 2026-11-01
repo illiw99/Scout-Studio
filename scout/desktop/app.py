@@ -488,7 +488,7 @@ class Studio(QMainWindow):
         self.review_options.addAction('Refresh saved review', self.reload_match)
         self.order_sources_action = self.review_options.addAction('Order camera files by name', self.order_camera_files)
         self.review_options.addAction('Open output folder', self.open_output)
-        self.export_button = button('Export clips', lambda: self.enqueue('cut'), True)
+        self.export_button = button('Export clips', self.export_clips, True)
         zoom.addWidget(self.export_button)
         layout.addLayout(zoom)
         self.review_shortcuts = []
@@ -968,11 +968,33 @@ class Studio(QMainWindow):
         if self.data and all(self.data['regions']) and not self.data['review'].exists() and self.resolve_dirty():
             self.enqueue('run')
 
-    def enqueue(self, command):
+    def export_clips(self):
+        if not self.data or self.match_busy() or self.importing or not self.resolve_marker_dirty():
+            return
+        from scout.groundtruth import to_plays
+        from .export_dialog import ExportDialog
+        import hashlib
+        match, root = self.match, self.root
+        review, expected_hash = self.data['review'], self.data['review_hash']
+        dialog = ExportDialog(self.match, to_plays(self.data['plays']),
+                              review.parent / 'clips', self.settings, self)
+        self.transport.pause()
+        self.reset_speed()
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            try:
+                if (self.match != match or self.root != root or
+                        hashlib.sha256(review.read_bytes()).hexdigest() != expected_hash):
+                    raise ValueError('The review changed. Reopen Export clips to refresh the filename preview.')
+            except (OSError, ValueError) as exc:
+                self.show_error(str(exc))
+                return
+            self.enqueue('cut', dict(dialog.options(), review_hash=expected_hash))
+
+    def enqueue(self, command, options=None):
         if command == 'cut' and not self.resolve_marker_dirty():
             return
         if self.match and not self.importing and not self.match_busy():
-            self.jobs.add(self.match, command)
+            self.jobs.add(self.match, command, options)
             self.statusBar().showMessage(f'{self.match} added to the global processing queue.', 6000)
             self.update_actions()
 
@@ -1449,7 +1471,7 @@ class Studio(QMainWindow):
                     ('Ctrl+Shift+F', self.toggle_fullscreen), ('F', self.toggle_fullscreen),
                     ('Ctrl+`', self.toggle_popout), ('Alt+6', self.toggle_focus),
                     ('Ctrl+Shift+6', self.toggle_focus),
-                    ('Ctrl+E', lambda: self.enqueue('cut')), ('N', self.add_play),
+                    ('Ctrl+E', self.export_clips), ('N', self.add_play),
                     ('Alt+-', lambda: self.change_speed(-1)), ('Alt+=', lambda: self.change_speed(1)),
                     ('?', self.show_shortcuts), ('/', self.show_shortcuts), ('F1', self.show_shortcuts)]
         for modifier, seconds in [('', 1), ('Shift+', 2), ('Ctrl+', 5), ('Ctrl+Shift+', 10)]:

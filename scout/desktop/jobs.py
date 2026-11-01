@@ -22,6 +22,7 @@ class JobQueue(QObject):
         super().__init__(parent)
         self.root = Path(root)
         self.pending = []
+        self.options = {}
         self.current = None
         self.history = []
         self.process = QProcess(self)
@@ -45,10 +46,11 @@ class JobQueue(QObject):
         self.timer.timeout.connect(self.start_next)
         self.timer.start(3000)
 
-    def add(self, match, command):
+    def add(self, match, command, options=None):
         job = (match, command)
         if job == self.current or job in self.pending:
             return
+        self.options[job] = dict(options or {})
         self.pending.append(job)
         self.changed.emit()
         self.start_next()
@@ -69,6 +71,12 @@ class JobQueue(QObject):
         cfg = configuration(self.root, match)
         args = ['--config', str(self.root / 'scout.json'), '--media-dir', str(self.root / 'media'),
                 '--match', match, command]
+        if command == 'cut':
+            for key, flag in [('name_pattern', '--name-pattern'), ('start_number', '--start-number'),
+                              ('number_width', '--number-width'), ('review_hash', '--review-hash')]:
+                value = self.options.get(self.current, {}).get(key)
+                if value is not None:
+                    args.append(f'{flag}={value}')
         # Use bundled model paths in a fresh library through an explicit config.
         config_dir = self.root / 'out' / '.desktop'
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -125,12 +133,15 @@ class JobQueue(QObject):
             self.log.close()
             self.log = None
         self.current = None
+        self.options.pop((match, command), None)
         self.pid = None
         self.finished.emit(match, command, ok)
         self.changed.emit()
         QTimer.singleShot(0, self.start_next)
 
     def cancel(self):
+        for job in self.pending:
+            self.options.pop(job, None)
         self.pending.clear()
         if self.current:
             self.cancelling = True

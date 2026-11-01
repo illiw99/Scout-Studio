@@ -75,7 +75,11 @@ below. Day-to-day use needs no terminal or Python knowledge.
   `0077a`. For an older saved review, **… → Order camera files by name** moves
   markers with their original source footage and saves an exact original backup.
   A play split across files that become separated is kept as separate ranges.
-- **Export clips** creates MP4s from the saved review. The **…** menu holds
+- **Export clips** opens a naming preview before adding the job to the queue.
+  Use **<N>** anywhere in the pattern, such as `Saints_<N>_offense`, choose the
+  first number and digit width (`007`), or keep automatic padding. Preferences
+  are remembered per match; original play-number/time names are also available.
+  MP4s are created from the saved review. The **…** menu holds
   refresh, output-folder and optional Shotcut actions. The review workflow is built in.
 
 One-time setup for a source checkout:

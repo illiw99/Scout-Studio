@@ -15,6 +15,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
+from .clip_names import pattern_names
 from .config import Config
 from .media import ffmpeg_exe, run
 from .segment import Play
@@ -89,45 +90,76 @@ def name_for(play: Play) -> str:
 
 
 def cut_all(cfg: Config, clips: list[Clip], plays: list[Play],
-            out_dir: Path | None = None, progress: bool = True, partial: bool = False) -> list[Path]:
+            out_dir: Path | None = None, progress: bool = True, partial: bool = False,
+            name_pattern: str | None = None, start_number: int = 1,
+            number_width: int | None = None) -> list[Path]:
+    names = (pattern_names(len(plays), name_pattern, start_number, number_width)
+             if name_pattern is not None else [name_for(p) for p in plays])
     out_dir = out_dir or cfg.path(cfg.out_dir) / "clips"
     out_dir.mkdir(parents=True, exist_ok=True)
-    staging = tempfile.TemporaryDirectory(prefix=".export-", dir=out_dir)
-    stage = Path(staging.name)
-    done: list[Path] = []
-    total = len(plays)
-    failures = []
-
-    def job(p: Play) -> Path:
-        return cut_one(cfg, clips, p, stage / name_for(p))
-
-    with cf.ThreadPoolExecutor(max_workers=cfg.clip_workers) as ex:
-        futs = {ex.submit(job, p): p for p in plays}
-        for i, fut in enumerate(cf.as_completed(futs), 1):
-            p = futs[fut]
-            try:
-                done.append(fut.result())
-            except Exception as exc:
-                failures.append(f"play {p.index}: {exc}")
-            if progress:
-                print(f"\r  cutting {i}/{total} clips", end="", flush=True)
-    if progress:
-        print()
-    if failures:
-        staging.cleanup()
-        raise RuntimeError("clip export failed: " + "; ".join(failures))
     manifest = out_dir / "exports.json"
     previous = json.loads(manifest.read_text()) if manifest.exists() else []
-    current = [p.name for p in done]
-    if partial:
-        current = sorted(set(previous) | set(current))
-    for path in done:
-        path.replace(out_dir / path.name)
-    for name in set(previous) - set(current):
-        if Path(name).name == name and name.startswith("play_") and name.endswith(".mp4"):
-            (out_dir / name).unlink(missing_ok=True)
-    temporary = out_dir / ".exports.json.tmp"
-    temporary.write_text(json.dumps(current, indent=2))
-    temporary.replace(manifest)
-    staging.cleanup()
+    if not isinstance(previous, list) or not all(isinstance(n, str) for n in previous):
+        raise ValueError(f"invalid export manifest: {manifest}")
+
+    def check_destinations() -> None:
+        if name_pattern is None:
+            return
+        for name in names:
+            target = out_dir / name
+            if target.is_symlink() or (target.exists() and
+                                      (name not in previous or not target.is_file())):
+                raise ValueError(f"destination already exists: {target}")
+
+    check_destinations()
+    with tempfile.TemporaryDirectory(prefix=".export-", dir=out_dir) as directory:
+        stage = Path(directory)
+        total = len(plays)
+        failures = []
+
+        def job(p: Play, name: str) -> Path:
+            return cut_one(cfg, clips, p, stage / name)
+
+        with cf.ThreadPoolExecutor(max_workers=cfg.clip_workers) as ex:
+            futs = {ex.submit(job, p, name): p for p, name in zip(plays, names)}
+            for i, fut in enumerate(cf.as_completed(futs), 1):
+                p = futs[fut]
+                try:
+                    fut.result()
+                except Exception as exc:
+                    failures.append(f"play {p.index}: {exc}")
+                if progress:
+                    print(f"\r  cutting {i}/{total} clips", end="", flush=True)
+        if progress:
+            print()
+        if failures:
+            raise RuntimeError("clip export failed: " + "; ".join(failures))
+        check_destinations()
+        current = names
+        if partial:
+            current = sorted(set(previous) | set(current))
+        # New custom names are published without replacement, so a file that
+        # appears after preflight cannot be overwritten. Claim all new names
+        # before replacing any manifest-owned clips or removing stale exports.
+        claimed = []
+        try:
+            if name_pattern is not None:
+                for name in names:
+                    if name not in previous:
+                        target = out_dir / name
+                        target.hardlink_to(stage / name)
+                        claimed.append(target)
+        except OSError:
+            for target in claimed:
+                target.unlink()
+            raise
+        for name in names:
+            if name_pattern is None or name in previous:
+                (stage / name).replace(out_dir / name)
+        for name in set(previous) - set(current):
+            if Path(name).name == name and name.lower().endswith(".mp4"):
+                (out_dir / name).unlink(missing_ok=True)
+        temporary = out_dir / ".exports.json.tmp"
+        temporary.write_text(json.dumps(current, indent=2))
+        temporary.replace(manifest)
     return sorted(out_dir / name for name in current)

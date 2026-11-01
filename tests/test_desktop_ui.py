@@ -408,12 +408,31 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertTrue(studio.queue_dock.isVisible())
             studio.show_queue()
             current_tab = studio.tabs.currentIndex()
-            studio.enqueue('cut')
+            # An external save while the naming dialog is open invalidates it.
+            original_review = review.read_bytes()
+            def external_edit(_dialog):
+                review.write_bytes(original_review.replace(b'title="Scout"', b'title="External edit"'))
+                return 1
+            with patch('scout.desktop.export_dialog.ExportDialog.exec', external_edit):
+                studio.export_clips()
+            self.assertIn('review changed', errors.pop())
+            self.assertIsNone(studio.jobs.current)
+            review.write_bytes(original_review)
+            from PySide6.QtCore import QTimer
+            def choose_export_names():
+                dialog = self.app.activeModalWidget()
+                dialog.pattern.setText('-Saints_<N>_reviewed')
+                dialog.start.setValue(7)
+                dialog.pad.setValue(3)
+                dialog.accept()
+            QTimer.singleShot(0, choose_export_names)
+            studio.export_button.click()
             self.assertEqual(studio.tabs.currentIndex(), current_tab)
             self.wait_for(lambda: bool(studio.jobs.history) and studio.jobs.current is None, seconds=25)
             self.assertEqual(studio.jobs.history[-1][2], 'Finished')
             exports = list((root/'out/Demo/clips').glob('*.mp4'))
             self.assertEqual(len(exports), 1)
+            self.assertEqual(exports[0].name, '-Saints_007_reviewed.mp4')
             self.assertAlmostEqual(probe(exports[0]).duration, 2., places=1)
             self.wait_for(lambda: not studio.tasks)
             self.assertEqual(errors, [])

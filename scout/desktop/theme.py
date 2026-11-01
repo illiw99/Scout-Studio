@@ -45,8 +45,8 @@ QPushButton#primary:hover { background: #343b88; }
 QPushButton#primary:disabled { background: $raised; color: $muted; border-color: $border; }
 QPushButton#transportPlay { background: $accent; color: $bg; border: none; border-radius: 16px; }
 QPushButton[iconOnly="true"] { padding: 0; border-radius: 7px; }
-QLineEdit, QComboBox, QDoubleSpinBox { background: $input; border: 1px solid $border; border-radius: 7px; padding: 8px; selection-background-color: $selected; }
-QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus { border-color: $focus; }
+QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox { background: $input; border: 1px solid $border; border-radius: 7px; padding: 8px; selection-background-color: $selected; }
+QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus { border-color: $focus; }
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { padding: 12px; margin: 3px 0; border-radius: 8px; color: $text; }
 QListWidget::item:selected { background: $selected; color: $accent; }

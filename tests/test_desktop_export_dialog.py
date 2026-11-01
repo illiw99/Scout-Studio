@@ -1,0 +1,80 @@
+"""Export names are previewed and validated before work is queued."""
+import importlib.util
+import os
+from pathlib import Path
+import tempfile
+import unittest
+
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+HAS_QT = importlib.util.find_spec('PySide6') is not None
+
+
+@unittest.skipUnless(HAS_QT, 'install the desktop extra to test export options')
+class ExportDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_preview_options_validation_and_remembered_preferences(self):
+        from PySide6.QtCore import QSettings
+        from scout.desktop.export_dialog import ExportDialog
+        from scout.groundtruth import Marked, to_plays
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            settings = QSettings(str(root/'settings.ini'), QSettings.Format.IniFormat)
+            plays = to_plays([Marked(1, 1., 3.), Marked(2, 5., 8.)])
+            dialog = ExportDialog('Demo', plays, root/'clips', settings)
+            dialog.pattern.setText('Saints_<N>_offense')
+            dialog.start.setValue(7)
+            dialog.pad.setValue(3)
+            self.assertEqual(dialog.preview.toPlainText().splitlines(),
+                             ['Saints_007_offense.mp4', 'Saints_008_offense.mp4'])
+            self.assertEqual(dialog.options(), dict(name_pattern='Saints_<N>_offense', start_number=7, number_width=3))
+            dialog.pattern.setText('../<N>')
+            self.assertFalse(dialog.export_button.isEnabled())
+            self.assertTrue(dialog.error.text())
+            dialog.accept()
+            self.assertEqual(dialog.result(), 0)
+            dialog.style.setCurrentIndex(1)
+            self.assertTrue(dialog.export_button.isEnabled())
+            self.assertEqual(dialog.preview.toPlainText().splitlines(),
+                             ['play_001_00m01s.mp4', 'play_002_00m05s.mp4'])
+            self.assertEqual(dialog.options(), {})
+            dialog.style.setCurrentIndex(0)
+            dialog.pattern.setText('Saints_<N>_offense')
+            dialog.accept()
+            restored = ExportDialog('Demo', plays, root/'clips', settings)
+            self.assertEqual(restored.pattern.text(), 'Saints_<N>_offense')
+            self.assertEqual(restored.start.value(), 7)
+            self.assertEqual(restored.pad.value(), 3)
+            self.assertEqual(restored.preview.toPlainText(), dialog.preview.toPlainText())
+            self.assertFalse((root/'clips').exists())
+
+    def test_empty_review_cannot_queue_export(self):
+        from PySide6.QtCore import QSettings
+        from scout.desktop.export_dialog import ExportDialog
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            dialog = ExportDialog('Demo', [], root/'clips',
+                                  QSettings(str(root/'settings.ini'), QSettings.Format.IniFormat))
+            self.assertFalse(dialog.export_button.isEnabled())
+            self.assertIn('Add a play', dialog.error.text())
+
+    def test_queued_settings_are_snapshots_and_clear_on_cancel(self):
+        from unittest.mock import patch
+        from scout.desktop.jobs import JobQueue
+        with tempfile.TemporaryDirectory() as folder:
+            queue = JobQueue(Path(folder))
+            queue.timer.stop()
+            first = dict(name_pattern='A_<N>', start_number=7, number_width=3)
+            second = dict(name_pattern='B_<N>', start_number=42, number_width=None)
+            with patch.object(queue, 'start_next'):
+                queue.add('A', 'cut', first)
+                queue.add('B', 'cut', second)
+            first['name_pattern'] = 'changed_<N>'
+            self.assertEqual(queue.options[('A', 'cut')]['name_pattern'], 'A_<N>')
+            self.assertEqual(queue.options[('B', 'cut')]['start_number'], 42)
+            queue.cancel()
+            self.assertEqual(queue.pending, [])
+            self.assertEqual(queue.options, {})
