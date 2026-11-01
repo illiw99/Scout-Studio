@@ -28,6 +28,33 @@ class DesktopIntegrationTests(unittest.TestCase):
             QTest.qWait(20)
         self.assertTrue(condition(), 'Timed out waiting for desktop operation')
 
+    def test_camera_order_tasks_keep_independent_match_locks(self):
+        from types import SimpleNamespace, MethodType
+        from unittest.mock import Mock
+        from scout.desktop.app import Studio
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            review = root/'review.mlt'
+            review.write_text('fixture')
+            callbacks = []
+            state = SimpleNamespace(root=root, match='A', ordering_matches=set(),
+                jobs=SimpleNamespace(current=None, pending=[]),
+                data={'review': review, 'review_hash': 'fixture hash'},
+                resolve_dirty=lambda: True, transport=Mock(), reset_speed=Mock(), update_actions=Mock(),
+                task=lambda fn, done, failed: callbacks.append((done, failed)),
+                dirty=False, marker_dirty=False, statusBar=Mock(), reload_match=Mock())
+            state.match_busy = MethodType(Studio.match_busy, state)
+            Studio.order_camera_files(state)
+            state.match = 'B'
+            Studio.order_camera_files(state)
+            self.assertTrue(state.match_busy('A'))
+            self.assertTrue(state.match_busy('B'))
+            callbacks[0][0]({'changed': False})
+            self.assertFalse(state.match_busy('A'))
+            self.assertTrue(state.match_busy('B'))
+            callbacks[1][0]({'changed': False})
+            self.assertFalse(state.match_busy('B'))
+
     def test_import_field_edit_preview_and_queued_export(self):
         from PySide6.QtCore import QPoint, Qt, QSettings
         from PySide6.QtTest import QTest

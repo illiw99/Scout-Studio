@@ -118,6 +118,7 @@ class Studio(QMainWindow):
         self.frame_token = 0
         self.load_token = 0
         self.importing = False
+        self.ordering_matches = set()
         self.marker_dirty = False
         self.editing_index = -1
         self.loading_editor = False
@@ -483,6 +484,7 @@ class Studio(QMainWindow):
         self.review_options = QMenu(self)
         self.review_button = self.review_options.addAction('Open in Shotcut', self.open_review)
         self.review_options.addAction('Refresh saved review', self.reload_match)
+        self.order_sources_action = self.review_options.addAction('Order camera files by name', self.order_camera_files)
         self.review_options.addAction('Open output folder', self.open_output)
         self.export_button = button('Export clips', lambda: self.enqueue('cut'), True)
         zoom.addWidget(self.export_button)
@@ -641,6 +643,32 @@ class Studio(QMainWindow):
         if self.match and self.resolve_dirty():
             self.select_match(self.match)
 
+    def order_camera_files(self):
+        if not self.data or not self.data['review'].exists() or self.match_busy() or not self.resolve_dirty():
+            return
+        from scout.review_order import order_by_filename
+        name, root = self.match, self.root
+        review, digest = self.data['review'], self.data['review_hash']
+        self.ordering_matches.add((root, name))
+        self.transport.pause()
+        self.reset_speed()
+        self.update_actions()
+
+        def complete(result):
+            self.ordering_matches.discard((root, name))
+            self.update_actions()
+            self.statusBar().showMessage('Camera files ordered by name; markers follow their footage.'
+                if result['changed'] else 'Camera files already follow filename order.', 7000)
+            if self.root == root and self.match == name and not self.dirty and not self.marker_dirty:
+                self.reload_match()
+
+        def failed(message):
+            self.ordering_matches.discard((root, name))
+            self.update_actions()
+            self.show_error(message)
+
+        self.task(lambda _: order_by_filename(review, digest), complete, failed)
+
     def tab_changed(self, index):
         self.metrics_container.setVisible(index != 1)
         self.banner.setVisible(index != 1)
@@ -723,6 +751,7 @@ class Studio(QMainWindow):
     def match_busy(self, name=None):
         name = name or self.match
         return (any(r['name'] == name for r in library.active_batches(self.root)) or
+                ((self.root, name) in self.ordering_matches) or
                 (self.jobs.current and self.jobs.current[0] == name) or
                 any(job[0] == name for job in self.jobs.pending))
 
@@ -733,6 +762,7 @@ class Studio(QMainWindow):
         review = bool(data and data['review'].exists())
         self.run_button.setEnabled(ready and not review and not busy and not self.importing and not self.dirty)
         self.review_button.setEnabled(review)
+        self.order_sources_action.setEnabled(review and not busy and not self.importing)
         self.export_button.setEnabled(review and not busy and not self.importing)
         for action in (self.add_play_button, self.delete_play_button, self.save_play_button):
             action.setEnabled(review and not busy and not self.importing)

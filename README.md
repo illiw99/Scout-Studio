@@ -47,6 +47,7 @@ below. Day-to-day use needs no terminal or Python knowledge.
 - Playback and timeline shortcuts follow [Shotcut's reference](https://www.shotcut.org/howtos/keyboard-shortcuts/).
   **Space** plays/pauses even when a header button has focus. **J/K/L** reverse,
   pause, and play forwards; repeated J or L increases speed through **10×**.
+  Space and pause controls reset speed to **1×**.
   Reverse uses paused frame seeks across source files. **Left/Right** step frames;
   holding **K** and tapping **J/L** also steps frames. **Page Up/Down** seek one
   second, with **Shift** for two, **Ctrl** for five, or **Ctrl+Shift** for ten.
@@ -68,6 +69,10 @@ below. Day-to-day use needs no terminal or Python knowledge.
 - Use **Undo/Redo** (Ctrl+Z / Ctrl+Shift+Z) for marker additions, deletions,
   boundary changes and label edits. Saves and undo/redo preserve your viewing
   position and playback. Undo history lasts until you reload or change matches.
+- Camera files follow natural filename order, including edited suffixes such as
+  `0077a`. For an older saved review, **… → Order camera files by name** moves
+  markers with their original source footage and saves an exact original backup.
+  A play split across files that become separated is kept as separate ranges.
 - **Export clips** creates MP4s from the saved review. The **…** menu holds
   refresh, output-folder and optional Shotcut actions. The review workflow is built in.
 

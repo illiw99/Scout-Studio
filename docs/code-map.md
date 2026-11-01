@@ -16,6 +16,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Trained classifier, evaluation and parameter tuning | `scout/model.py`, `scout/evaluate.py`, `scout/tune.py` |
 | MP4 cuts, cross-source clips, audio and encoding | `scout/cut.py` |
 | Shotcut review/playlist writing and marker parsing | `scout/shotcut.py`, `scout/groundtruth.py` |
+| Explicit source reordering with marker remapping and backups | `scout/review_order.py` |
 | Tables, timelines, filmstrips and annotations | `scout/report.py` |
 | Collection, merging and clip renaming | `scout/collect.py`, `scout/merge.py`, `scout/rename_clips.py` |
 | Native app entry, window, field/review editing and shortcuts | `scout/desktop/app.py` |
@@ -29,6 +30,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Packaging, console entry points and optional Qt dependencies | `pyproject.toml` |
 | Studio launcher and desktop installation | `start-studio.sh`, `scripts/install_studio.py` |
 | Pipeline/export/decode regression tests | `tests/test_workflow.py`, `tests/test_export.py`, `tests/test_decode.py` |
+| Camera filename order and review marker migration checks | `tests/test_review_order.py` |
 | Native library, playback and UI checks | `tests/test_desktop_library.py`, `tests/test_desktop_review.py`, `tests/test_desktop_ui.py`, `tests/test_desktop_jobs.py`, `tests/test_desktop_labels.py` |
 | Rename regression checks | `tests/test_rename_clips.py` |
 | Agent workflow and local checks | `AGENTS.md`, `.codex/config.toml`, `.codex/agents/`, `scripts/check-agents.py`, `scripts/check.sh` |
