@@ -260,8 +260,10 @@ class MarkerTimeline(QWidget):
         self.update()
 
     def focus_range(self, start, end):
-        padding = max(4., (end-start)*.75)
-        self.set_window(max(15., end-start+2*padding), (start+end)/2)
+        padding = max(4., (end-start)*.15)
+        # Selection brings a play into view without overriding the chosen zoom.
+        span = self.span if end-start <= self.span else end-start+2*padding
+        self.set_window(span, (start+end)/2)
 
     def set_window(self, seconds, center=None):
         self.span = max(.001, min(self.duration, seconds))

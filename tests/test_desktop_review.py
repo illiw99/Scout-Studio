@@ -220,13 +220,23 @@ class TimelineWindowTests(unittest.TestCase):
     def test_default_window_and_marker_focus_keep_handles_readable(self):
         self.assertEqual(self.timeline.span, 30.)
         self.timeline.focus_range(1800., 1806.)
-        self.assertGreaterEqual(self.timeline.marker_rect(self.timeline.markers[0]).width(), 250)
+        self.assertEqual(self.timeline.span, 30.)
+        self.assertGreaterEqual(self.timeline.marker_rect(self.timeline.markers[0]).width(), 150)
+        self.timeline.focus_range(1800., 1828.)
+        self.assertEqual(self.timeline.span, 30.)
         self.assertLess(self.timeline.start, 1800.)
         self.assertGreater(self.timeline.start+self.timeline.span, 1806.)
         self.timeline.pan(9999.)
         self.assertAlmostEqual(self.timeline.start+self.timeline.span, 3600.)
         self.timeline.fit()
         self.assertEqual(self.timeline.span, 3600.)
+        self.timeline.set_window(60.)
+        self.timeline.focus_range(1800., 1806.)
+        self.assertEqual(self.timeline.span, 60.)
+        self.timeline.focus_range(1800., 1850.)
+        self.assertGreaterEqual(self.timeline.span, 50.)
+        self.assertLess(self.timeline.start, 1800.)
+        self.assertGreater(self.timeline.start+self.timeline.span, 1850.)
 
     def test_window_drag_snaps_to_source_frames(self):
         from PySide6.QtCore import QPoint, Qt
