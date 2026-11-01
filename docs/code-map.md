@@ -20,7 +20,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Explicit source reordering with marker remapping and backups | `scout/review_order.py` |
 | Tables, timelines, filmstrips and annotations | `scout/report.py` |
 | Collection, merging and clip renaming | `scout/collect.py`, `scout/merge.py`, `scout/rename_clips.py` |
-| Native app entry, window, field/review editing and shortcuts | `scout/desktop/app.py` |
+| Native app entry, window, field/review editing and shortcuts | `scout/desktop/__init__.py`, `scout/desktop/app.py` |
 | Qt task runners, click-to-seek slider and field canvas | `scout/desktop/widgets.py` |
 | Native match playback and marker timeline | `scout/desktop/review.py` |
 | Resizable video window, fullscreen transitions and subtle in-play video frame | `scout/desktop/player_window.py` |
@@ -28,9 +28,13 @@ when moving responsibilities; read only paths relevant to the task.
 | Library imports, fields and conflict-safe review saves | `scout/desktop/library.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
 | Native theme and app icon | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/scout.svg` |
-| Packaging, console entry points and optional Qt dependencies | `pyproject.toml` |
+| Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
+| Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |
+| User installation, Studio and CLI guides | `docs/installation.md`, `docs/studio.md`, `docs/cli.md` |
+| Development, validation and contribution conventions | `docs/development.md`, `CONTRIBUTING.md` |
 | Studio launcher and desktop installation | `start-studio.sh`, `scripts/install_studio.py` |
 | Pipeline/export/decode regression tests | `tests/test_workflow.py`, `tests/test_export.py`, `tests/test_decode.py` |
+| Detector precision compatibility and cache invalidation | `tests/test_precision.py` |
 | Custom clip names, collision handling and export dialog checks | `tests/test_clip_names.py`, `tests/test_desktop_export_dialog.py` |
 | Camera filename order and review marker migration checks | `tests/test_review_order.py` |
 | Native library, playback and UI checks | `tests/test_desktop_library.py`, `tests/test_desktop_review.py`, `tests/test_desktop_ui.py`, `tests/test_desktop_jobs.py`, `tests/test_desktop_labels.py` |

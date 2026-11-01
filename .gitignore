@@ -3,22 +3,36 @@ media/
 out/
 games/
 .scout-cache/
+fields/
+/scout.json
 
-# Trained model: keep it, it is small and is the thing that took the work
-!models/
-!models/*.pkl
+# Keep the shipped classifier; locally trained variants stay out of commits.
+models/*
+!models/play.pkl
 
 # Weights fetched by ultralytics on first run
 yolo*.pt
+*.onnx
+*.engine
 
 .venv/
+venv/
 __pycache__/
 *.egg-info/
+.vscode/
+.idea/
+.DS_Store
+.env
+.env.*
+!.env.example
 
 # Build and test artifacts
 build/
 dist/
 .pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 *.pyc
 
 # Local agent task ledgers
