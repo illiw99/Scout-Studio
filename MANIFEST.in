@@ -1,0 +1,15 @@
+# Start from an explicit allowlist, including when egg-info already exists.
+global-exclude *
+include pyproject.toml README.md LICENSE MANIFEST.in AGENTS.md start-studio.sh
+include CHANGELOG.md CONTRIBUTING.md
+recursive-include scout *.py *.svg py.typed
+recursive-include docs *.md
+recursive-include tests *.py
+recursive-include scripts *.py *.sh
+include .codex/config.toml
+recursive-include .codex/agents *.toml
+include .github/workflows/tests.yml
+# User libraries, configuration, trained models and generated/editor files
+# are deliberately absent. Bytecode must never enter either artifact.
+global-exclude *.py[cod] *~ *.bak *.swp *.swo .DS_Store
+prune **/__pycache__

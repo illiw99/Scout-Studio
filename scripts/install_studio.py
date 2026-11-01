@@ -40,7 +40,7 @@ def main():
     target = applications/'scout-studio.desktop'
     target.write_text('[Desktop Entry]\nType=Application\nName=Scout Studio\n'
         'Comment=Your game. Every play.\nTerminal=false\nCategories=AudioVideo;Video;\n'
-        f'Exec={quoted(sys.executable)} -m scout.desktop.app\n'
+        f'Exec={quoted(sys.executable)} -m scout.desktop\n'
         f'Path={root}\nIcon=scout-studio\nStartupWMClass=Scout Studio\n')
     target.chmod(0o755)
     print(f'Installed {target}. Open Scout Studio from your Applications menu.')
