@@ -134,6 +134,17 @@ class DesktopIntegrationTests(unittest.TestCase):
             by_name = {p.text: p for p in groundtruth.load(review)}
             self.assertEqual((by_name['Other'].start, by_name['Other'].end), (3.2, 3.8))
             self.assertEqual((by_name['Touchdown'].start, by_name['Touchdown'].end), (.8, 3.9))
+            # Moving another play must survive a dirty Save that renumbers it.
+            studio.play_in.setValue(3.3)
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Save):
+                studio.move_marker(1, -.2)
+            by_name = {p.text: p for p in groundtruth.load(review)}
+            self.assertAlmostEqual(by_name['Other'].start, 3.)
+            self.assertAlmostEqual(by_name['Other'].duration, .6)
+            self.assertAlmostEqual(by_name['Touchdown'].start, 3.3)
+            studio.undo_marker()
+            studio.undo_marker()
+            studio.plays.setCurrentRow(0)
             # A right-click Save prompt can reorder and renumber the target.
             studio.play_in.setValue(3.3)
             with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Save):
@@ -186,6 +197,31 @@ class DesktopIntegrationTests(unittest.TestCase):
             QTest.mouseRelease(studio.timeline, Qt.MouseButton.LeftButton,
                 pos=QPoint(round(studio.timeline.x(.8)), 55))
             self.assertAlmostEqual(groundtruth.load(review)[0].start, .8, places=1)
+            studio.undo_marker()
+            self.assertAlmostEqual(groundtruth.load(review)[0].start, 1.)
+            # Moving the body saves both bounds together and keeps its length.
+            studio.timeline.fit()
+            QTest.mousePress(studio.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(studio.timeline.x(2.)), 55))
+            QTest.mouseMove(studio.timeline, QPoint(round(studio.timeline.x(1.5)), 55))
+            QTest.mouseRelease(studio.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(studio.timeline.x(1.5)), 55))
+            moved = groundtruth.load(review)[0]
+            self.assertAlmostEqual(moved.start, .5, delta=.04)
+            self.assertAlmostEqual(moved.duration, 2.)
+            self.assertEqual(moved.text, 'Touchdown')
+            studio.undo_marker()
+            self.assertAlmostEqual(groundtruth.load(review)[0].start, 1.)
+            # If Save resolves pending bounds first, move the saved length.
+            studio.plays.setCurrentRow(0)
+            studio.play_in.setValue(1.2)
+            studio.play_out.setValue(2.8)
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Save):
+                studio.move_marker(0, .2)
+            moved = groundtruth.load(review)[0]
+            self.assertAlmostEqual(moved.start, 1.4)
+            self.assertAlmostEqual(moved.duration, 1.6)
+            studio.undo_marker()
             studio.undo_marker()
             self.assertAlmostEqual(groundtruth.load(review)[0].start, 1.)
             # Real playback automatically enters the next camera file and keeps

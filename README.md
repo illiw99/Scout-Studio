@@ -33,7 +33,8 @@ below. Day-to-day use needs no terminal or Python knowledge.
   select, in either direction and across camera-file boundaries. A live preview
   shows its bounds and duration; **Esc** cancels. Default labels use the start
   time, such as `Play 00:12:34.560`, and follow boundary changes. Custom names
-  are kept. Click a play and drag either handle to resize it; undo is available.
+  are kept. Drag the middle of a play to move the whole block without changing
+  its length, or drag either edge handle to resize it. Undo restores either edit.
 - Click a marker to jump to it. Adjust start/end times and labels, drag the
   selected marker's timeline edges (snapped to source frames), add missing plays,
   or delete proposals. Playback previews a dragged boundary, pauses during a

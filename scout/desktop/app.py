@@ -458,6 +458,7 @@ class Studio(QMainWindow):
         self.timeline.markerSelected.connect(self.select_timeline_marker)
         self.timeline.markerMenuRequested.connect(self.show_marker_menu)
         self.timeline.rangeEdited.connect(self.drag_marker)
+        self.timeline.rangeMoved.connect(self.move_marker)
         self.timeline.rangeCreated.connect(self.create_range)
         self.timeline.viewChanged.connect(self.timeline_view_changed)
         layout.addWidget(self.timeline)
@@ -1319,6 +1320,31 @@ class Studio(QMainWindow):
         ordered = sorted(plays, key=lambda p: (p.start, p.end, p.text))
         self.commit_plays(plays, ordered.index(marker))
 
+    def move_marker(self, index, delta):
+        if not self.data or self.match_busy() or not 0 <= index < len(self.data['plays']):
+            return
+        before = self.data['plays'][index]
+        editing_this = self.marker_dirty and self.editing_index == index
+        if not self.resolve_marker_dirty():
+            return
+        plays = list(self.data['plays'])
+        if editing_this:
+            index = self.editing_index
+        else:
+            matches = [i for i, play in enumerate(plays)
+                       if (play.start, play.end, play.text) == (before.start, before.end, before.text)]
+            if len(matches) != 1:
+                return
+            index = matches[0]
+        original = plays[index]
+        start = self.timeline.move_start(original.start+delta, original.duration)
+        marker = Marked(original.index, start, start+original.duration, original.text)
+        if abs(start-original.start) < 1e-9:
+            return
+        plays[index] = marker
+        ordered = sorted(plays, key=lambda p: (p.start, p.end, p.text))
+        self.commit_plays(plays, ordered.index(marker))
+
     def adjacent_play(self, direction):
         if not self.data or not self.data['plays']:
             return
@@ -1477,6 +1503,7 @@ class Studio(QMainWindow):
                 ('Ctrl+`', 'Open video window / bring video back'),
                 ('Alt+6 / Ctrl+Shift+6', 'Show / hide play inspector'),
                 ('Shift + drag / N', 'Scout: draw a variable-length play / new play'),
+                ('Drag play / drag edge', 'Move the whole play / resize its start or end'),
                 ('Alt+− / Alt+=', 'Scout: slower / faster (0.1× – 10×)'),
                 ('Ctrl+B', 'Scout: show / hide match library'),
                 ('? / / / F1', 'Show this shortcut guide')]

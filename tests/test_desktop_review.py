@@ -254,6 +254,81 @@ class TimelineWindowTests(unittest.TestCase):
         self.assertAlmostEqual(edits[0][2], 1806.)
         self.timeline.close()
 
+    def body_drag(self, target, cancel=False):
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        self.timeline.show()
+        self.timeline.focus_range(1800., 1806.)
+        moved, selected, started, finished = [], [], [], []
+        self.timeline.rangeMoved.connect(lambda *args: moved.append(args))
+        self.timeline.markerSelected.connect(selected.append)
+        self.timeline.scrubStarted.connect(lambda: started.append(True))
+        self.timeline.scrubFinished.connect(lambda: finished.append(True))
+        first = QPoint(round(self.timeline.x(1803.)), 55)
+        last = QPoint(round(self.timeline.x(target)), 55)
+        QTest.mousePress(self.timeline, Qt.MouseButton.LeftButton, pos=first)
+        QTest.mouseMove(self.timeline, last)
+        draft = self.timeline.draft
+        if cancel:
+            QTest.keyClick(self.timeline, Qt.Key.Key_Escape)
+        QTest.mouseRelease(self.timeline, Qt.MouseButton.LeftButton, pos=last)
+        self.assertEqual(started, [True])
+        self.assertEqual(finished, [True])
+        self.assertIsNone(self.timeline.drag)
+        self.assertIsNone(self.timeline.draft)
+        self.timeline.close()
+        return moved, selected, draft
+
+    def test_drag_body_moves_without_resizing_or_selecting_mid_gesture(self):
+        moved, selected, draft = self.body_drag(1808.)
+        self.assertEqual(selected, [])
+        self.assertEqual(len(moved), 1)
+        self.assertEqual(moved[0][0], 0)
+        self.assertAlmostEqual(moved[0][1], 5., delta=.04)
+        self.assertAlmostEqual(draft[1]-draft[0], 6.)
+        self.assertAlmostEqual(draft[0]*25, round(draft[0]*25))
+
+    def test_drag_body_stops_at_match_end_and_retains_duration(self):
+        moved, _, draft = self.body_drag(4000.)
+        self.assertEqual(len(moved), 1)
+        self.assertAlmostEqual(draft[1], 3600.)
+        self.assertAlmostEqual(draft[1]-draft[0], 6.)
+
+    def test_drag_body_stops_at_match_start(self):
+        moved, _, draft = self.body_drag(-10.)
+        self.assertEqual(len(moved), 1)
+        self.assertAlmostEqual(draft[0], 0.)
+        self.assertAlmostEqual(draft[1], 6.)
+
+    def test_body_move_keeps_frame_alignment_for_fractional_duration_at_end(self):
+        start = self.timeline.move_start(9999., 1.01)
+        self.assertAlmostEqual(start*25, round(start*25))
+        self.assertLessEqual(start+1.01, self.timeline.duration)
+        self.assertLess(self.timeline.duration-(start+1.01), 1/25)
+
+    def test_body_move_snaps_to_destination_source_clock(self):
+        from scout.media import MediaInfo
+        from scout.timeline import Clip
+        clips = [Clip(MediaInfo(Path('/one.mp4'), 10.01, 160, 90, 25., None), 0., 0),
+                 Clip(MediaInfo(Path('/two.mp4'), 12., 160, 90, 30., None), 10.01, 0)]
+        self.timeline.set_match(clips, [])
+        start = self.timeline.move_start(11.18, 1.01)
+        self.assertAlmostEqual((start-10.01)*30, round((start-10.01)*30))
+        start = self.timeline.move_start(999., 1.01)
+        self.assertAlmostEqual((start-10.01)*30, round((start-10.01)*30))
+        self.assertLessEqual(start+1.01, self.timeline.duration)
+
+    def test_escape_cancels_body_drag_without_moving_or_selecting(self):
+        moved, selected, _ = self.body_drag(1808., cancel=True)
+        self.assertEqual(moved, [])
+        self.assertEqual(selected, [])
+
+    def test_body_click_selects_without_writing_a_move(self):
+        moved, selected, draft = self.body_drag(1803.)
+        self.assertEqual(moved, [])
+        self.assertEqual(selected, [0])
+        self.assertIsNone(draft)
+
     def shift_drag(self, start, end, cancel=False):
         from PySide6.QtCore import QPoint, Qt
         from PySide6.QtTest import QTest

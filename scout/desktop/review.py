@@ -220,6 +220,7 @@ class MarkerTimeline(QWidget):
     markerSelected = Signal(int)
     markerMenuRequested = Signal(int, object)
     rangeEdited = Signal(int, float, float)
+    rangeMoved = Signal(int, float)
     rangeCreated = Signal(float, float)
     viewChanged = Signal()
     scrubStarted = Signal()
@@ -236,6 +237,8 @@ class MarkerTimeline(QWidget):
         self.selected = -1
         self.draft = None
         self.drag = None
+        self.move_origin = None
+        self.move_moved = False
         self.create_anchor = None
         self.create_origin_x = None
         self.create_moved = False
@@ -245,7 +248,7 @@ class MarkerTimeline(QWidget):
         self.setMaximumHeight(150)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
-        self.setToolTip('Select a play or seek through the match. Drag play handles to adjust its bounds.')
+        self.setToolTip('Drag a play to move it. Drag its handles to resize it. Click to select or seek.')
 
     def set_match(self, clips, markers):
         self.cancel_gesture()
@@ -334,7 +337,11 @@ class MarkerTimeline(QWidget):
             p.drawLine(QPointF(self.x(clip.start), 33), QPointF(self.x(clip.start), 79))
         for i, marker in enumerate(self.markers):
             rect = self.marker_rect(marker)
-            selected = i == self.selected
+            moving = self.drag is not None and self.drag[1] == 'move'
+            selected = i == (self.drag[0] if moving else self.selected)
+            if moving and selected and self.draft:
+                a, b = self.draft
+                rect = QRectF(self.x(a), 41, max(3., self.x(b)-self.x(a)), 30)
             fill = QColor(colors['accent'])
             fill.setAlpha(110 if selected else 65)
             p.setPen(QPen(QColor(colors['accent'] if selected else colors['focus']), 2.5 if selected else 1.5))
@@ -345,13 +352,13 @@ class MarkerTimeline(QWidget):
                 p.setPen(QColor(colors['text']))
                 text = f'{i+1} · {marker.end-marker.start:.1f}s' if visible.width() > 100 else str(i+1)
                 p.drawText(visible.adjusted(6, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter, text)
-            if i == self.selected and marker.end > marker.start:
+            if selected and marker.end > marker.start:
                 p.setPen(QPen(QColor(colors['accent']), 2))
                 p.setBrush(QColor(colors['raised']))
-                for x in [self.x(marker.start), self.x(marker.end)]:
+                for x in [rect.left(), rect.right()]:
                     p.drawRoundedRect(QRectF(x-4, 44, 8, 24), 2, 2)
                     p.drawLine(QPointF(x, 50), QPointF(x, 62))
-        if self.draft:
+        if self.draft and not (self.drag and self.drag[1] == 'move'):
             a, b = self.draft
             p.setPen(QPen(QColor(colors['cursor']), 2, Qt.PenStyle.DashLine))
             tint = QColor(colors['cursor'])
@@ -378,6 +385,16 @@ class MarkerTimeline(QWidget):
         frame = self.frame_at(seconds)
         return max(clip.start, min(clip.end, clip.start+round((seconds-clip.start)/frame)*frame))
 
+    def move_start(self, seconds, length):
+        """Snap a translated start without letting its unchanged end overflow."""
+        limit = max(0., self.duration-length)
+        start = self.snap_time(max(0., min(limit, seconds)))
+        if start > limit:
+            clip = next((c for c in self.clips if c.start <= limit < c.end), self.clips[-1])
+            frame = self.frame_at(limit)
+            start = clip.start+math.floor((limit-clip.start)/frame+1e-9)*frame
+        return max(0., min(limit, start))
+
     def selected_edge(self, point):
         if not self.editable or not 0 <= self.selected < len(self.markers) or not 35 <= point.y() <= 78:
             return None
@@ -391,6 +408,8 @@ class MarkerTimeline(QWidget):
     def cancel_gesture(self):
         active = self.drag is not None or self.create_anchor is not None or self.scrubbing
         self.drag = None
+        self.move_origin = None
+        self.move_moved = False
         self.create_anchor = None
         self.create_origin_x = None
         self.create_moved = False
@@ -441,7 +460,16 @@ class MarkerTimeline(QWidget):
         if 35 <= point.y() <= 78:
             for i in reversed(range(len(self.markers))):
                 if self.marker_rect(self.markers[i]).contains(point):
-                    self.markerSelected.emit(i)
+                    if self.editable:
+                        marker = self.markers[i]
+                        self.drag = (i, 'move', marker.start, marker.end)
+                        self.move_origin = (point.x(), self.seconds(point.x()))
+                        self.move_moved = False
+                        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                        self.scrubStarted.emit()
+                        self.update()
+                    else:
+                        self.markerSelected.emit(i)
                     return
         self.scrubbing = True
         self.scrubStarted.emit()
@@ -456,6 +484,15 @@ class MarkerTimeline(QWidget):
             self.update()
         elif self.drag:
             index, edge, a, b = self.drag
+            if edge == 'move':
+                if not self.move_moved and abs(point.x()-self.move_origin[0]) < 5:
+                    return
+                self.move_moved = True
+                start = self.move_start(a+self.seconds(point.x())-self.move_origin[1], b-a)
+                self.draft = (start, start+(b-a))
+                self.seekRequested.emit(start)
+                self.update()
+                return
             at = self.snap_time(self.seconds(point.x()))
             frame = self.frame_at(at)
             self.draft = (max(0., min(at, b-frame)), b) if edge == 'start' else (a, min(self.duration, max(at, a+frame)))
@@ -473,6 +510,8 @@ class MarkerTimeline(QWidget):
                 self.setCursor(Qt.CursorShape.CrossCursor)
             elif edge:
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
+            elif self.editable and any(self.marker_rect(m).contains(event.position()) for m in self.markers):
+                self.setCursor(Qt.CursorShape.OpenHandCursor)
             else:
                 self.unsetCursor()
 
@@ -485,10 +524,19 @@ class MarkerTimeline(QWidget):
         self.update_gesture(event.position())
         created = None
         edited = None
+        moved = None
+        clicked = None
         if self.create_anchor is not None and self.draft and self.create_moved:
             a, b = self.draft
             if b-a >= self.frame_at(a)-1e-9:
                 created = (a, b)
+        elif self.drag and self.drag[1] == 'move':
+            if self.move_moved and self.draft:
+                delta = self.draft[0]-self.drag[2]
+                if abs(delta) > 1e-9:
+                    moved = (self.drag[0], delta)
+            elif not self.move_moved:
+                clicked = self.drag[0]
         elif self.drag and self.draft:
             edited = (self.drag[0], *self.draft)
         # Clear the transient state before notifying the owner, which may refresh
@@ -496,6 +544,10 @@ class MarkerTimeline(QWidget):
         self.cancel_gesture()
         if created:
             self.rangeCreated.emit(*created)
+        elif moved:
+            self.rangeMoved.emit(*moved)
+        elif clicked is not None:
+            self.markerSelected.emit(clicked)
         elif edited:
             self.rangeEdited.emit(*edited)
 
