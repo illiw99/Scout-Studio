@@ -35,7 +35,8 @@ below. Day-to-day use needs no terminal or Python knowledge.
   time, such as `Play 00:12:34.560`, and follow boundary changes. Custom names
   are kept. Drag the middle of a play to move the whole block without changing
   its length, or drag either edge handle to resize it. Undo restores either edit.
-- Click a marker to jump to it. Adjust start/end times and labels, drag the
+- Click the first or second half of a marker to seek to its start or end.
+  Adjust start/end times and labels, drag the
   selected marker's timeline edges (snapped to source frames), add missing plays,
   or delete proposals. Playback previews a dragged boundary, pauses during a
   scrub, and resumes afterward only if it was playing beforehand.

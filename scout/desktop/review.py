@@ -217,7 +217,7 @@ def timecode(seconds):
 
 class MarkerTimeline(QWidget):
     seekRequested = Signal(float)
-    markerSelected = Signal(int)
+    markerSelected = Signal(int, str)
     markerMenuRequested = Signal(int, object)
     rangeEdited = Signal(int, float, float)
     rangeMoved = Signal(int, float)
@@ -239,6 +239,8 @@ class MarkerTimeline(QWidget):
         self.drag = None
         self.move_origin = None
         self.move_moved = False
+        self.trim_origin_x = None
+        self.trim_moved = False
         self.create_anchor = None
         self.create_origin_x = None
         self.create_moved = False
@@ -410,6 +412,8 @@ class MarkerTimeline(QWidget):
         self.drag = None
         self.move_origin = None
         self.move_moved = False
+        self.trim_origin_x = None
+        self.trim_moved = False
         self.create_anchor = None
         self.create_origin_x = None
         self.create_moved = False
@@ -454,6 +458,8 @@ class MarkerTimeline(QWidget):
         if edge:
             marker = self.markers[self.selected]
             self.drag = (self.selected, edge, marker.start, marker.end)
+            self.trim_origin_x = point.x()
+            self.trim_moved = False
             self.setCursor(Qt.CursorShape.SizeHorCursor)
             self.scrubStarted.emit()
             return
@@ -469,7 +475,7 @@ class MarkerTimeline(QWidget):
                         self.scrubStarted.emit()
                         self.update()
                     else:
-                        self.markerSelected.emit(i)
+                        self.markerSelected.emit(i, self.click_edge(i, point.x()))
                     return
         self.scrubbing = True
         self.scrubStarted.emit()
@@ -493,6 +499,9 @@ class MarkerTimeline(QWidget):
                 self.seekRequested.emit(start)
                 self.update()
                 return
+            if not self.trim_moved and abs(point.x()-self.trim_origin_x) < 5:
+                return
+            self.trim_moved = True
             at = self.snap_time(self.seconds(point.x()))
             frame = self.frame_at(at)
             self.draft = (max(0., min(at, b-frame)), b) if edge == 'start' else (a, min(self.duration, max(at, a+frame)))
@@ -536,7 +545,9 @@ class MarkerTimeline(QWidget):
                 if abs(delta) > 1e-9:
                     moved = (self.drag[0], delta)
             elif not self.move_moved:
-                clicked = self.drag[0]
+                clicked = (self.drag[0], self.click_edge(self.drag[0], event.position().x()))
+        elif self.drag and not self.trim_moved:
+            clicked = (self.drag[0], self.drag[1])
         elif self.drag and self.draft:
             edited = (self.drag[0], *self.draft)
         # Clear the transient state before notifying the owner, which may refresh
@@ -547,9 +558,13 @@ class MarkerTimeline(QWidget):
         elif moved:
             self.rangeMoved.emit(*moved)
         elif clicked is not None:
-            self.markerSelected.emit(clicked)
+            self.markerSelected.emit(*clicked)
         elif edited:
             self.rangeEdited.emit(*edited)
+
+    def click_edge(self, index, x):
+        marker = self.markers[index]
+        return 'end' if self.seconds(x) > (marker.start+marker.end)/2 else 'start'
 
     def wheelEvent(self, event):
         angle = event.angleDelta()

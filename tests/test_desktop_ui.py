@@ -228,6 +228,22 @@ class DesktopIntegrationTests(unittest.TestCase):
             # running past the marker's end through previously unmarked footage.
             studio.tabs.setCurrentIndex(1)
             self.app.processEvents()
+            # Left/right halves seek the chosen boundary without changing plays.
+            studio.timeline.fit()
+            QTest.mouseClick(studio.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(studio.timeline.x(1.4)), 55))
+            self.assertAlmostEqual(studio.transport.position, 1.)
+            studio.repeat_button.setChecked(True)
+            studio.transport.seek(1.2, play=True)
+            original_review = review.read_bytes()
+            QTest.mouseClick(studio.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(studio.timeline.x(2.6)), 55))
+            self.assertAlmostEqual(studio.transport.position, 3.)
+            self.assertFalse(studio.transport.want_play)
+            self.assertEqual(review.read_bytes(), original_review)
+            studio.repeat_button.setChecked(False)
+            self.assertEqual(studio.editing_index, 0)
+            self.assertAlmostEqual(groundtruth.load(review)[0].duration, 2.)
             normal_height = studio.video_widget.height()
             self.assertGreater(normal_height, 500)
             self.assertTrue(studio.sidebar.isHidden())

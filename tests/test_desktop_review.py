@@ -261,7 +261,7 @@ class TimelineWindowTests(unittest.TestCase):
         self.timeline.focus_range(1800., 1806.)
         moved, selected, started, finished = [], [], [], []
         self.timeline.rangeMoved.connect(lambda *args: moved.append(args))
-        self.timeline.markerSelected.connect(selected.append)
+        self.timeline.markerSelected.connect(lambda index, edge: selected.append(index))
         self.timeline.scrubStarted.connect(lambda: started.append(True))
         self.timeline.scrubFinished.connect(lambda: finished.append(True))
         first = QPoint(round(self.timeline.x(1803.)), 55)
@@ -328,6 +328,24 @@ class TimelineWindowTests(unittest.TestCase):
         self.assertEqual(moved, [])
         self.assertEqual(selected, [0])
         self.assertIsNone(draft)
+
+    def test_click_selects_nearest_boundary_including_handles_without_editing(self):
+        from PySide6.QtCore import QPoint, Qt
+        from PySide6.QtTest import QTest
+        self.timeline.show()
+        self.timeline.focus_range(1800., 1806.)
+        self.timeline.selected = 0
+        selected, edits, moves = [], [], []
+        self.timeline.markerSelected.connect(lambda *args: selected.append(args))
+        self.timeline.rangeEdited.connect(lambda *args: edits.append(args))
+        self.timeline.rangeMoved.connect(lambda *args: moves.append(args))
+        for time in [1801., 1805., 1800., 1806.]:
+            QTest.mouseClick(self.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(self.timeline.x(time)), 55))
+        self.assertEqual(selected, [(0, 'start'), (0, 'end'), (0, 'start'), (0, 'end')])
+        self.assertEqual(edits, [])
+        self.assertEqual(moves, [])
+        self.timeline.close()
 
     def shift_drag(self, start, end, cancel=False):
         from PySide6.QtCore import QPoint, Qt

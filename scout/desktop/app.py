@@ -1062,22 +1062,35 @@ class Studio(QMainWindow):
         folder.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
-    def preview_play(self, index):
+    def preview_play(self, index, edge='start', pause=False):
         if not self.data or not 0 <= index < len(self.data['plays']):
             return
         previous = self.editing_index
         requested = self.data['plays'][index]
+        editing_this = self.marker_dirty and self.editing_index == index
         if not self.resolve_marker_dirty():
             self.plays.blockSignals(True)
             self.plays.setCurrentRow(previous)
             self.plays.blockSignals(False)
             return
-        if requested in self.data['plays']:
-            index = self.data['plays'].index(requested)
+        if editing_this:
+            index = self.editing_index
+        else:
+            matches = [i for i, play in enumerate(self.data['plays']) if
+                (play.start, play.end, play.text) == (requested.start, requested.end, requested.text)]
+            if len(matches) != 1:
+                return
+            index = matches[0]
         self.load_marker_editor(index)
+        self.plays.blockSignals(True)
+        self.plays.setCurrentRow(index)
+        self.plays.blockSignals(False)
         marker = self.data['plays'][index]
         self.timeline.focus_range(marker.start, marker.end)
-        self.transport.seek(self.data['plays'][index].start)
+        if pause:
+            self.transport.pause()
+            self.reset_speed()
+        self.transport.seek(marker.end if edge == 'end' else marker.start)
 
     def load_marker_editor(self, index):
         self.loading_editor = True
@@ -1241,11 +1254,8 @@ class Studio(QMainWindow):
                 self.undo_stack.append(current)
                 self.update_actions()
 
-    def select_timeline_marker(self, index):
-        if self.plays.currentRow() == index:
-            self.preview_play(index)
-        else:
-            self.plays.setCurrentRow(index)
+    def select_timeline_marker(self, index, edge=None):
+        self.preview_play(index, edge or 'start', pause=edge is not None)
 
     def show_marker_menu(self, index, position):
         if not self.data or not 0 <= index < len(self.data['plays']):
