@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
     QProgressBar, QPushButton, QSlider, QSplitter, QTabWidget, QVBoxLayout, QWidget,
-    QScrollBar, QAbstractSpinBox, QGridLayout, QDockWidget, QMenu, QSizePolicy,
+    QScrollBar, QAbstractSpinBox, QGridLayout, QDockWidget, QMenu, QSizePolicy, QScrollArea,
 )
 
 from scout.media import grab_frame
@@ -31,7 +31,7 @@ from .icons import IconButton
 from .labels import label_for, time_label
 from .player_window import PlayerWindow
 
-PLAYBACK_RATES = [.1, .2, .25, .5, .75, 1., 1.25, 1.5, 2., 3., 4., 5., 7.5, 10.]
+PLAYBACK_RATES = [.1, .2, .25, .5, .75, 1., 1.25, 1.5, 2., 3., 4., 5., 7.5, 8., 10.]
 
 
 def label(text, name=None):
@@ -141,7 +141,9 @@ class Studio(QMainWindow):
         self.setAcceptDrops(True)
         icon = Path(__file__).with_name('scout.svg')
         self.setWindowIcon(QIcon(str(icon)))
+        self.shuttle_hold = False
         self.build_ui()
+        QApplication.instance().installEventFilter(self)
         geometry = self.settings.value('mainWindowGeometry')
         if geometry is not None:
             self.restoreGeometry(geometry)
@@ -196,7 +198,7 @@ class Studio(QMainWindow):
         body.setSpacing(7)
         outer.addLayout(body, 1)
         header = QHBoxLayout()
-        self.library_toggle = IconButton('sidebar', 'Show / hide match library', self.toggle_library, 'Ctrl+B')
+        self.library_toggle = IconButton('sidebar', 'Show / hide match library', self.toggle_library)
         self.library_toggle.setCheckable(True)
         self.library_toggle.setChecked(True)
         header.addWidget(self.library_toggle)
@@ -213,7 +215,7 @@ class Studio(QMainWindow):
         self.run_button.setEnabled(False)
         header.addWidget(self.run_button)
         self.queue_button = button('Queue', self.show_queue)
-        self.queue_button.setToolTip('One processing queue for the whole library · Ctrl+Q')
+        self.queue_button.setToolTip('One processing queue for the whole library')
         header.addWidget(self.queue_button)
         body.addLayout(header)
         metrics = QHBoxLayout()
@@ -251,7 +253,7 @@ class Studio(QMainWindow):
         self.queue_dock.setFloating(True)
         self.queue_dock.resize(760, 460)
         self.queue_dock.hide()
-        for key, callback in [('Ctrl+Q', self.show_queue), ('Ctrl+B', self.toggle_library)]:
+        for key, callback in [('Ctrl+0', self.show_queue), ('Ctrl+B', self.toggle_library), ('Ctrl+Q', self.close)]:
             action = QShortcut(QKeySequence(key), self)
             action.setContext(Qt.ShortcutContext.ApplicationShortcut)
             action.activated.connect(callback)
@@ -353,21 +355,21 @@ class Studio(QMainWindow):
         pv.addLayout(seek)
         controls = QHBoxLayout()
         controls.setSpacing(3)
-        controls.addWidget(IconButton('previous', 'Previous play', lambda: self.adjacent_play(-1), 'Page Up'))
-        controls.addWidget(IconButton('back', 'Back 5 seconds', lambda: self.transport.seek(self.transport.position-5), '←'))
-        self.play_button = IconButton('play', 'Play / pause', self.toggle_play, 'Space')
+        controls.addWidget(IconButton('previous', 'Previous play', lambda: self.adjacent_play(-1)))
+        controls.addWidget(IconButton('back', 'Back 5 seconds', lambda: self.transport.seek(self.transport.position-5)))
+        self.play_button = IconButton('play', 'Play / pause', self.toggle_play)
         self.play_button.setObjectName('transportPlay')
         self.play_button.refresh()
         self.player.playbackStateChanged.connect(self.refresh_play_icons)
         controls.addWidget(self.play_button)
-        controls.addWidget(IconButton('forward', 'Forward 5 seconds', lambda: self.transport.seek(self.transport.position+5), '→'))
-        controls.addWidget(IconButton('next', 'Next play', lambda: self.adjacent_play(1), 'Page Down'))
-        controls.addWidget(IconButton('replay', 'Replay', self.replay, 'R'))
-        self.repeat_button = IconButton('repeat', 'Repeat selected play / match', lambda: None, 'L')
+        controls.addWidget(IconButton('forward', 'Forward 5 seconds', lambda: self.transport.seek(self.transport.position+5)))
+        controls.addWidget(IconButton('next', 'Next play', lambda: self.adjacent_play(1)))
+        controls.addWidget(IconButton('replay', 'Replay', self.replay))
+        self.repeat_button = IconButton('repeat', 'Repeat selected play / match', lambda: None)
         self.repeat_button.setCheckable(True)
         self.repeat_button.toggled.connect(self.update_loop)
         controls.addWidget(self.repeat_button)
-        self.mute_button = IconButton('sound', 'Mute / unmute', self.toggle_mute, 'M')
+        self.mute_button = IconButton('sound', 'Mute / unmute', self.toggle_mute)
         self.mute_button.setCheckable(True)
         controls.addWidget(self.mute_button)
         self.speed = QComboBox()
@@ -376,15 +378,15 @@ class Studio(QMainWindow):
         self.speed.setCurrentIndex(PLAYBACK_RATES.index(1.))
         self.speed.currentIndexChanged.connect(self.apply_speed)
         self.speed.setAccessibleName('Playback speed')
-        self.speed.setToolTip('0.1× slow motion through 10× fast playback · < / > · 0 resets')
+        self.speed.setToolTip('Playback speed: 0.1× to 10×')
         controls.addWidget(self.speed)
         controls.addStretch()
-        controls.addWidget(IconButton('popout', 'Resizable video window', self.toggle_popout, 'P'))
-        controls.addWidget(IconButton('fullscreen', 'Full screen', self.toggle_fullscreen, 'F · Esc to leave'))
-        self.focus_button = IconButton('inspector', 'Show / hide play inspector', self.toggle_focus, 'V')
+        controls.addWidget(IconButton('popout', 'Resizable video window', self.toggle_popout))
+        controls.addWidget(IconButton('fullscreen', 'Full screen', self.toggle_fullscreen))
+        self.focus_button = IconButton('inspector', 'Show / hide play inspector', self.toggle_focus)
         self.focus_button.setCheckable(True)
         controls.addWidget(self.focus_button)
-        controls.addWidget(IconButton('help', 'Keyboard shortcuts', self.show_shortcuts, '? / F1'))
+        controls.addWidget(IconButton('help', 'Keyboard shortcuts', self.show_shortcuts))
         pv.addLayout(controls)
         self.review_split.addWidget(player_panel)
         self.inspector_panel = QFrame()
@@ -397,14 +399,14 @@ class Studio(QMainWindow):
         heading = QHBoxLayout()
         self.plays_heading = label('PLAYS', 'eyebrow')
         heading.addWidget(self.plays_heading, 1)
-        self.add_play_button = IconButton('add', 'New play · or Shift + drag the timeline', self.add_play, 'N')
+        self.add_play_button = IconButton('add', 'New play', self.add_play)
         heading.addWidget(self.add_play_button)
         inspector.addLayout(heading)
         self.plays = QListWidget()
         self.plays.setObjectName('playList')
         self.plays.currentRowChanged.connect(self.preview_play)
         inspector.addWidget(self.plays, 1)
-        self.edit_state = label('Shift + drag the timeline to add a play.', 'muted')
+        self.edit_state = label('Select a play to edit, or add a new play.', 'muted')
         self.edit_state.setWordWrap(True)
         inspector.addWidget(self.edit_state)
         self.play_name = QLineEdit()
@@ -422,16 +424,16 @@ class Studio(QMainWindow):
             widget.setAccessibleName(f'Play {title.lower()} point in seconds')
             bounds.addWidget(label(title, 'muted'), row, 0)
             bounds.addWidget(widget, row, 1)
-        self.mark_in_button = IconButton('in', 'Set start at cursor', lambda: self.set_boundary('in'), 'I')
-        self.mark_out_button = IconButton('out', 'Set end at cursor', lambda: self.set_boundary('out'), 'O')
+        self.mark_in_button = IconButton('in', 'Set start at cursor', lambda: self.set_boundary('in'))
+        self.mark_out_button = IconButton('out', 'Set end at cursor', lambda: self.set_boundary('out'))
         bounds.addWidget(self.mark_in_button, 0, 2)
         bounds.addWidget(self.mark_out_button, 1, 2)
         inspector.addLayout(bounds)
         self.range_summary = label('Choose a range on the timeline', 'muted')
         inspector.addWidget(self.range_summary)
         edits = QHBoxLayout()
-        self.delete_play_button = IconButton('delete', 'Delete selected play', self.delete_play, 'Delete')
-        self.save_play_button = IconButton('save', 'Save play changes', self.save_play, 'Ctrl+S')
+        self.delete_play_button = IconButton('delete', 'Delete selected play', self.delete_play)
+        self.save_play_button = IconButton('save', 'Save play changes', self.save_play)
         edits.addWidget(self.delete_play_button)
         edits.addStretch()
         edits.addWidget(self.save_play_button)
@@ -452,16 +454,17 @@ class Studio(QMainWindow):
         self.timeline.seekRequested.connect(self.transport.scrub)
         self.timeline.scrubFinished.connect(self.transport.finish_scrub)
         self.timeline.markerSelected.connect(self.select_timeline_marker)
+        self.timeline.markerMenuRequested.connect(self.show_marker_menu)
         self.timeline.rangeEdited.connect(self.drag_marker)
         self.timeline.rangeCreated.connect(self.create_range)
         self.timeline.viewChanged.connect(self.timeline_view_changed)
         layout.addWidget(self.timeline)
         zoom = QHBoxLayout()
         zoom.setSpacing(3)
-        zoom.addWidget(IconButton('zoom_out', 'Zoom out', lambda: self.timeline.zoom(.5), '− · Ctrl+scroll'))
-        zoom.addWidget(IconButton('zoom_in', 'Zoom in', lambda: self.timeline.zoom(2), '+ · Ctrl+scroll'))
-        zoom.addWidget(IconButton('fit', 'Fit whole match', self.timeline.fit, 'Ctrl+0'))
-        zoom.addWidget(IconButton('center', 'Center on cursor', self.center_cursor, 'C'))
+        zoom.addWidget(IconButton('zoom_out', 'Zoom out', lambda: self.timeline.zoom(.5)))
+        zoom.addWidget(IconButton('zoom_in', 'Zoom in', lambda: self.timeline.zoom(2)))
+        zoom.addWidget(IconButton('fit', 'Fit whole match', self.timeline.fit))
+        zoom.addWidget(IconButton('center', 'Center on cursor', self.center_cursor))
         self.window_size = QComboBox()
         for text, size in [('15s window', 15), ('30s window', 30), ('60s window', 60), ('2 min window', 120), ('5 min window', 300)]:
             self.window_size.addItem(text, size)
@@ -471,8 +474,8 @@ class Studio(QMainWindow):
         self.timeline_scroll = QScrollBar(Qt.Orientation.Horizontal)
         self.timeline_scroll.valueChanged.connect(lambda value: self.timeline.pan(value/1000))
         zoom.addWidget(self.timeline_scroll, 1)
-        self.undo_marker_button = IconButton('undo', 'Undo marker change', self.undo_marker, 'Ctrl+Z')
-        self.redo_marker_button = IconButton('redo', 'Redo marker change', self.redo_marker, 'Ctrl+Shift+Z')
+        self.undo_marker_button = IconButton('undo', 'Undo marker change', self.undo_marker)
+        self.redo_marker_button = IconButton('redo', 'Redo marker change', self.redo_marker)
         zoom.addWidget(self.undo_marker_button)
         zoom.addWidget(self.redo_marker_button)
         more_button = IconButton('more', 'Review options', self.show_review_options)
@@ -485,30 +488,12 @@ class Studio(QMainWindow):
         zoom.addWidget(self.export_button)
         layout.addLayout(zoom)
         self.review_shortcuts = []
-        for key, callback in [('Space', self.toggle_play), ('Left', lambda: self.transport.seek(self.transport.position-5)),
-                ('Right', lambda: self.transport.seek(self.transport.position+5)),
-                (',', lambda: self.step_frame(-1)), ('.', lambda: self.step_frame(1)),
-                ('N', self.add_play), ('I', lambda: self.set_boundary('in')), ('O', lambda: self.set_boundary('out')),
-                ('Ctrl+S', self.save_play), ('Delete', self.delete_play),
-                ('R', self.replay), ('L', lambda: self.repeat_button.toggle()), ('M', self.toggle_mute),
-                ('F', self.toggle_fullscreen),
-                ('P', self.toggle_popout), ('V', self.toggle_focus),
-                ('<', lambda: self.change_speed(-1)), ('>', lambda: self.change_speed(1)), ('0', self.reset_speed),
-                ('PageUp', lambda: self.adjacent_play(-1)), ('PageDown', lambda: self.adjacent_play(1)),
-                ('Shift+Left', lambda: self.transport.seek(self.transport.position-1)),
-                ('Shift+Right', lambda: self.transport.seek(self.transport.position+1)),
-                ('+', lambda: self.timeline.zoom(2)), ('=', lambda: self.timeline.zoom(2)),
-                ('-', lambda: self.timeline.zoom(.5)), ('Ctrl+0', self.timeline.fit), ('C', self.center_cursor),
-                ('[', lambda: self.timeline.pan(self.timeline.start-self.timeline.span/2)),
-                (']', lambda: self.timeline.pan(self.timeline.start+self.timeline.span/2)),
-                ('Home', lambda: self.transport.seek(0.)), ('End', lambda: self.transport.seek(self.transport.duration)),
-                ('?', self.show_shortcuts), ('F1', self.show_shortcuts),
-                ('Ctrl+Z', self.undo_marker), ('Ctrl+Shift+Z', self.redo_marker)]:
+        for key, callback in self.review_bindings():
             shortcut = QShortcut(QKeySequence(key), page)
             # Transport must also win over a focused header button's native
             # Space activation (for example the match-library toggle).
-            shortcut.setContext(Qt.ShortcutContext.WindowShortcut if key == 'Space'
-                                else Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+            shortcut.setAutoRepeat(False)
             shortcut.setProperty('allowTyping', key == 'Ctrl+S')
             shortcut.activated.connect(callback)
             self.review_shortcuts.append(shortcut)
@@ -696,11 +681,14 @@ class Studio(QMainWindow):
         self.review_options.popup(QCursor.pos())
 
     def show_video_error(self, *_):
+        self.transport.pause()
         self.review_hint.setText('Could not play this source: '+self.player.errorString())
         self.review_hint.show()
 
     def apply_speed(self, *_):
         self.player.setPlaybackRate(self.speed.currentData())
+        if self.transport.reverse_rate:
+            self.transport.reverse(self.speed.currentData())
         if self.fullscreen_speed is not None:
             self.fullscreen_speed.blockSignals(True)
             self.fullscreen_speed.setCurrentIndex(self.speed.currentIndex())
@@ -1071,12 +1059,12 @@ class Studio(QMainWindow):
             self.play_in.setValue(play.start)
             self.play_out.setValue(play.end)
             self.edit_state.setText('Saved')
-            self.edit_state.setToolTip('Drag either timeline handle to change the length. Shift + drag to add another play.')
+            self.edit_state.setToolTip('Drag either timeline handle to change the length.')
         else:
             self.play_name.clear()
             self.play_in.setValue(0.)
             self.play_out.setValue(0.)
-            self.edit_state.setText('Shift + drag the timeline to add a play.')
+            self.edit_state.setText('Select a play to edit, or add a new play.')
         self.loading_editor = False
         self.update_range_summary()
         self.update_loop()
@@ -1182,7 +1170,7 @@ class Studio(QMainWindow):
         if self.commit_plays(plays, ordered.index(marker)):
             self.new_play_duration = end-start
             self.timeline.focus_range(start, end)
-            self.statusBar().showMessage(f'Added {marker.text} · {end-start:.2f}s · Ctrl+Z to undo', 5000)
+            self.statusBar().showMessage(f'Added {marker.text} · {end-start:.2f}s', 5000)
             return True
         return False
 
@@ -1200,7 +1188,7 @@ class Studio(QMainWindow):
         plays = list(self.data['plays'])
         removed = plays.pop(self.editing_index)
         if self.commit_plays(plays, min(self.editing_index, len(plays)-1)):
-            self.statusBar().showMessage(f'Deleted {label_for(removed.text, removed.start)} · Ctrl+Z to undo', 5000)
+            self.statusBar().showMessage(f'Deleted {label_for(removed.text, removed.start)}', 5000)
 
     def undo_marker(self):
         if self.undo_stack and not self.match_busy() and self.resolve_marker_dirty():
@@ -1225,6 +1213,55 @@ class Studio(QMainWindow):
             self.preview_play(index)
         else:
             self.plays.setCurrentRow(index)
+
+    def show_marker_menu(self, index, position):
+        if not self.data or not 0 <= index < len(self.data['plays']):
+            return
+        marker = self.data['plays'][index]
+        editing_this = self.marker_dirty and self.editing_index == index
+        if not self.resolve_marker_dirty():
+            return
+        if editing_this:
+            marker = self.data['plays'][self.editing_index]
+        identity = (marker.start, marker.end, marker.text)
+
+        def target_index():
+            candidates = [i for i, play in enumerate(self.data['plays'])
+                          if (play.start, play.end, play.text) == identity]
+            # Saving can renumber every Marked.index; bounds and annotation
+            # identify the requested play. Refuse genuinely ambiguous matches.
+            return candidates[0] if len(candidates) == 1 else None
+
+        index = target_index()
+        if index is None:
+            return
+        self.select_timeline_marker(index)
+        menu = QMenu(self.timeline)
+        self.timeline_menu = menu
+        menu_match = self.match
+        menu.aboutToHide.connect(menu.deleteLater)
+
+        def act(callback):
+            # A background refresh must never redirect a menu action to a
+            # different play or match while the menu is open.
+            if self.match == menu_match and self.data:
+                index = target_index()
+                if index is not None:
+                    self.select_timeline_marker(index)
+                    callback()
+
+        def edit():
+            if self.focus_mode:
+                self.toggle_focus()
+            self.play_name.setFocus()
+            self.play_name.selectAll()
+
+        menu.addAction('Edit play', lambda: act(edit))
+        menu.addAction('Replay play', lambda: act(self.replay))
+        menu.addSeparator()
+        remove = menu.addAction('Delete play', lambda: act(self.delete_play))
+        remove.setEnabled(not self.match_busy())
+        menu.popup(position)
 
     def drag_marker(self, index, start, end):
         if not self.data or self.match_busy() or not 0 <= index < len(self.data['plays']):
@@ -1260,6 +1297,7 @@ class Studio(QMainWindow):
             self.select_timeline_marker(candidates[0] if direction > 0 else candidates[-1])
 
     def play_position(self, seconds):
+        self.refresh_play_icons()
         self.play_time.setText(f'{timecode(seconds)} / {timecode(self.transport.duration)[:8]}')
         if not self.play_slider.isSliderDown():
             self.play_slider.setValue(round(seconds*1000))
@@ -1274,10 +1312,12 @@ class Studio(QMainWindow):
     def review_source_changed(self, index):
         clip = self.transport.clips[index]
         self.review_source.setText(f'Full match · Camera file {index+1} / {len(self.transport.clips)} · {clip.path.name}')
-        self.video_widget.setToolTip(f'{clip.path.name} · camera {index+1}/{len(self.transport.clips)}\nDouble-click or F for full screen · P for a resizable window')
+        self.video_widget.setToolTip(f'{clip.path.name} · camera {index+1}/{len(self.transport.clips)}')
 
     def toggle_play(self):
+        self.reset_speed()
         self.transport.toggle()
+        self.refresh_play_icons()
 
     def seek_play(self):
         self.transport.scrub(self.play_slider.value()/1000)
@@ -1306,41 +1346,109 @@ class Studio(QMainWindow):
         self.audio.setMuted(muted)
         self.mute_button.setChecked(muted)
         self.mute_button.set_symbol('muted' if muted else 'sound')
-        self.mute_button.setToolTip('Turn sound on [M]' if muted else 'Mute [M]')
+        self.mute_button.setToolTip('Turn sound on' if muted else 'Mute')
         if self.fullscreen_mute_button is not None:
             self.fullscreen_mute_button.set_symbol('muted' if muted else 'sound')
             self.fullscreen_mute_button.setChecked(muted)
 
     def refresh_play_icons(self, *_):
-        symbol = 'pause' if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState else 'play'
+        symbol = 'pause' if self.transport.want_play else 'play'
         self.play_button.set_symbol(symbol)
         if self.fullscreen_play_button is not None:
             self.fullscreen_play_button.set_symbol(symbol)
 
+    def review_bindings(self):
+        """Shotcut mappings shared by the main and detached review windows."""
+        bindings = [('Space', self.toggle_play), ('Left', lambda: self.step_frame(-1)),
+                    ('Right', lambda: self.step_frame(1)), ('I', lambda: self.set_boundary('in')),
+                    ('O', lambda: self.set_boundary('out')), ('M', self.edit_marker_at_cursor),
+                    ('Ctrl+M', self.toggle_mute), ('\\', lambda: self.repeat_button.toggle()),
+                    ('<', lambda: self.adjacent_play(-1)), ('>', lambda: self.adjacent_play(1)),
+                    ('Alt+Left', lambda: self.adjacent_play(-1)), ('Alt+Right', lambda: self.adjacent_play(1)),
+                    ('Home', lambda: self.transport.seek(0.)), ('End', lambda: self.transport.seek(self.transport.duration)),
+                    ('Ctrl+S', self.save_play), ('Delete', self.delete_play), ('Backspace', self.delete_play),
+                    ('Ctrl+Shift+M', self.delete_play), ('Ctrl+Z', self.undo_marker),
+                    ('Ctrl+Y', self.redo_marker), ('Ctrl+Shift+Z', self.redo_marker),
+                    ('=', lambda: self.timeline.zoom(2)), ('+', lambda: self.timeline.zoom(2)),
+                    ('-', lambda: self.timeline.zoom(.5)), ('0', self.timeline.fit),
+                    ('Ctrl+Shift+P', self.center_cursor), ('F11', self.toggle_fullscreen),
+                    ('Ctrl+Shift+F', self.toggle_fullscreen), ('F', self.toggle_fullscreen),
+                    ('Ctrl+`', self.toggle_popout), ('Alt+6', self.toggle_focus),
+                    ('Ctrl+Shift+6', self.toggle_focus),
+                    ('Ctrl+E', lambda: self.enqueue('cut')), ('N', self.add_play),
+                    ('Alt+-', lambda: self.change_speed(-1)), ('Alt+=', lambda: self.change_speed(1)),
+                    ('?', self.show_shortcuts), ('/', self.show_shortcuts), ('F1', self.show_shortcuts)]
+        for modifier, seconds in [('', 1), ('Shift+', 2), ('Ctrl+', 5), ('Ctrl+Shift+', 10)]:
+            for key, direction in [('PgUp', -1), ('PgDown', 1)]:
+                bindings.append((modifier+key, lambda delta=seconds*direction:
+                                 self.transport.seek(self.transport.position+delta)))
+        return bindings
+
+    def edit_marker_at_cursor(self):
+        if self.data:
+            for index, marker in enumerate(self.data['plays']):
+                if marker.start <= self.transport.position < marker.end:
+                    self.select_timeline_marker(index)
+                    self.play_name.setFocus()
+                    return
+        self.add_play()
+
+    def shuttle(self, direction):
+        if self.shuttle_hold:
+            self.step_frame(direction)
+            return
+        reverse = self.transport.reverse_rate > 0
+        same_direction = self.transport.want_play and reverse == (direction < 0)
+        rate = min(10., self.speed.currentData()*2) if same_direction else 1.
+        rate = next(value for value in PLAYBACK_RATES if value >= rate)
+        self.transport.stop_reverse()
+        self.speed.setCurrentIndex(self.speed.findData(rate))
+        if direction < 0:
+            self.transport.reverse(rate)
+        else:
+            self.transport.seek(self.transport.position, play=True)
+        self.refresh_play_icons()
+
     def show_shortcuts(self):
         dialog = QDialog(self)
         dialog.setWindowTitle('Scout Studio · Keyboard shortcuts')
+        dialog.resize(760, min(850, self.screen().availableGeometry().height()-100))
         layout = QVBoxLayout(dialog)
         layout.addWidget(label('Keyboard shortcuts', 'title'))
-        grid = QGridLayout()
-        rows = [('Space', 'Play / pause'), ('← / →', 'Skip 5 seconds'),
-                ('Shift+← / Shift+→', 'Skip 1 second'), ('Page Up / Page Down', 'Previous / next play'),
-                (', / .', 'Previous / next frame (paused)'), ('R / L / M', 'Replay / repeat / mute'),
-                ('F / Esc', 'Toggle full screen / return to a normal video window'),
-                ('P', 'Pop video out / bring it back'), ('V', 'Show / hide play inspector'),
-                ('< / > / 0', 'Slower / faster / reset to 1× (0.1× – 10×)'),
-                ('Ctrl+B / Ctrl+Q', 'Match library / global processing queue'),
+        contents = QWidget()
+        grid = QGridLayout(contents)
+        rows = [('Space / K', 'Play or pause / pause'),
+                ('J / L', 'Reverse / forward; tap again for faster playback up to 10×'),
+                ('← / → or hold K + J / L', 'Previous / next frame'),
+                ('Page Up / Page Down', 'Back / forward 1 second'),
+                ('Shift + Page Up / Down', 'Back / forward 2 seconds'),
+                ('Ctrl + Page Up / Down', 'Back / forward 5 seconds'),
+                ('Ctrl + Shift + Page Up / Down', 'Back / forward 10 seconds'),
+                ('< / > or Alt+← / →', 'Previous / next play'),
+                ('\\ / Ctrl+M', 'Repeat selected play or match / mute'),
+                ('F11 / Ctrl+Shift+F', 'Toggle fullscreen (F also works for the video)'),
+                ('Esc', 'Leave fullscreen; close a normal video window; cancel timeline drag'),
                 ('Home / End', 'Match start / end'),
-                ('Shift + drag', 'Create and save a play of any length on the timeline'),
-                ('N', 'New play'), ('I / O', 'Set start / end at the cursor'), ('Ctrl+S', 'Save play changes'),
-                ('Delete', 'Delete selected play'), ('Ctrl+Z / Ctrl+Shift+Z', 'Undo / redo marker changes'),
+                ('M', 'Add or edit the play at the cursor'), ('I / O', 'Set start / end at the cursor'),
+                ('Ctrl+S / Ctrl+E', 'Save play changes / export clips'),
+                ('Delete / Backspace / Ctrl+Shift+M', 'Delete selected play'),
+                ('Ctrl+Z / Ctrl+Y', 'Undo / redo (Ctrl+Shift+Z also redoes)'),
                 ('Scroll', 'Slide the timeline through time'), ('Ctrl+scroll', 'Zoom around the pointer'),
-                ('+ / −', 'Zoom in / out'), ('Ctrl+0', 'Fit whole match'), ('C', 'Center timeline on cursor'),
-                ('[ / ]', 'Slide half a timeline window'), ('? / F1', 'Show this shortcut guide')]
+                ('= / − / 0', 'Zoom in / out / fit whole match'), ('Ctrl+Shift+P', 'Center timeline on cursor'),
+                ('Ctrl+0 / Ctrl+Q', 'Global processing queue / quit'),
+                ('Ctrl+`', 'Open video window / bring video back'),
+                ('Alt+6 / Ctrl+Shift+6', 'Show / hide play inspector'),
+                ('Shift + drag / N', 'Scout: draw a variable-length play / new play'),
+                ('Alt+− / Alt+=', 'Scout: slower / faster (0.1× – 10×)'),
+                ('Ctrl+B', 'Scout: show / hide match library'),
+                ('? / / / F1', 'Show this shortcut guide')]
         for row, (keys, action) in enumerate(rows):
             grid.addWidget(label(keys, 'eyebrow'), row, 0)
             grid.addWidget(label(action), row, 1)
-        layout.addLayout(grid)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(contents)
+        layout.addWidget(scroll, 1)
         hint = label('Typing keeps its normal behavior. Ctrl+S also works while editing a label or time.', 'muted')
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -1399,16 +1507,16 @@ class Studio(QMainWindow):
         layout.addLayout(seek)
         controls = QHBoxLayout()
         controls.setSpacing(3)
-        controls.addWidget(IconButton('previous', 'Previous play', lambda: self.adjacent_play(-1), 'Page Up'))
-        controls.addWidget(IconButton('back', 'Back 5 seconds', lambda: self.transport.seek(self.transport.position-5), '←'))
-        self.fullscreen_play_button = IconButton('play', 'Play / pause', self.toggle_play, 'Space')
+        controls.addWidget(IconButton('previous', 'Previous play', lambda: self.adjacent_play(-1)))
+        controls.addWidget(IconButton('back', 'Back 5 seconds', lambda: self.transport.seek(self.transport.position-5)))
+        self.fullscreen_play_button = IconButton('play', 'Play / pause', self.toggle_play)
         self.fullscreen_play_button.setObjectName('transportPlay')
         self.refresh_play_icons()
         controls.addWidget(self.fullscreen_play_button)
-        controls.addWidget(IconButton('forward', 'Forward 5 seconds', lambda: self.transport.seek(self.transport.position+5), '→'))
-        controls.addWidget(IconButton('next', 'Next play', lambda: self.adjacent_play(1), 'Page Down'))
-        controls.addWidget(IconButton('replay', 'Replay', self.replay, 'R'))
-        self.fullscreen_mute_button = IconButton('muted' if self.audio.isMuted() else 'sound', 'Mute / unmute', self.toggle_mute, 'M')
+        controls.addWidget(IconButton('forward', 'Forward 5 seconds', lambda: self.transport.seek(self.transport.position+5)))
+        controls.addWidget(IconButton('next', 'Next play', lambda: self.adjacent_play(1)))
+        controls.addWidget(IconButton('replay', 'Replay', self.replay))
+        self.fullscreen_mute_button = IconButton('muted' if self.audio.isMuted() else 'sound', 'Mute / unmute', self.toggle_mute)
         self.fullscreen_mute_button.setCheckable(True)
         self.fullscreen_mute_button.setChecked(self.audio.isMuted())
         controls.addWidget(self.fullscreen_mute_button)
@@ -1420,18 +1528,12 @@ class Studio(QMainWindow):
         self.fullscreen_speed.currentIndexChanged.connect(self.speed.setCurrentIndex)
         controls.addWidget(self.fullscreen_speed)
         controls.addStretch()
-        controls.addWidget(IconButton('fullscreen', 'Toggle full screen', self.toggle_fullscreen, 'F / Esc'))
-        controls.addWidget(IconButton('popout', 'Bring video back to the main window', dialog.close, 'P'))
+        controls.addWidget(IconButton('fullscreen', 'Toggle full screen', self.toggle_fullscreen))
+        controls.addWidget(IconButton('popout', 'Bring video back to the main window', dialog.close))
         layout.addLayout(controls)
-        for key, callback in [('Space', self.toggle_play), ('R', self.replay), ('M', self.toggle_mute),
-                              ('L', lambda: self.repeat_button.toggle()),
-                              ('F', self.toggle_fullscreen), ('P', dialog.close),
-                              ('<', lambda: self.change_speed(-1)), ('>', lambda: self.change_speed(1)), ('0', self.reset_speed),
-                              ('PageUp', lambda: self.adjacent_play(-1)), ('PageDown', lambda: self.adjacent_play(1)),
-                              (',', lambda: self.step_frame(-1)), ('.', lambda: self.step_frame(1)),
-                              ('Left', lambda: self.transport.seek(self.transport.position-5)),
-                              ('Right', lambda: self.transport.seek(self.transport.position+5))]:
+        for key, callback in self.review_bindings():
             shortcut = QShortcut(QKeySequence(key), dialog)
+            shortcut.setAutoRepeat(False)
             shortcut.activated.connect(callback)
         def restore(_):
             self.settings.setValue('videoWindowGeometry', dialog.saveGeometry())
@@ -1465,6 +1567,29 @@ class Studio(QMainWindow):
         self.fullscreen_time.setText(f'{timecode(self.transport.position)} / {timecode(duration)[:8]}')
 
     def eventFilter(self, watched, event):
+        if event.type() == QEvent.Type.KeyRelease and event.key() == Qt.Key.Key_K and not event.isAutoRepeat():
+            self.shuttle_hold = False
+        active = QApplication.activeWindow()
+        reviewing = (active is self and self.tabs.currentIndex() == 1) or (
+            self.fullscreen_dialog is not None and active is self.fullscreen_dialog)
+        typing = isinstance(QApplication.focusWidget(), (QLineEdit, QAbstractSpinBox, QComboBox, QPlainTextEdit))
+        if (reviewing and not typing and event.type() in (QEvent.Type.ShortcutOverride, QEvent.Type.KeyPress)
+                and event.modifiers() == Qt.KeyboardModifier.NoModifier
+                and event.key() in (Qt.Key.Key_J, Qt.Key.Key_K, Qt.Key.Key_L)):
+            if event.type() == QEvent.Type.ShortcutOverride:
+                event.accept()
+                return True
+            if not event.isAutoRepeat():
+                if event.key() == Qt.Key.Key_K:
+                    self.shuttle_hold = True
+                    self.transport.pause()
+                    self.reset_speed()
+                    self.refresh_play_icons()
+                else:
+                    self.shuttle(-1 if event.key() == Qt.Key.Key_J else 1)
+            return True
+        if event.type() == QEvent.Type.WindowDeactivate:
+            self.shuttle_hold = False
         if watched is getattr(self, 'video_widget', None) and event.type() == QEvent.Type.MouseButtonDblClick:
             if event.button() == Qt.MouseButton.LeftButton:
                 self.toggle_fullscreen()
@@ -1508,7 +1633,8 @@ class Studio(QMainWindow):
         self.timeline.pan(self.transport.position-self.timeline.span/2)
 
     def review_focus_changed(self, old, current):
-        typing = isinstance(current, (QLineEdit, QAbstractSpinBox, QComboBox))
+        self.shuttle_hold = False
+        typing = isinstance(current, (QLineEdit, QAbstractSpinBox, QComboBox, QPlainTextEdit))
         for shortcut in self.review_shortcuts:
             shortcut.setEnabled(not typing or bool(shortcut.property('allowTyping')))
         if self.fullscreen_dialog is not None:

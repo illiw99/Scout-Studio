@@ -54,12 +54,12 @@ def icon(name, color):
 
 
 class IconButton(QPushButton):
-    def __init__(self, symbol, title, callback, shortcut=''):
+    def __init__(self, symbol, title, callback):
         super().__init__()
         self.symbol = symbol
         self.setProperty('iconOnly', True)
         self.setAccessibleName(title)
-        self.setToolTip(f'{title} ({shortcut})' if shortcut else title)
+        self.setToolTip(title)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedSize(36, 34)
         self.setIconSize(QSize(18, 18))

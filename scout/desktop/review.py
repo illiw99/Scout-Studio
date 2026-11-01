@@ -4,7 +4,7 @@ from __future__ import annotations
 import bisect
 import math
 
-from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QUrl, Signal, QTimer
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QUrl, Signal, QTimer, QElapsedTimer
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QWidget
@@ -28,6 +28,13 @@ class MatchPlayer(QObject):
         self.scrubbing = False
         self.resume_after_scrub = False
         self.loop_range = None
+        # Qt's FFmpeg backend has no reverse playback. Shuttle backwards by
+        # paused seeks on the global match clock, including across source joins.
+        self.reverse_rate = 0.
+        self.reverse_clock = QElapsedTimer()
+        self.reverse_timer = QTimer(self)
+        self.reverse_timer.setInterval(50)
+        self.reverse_timer.timeout.connect(self.tick_reverse)
         self.scrub_target = None
         self.scrub_timer = QTimer(self)
         self.scrub_timer.setSingleShot(True)
@@ -37,6 +44,7 @@ class MatchPlayer(QObject):
         player.mediaStatusChanged.connect(self.on_status)
 
     def set_clips(self, clips):
+        self.stop_reverse()
         self.loop_range = None
         self.scrub_timer.stop()
         self.scrubbing = False
@@ -59,6 +67,8 @@ class MatchPlayer(QObject):
             return
         if play is None:
             play = self.want_play
+        if not play:
+            self.stop_reverse()
         self.want_play = play
         seconds = max(0., min(float(seconds), max(0., self.duration-.001)))
         index = min(bisect.bisect_right([c.end for c in self.clips], seconds), len(self.clips)-1)
@@ -98,7 +108,7 @@ class MatchPlayer(QObject):
     def apply_state(self):
         if self.index < 0 or self.pending is not None:
             return
-        if self.want_play:
+        if self.want_play and not self.reverse_rate:
             self.player.play()
         else:
             self.player.pause()
@@ -109,6 +119,8 @@ class MatchPlayer(QObject):
         if status in (QMediaPlayer.MediaStatus.LoadedMedia, QMediaPlayer.MediaStatus.BufferedMedia):
             self.apply_pending()
         elif status == QMediaPlayer.MediaStatus.EndOfMedia and self.pending is None and self.index >= 0:
+            if self.reverse_rate:
+                return
             if self.loop_range and self.want_play and not self.scrubbing and self.clips[self.index].end >= self.loop_range[1]-.001:
                 self.seek(self.loop_range[0], play=True)
             elif self.index+1 < len(self.clips) and self.want_play:
@@ -119,7 +131,7 @@ class MatchPlayer(QObject):
                 self.positionChanged.emit(self.position)
 
     def on_position(self, millis):
-        if self.changing or self.pending is not None or not 0 <= self.index < len(self.clips):
+        if self.reverse_rate or self.changing or self.pending is not None or not 0 <= self.index < len(self.clips):
             return
         clip = self.clips[self.index]
         self.position = min(clip.end, clip.start + millis/1000)
@@ -129,8 +141,35 @@ class MatchPlayer(QObject):
         self.positionChanged.emit(self.position)
 
     def pause(self):
+        self.stop_reverse()
         self.want_play = False
         self.player.pause()
+
+    def stop_reverse(self):
+        self.reverse_timer.stop()
+        self.reverse_rate = 0.
+
+    def reverse(self, rate=1.):
+        if not self.clips:
+            return
+        self.player.pause()
+        self.reverse_rate = max(.1, min(10., rate))
+        self.reverse_clock.start()
+        self.want_play = True
+        self.reverse_timer.start()
+
+    def tick_reverse(self):
+        if not self.reverse_rate:
+            return
+        target = self.position-self.reverse_clock.restart()/1000*self.reverse_rate
+        if self.loop_range and target < self.loop_range[0]:
+            start, end = self.loop_range
+            target = end-(start-target) % max(.001, end-start)
+        if target <= 0:
+            self.pause()
+            self.seek(0., play=False)
+        else:
+            self.seek(target, play=True)
 
     def toggle(self):
         if self.want_play:
@@ -179,6 +218,7 @@ def timecode(seconds):
 class MarkerTimeline(QWidget):
     seekRequested = Signal(float)
     markerSelected = Signal(int)
+    markerMenuRequested = Signal(int, object)
     rangeEdited = Signal(int, float, float)
     rangeCreated = Signal(float, float)
     viewChanged = Signal()
@@ -205,7 +245,7 @@ class MarkerTimeline(QWidget):
         self.setMaximumHeight(150)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMouseTracking(True)
-        self.setToolTip('Click to seek or select a play. Shift + drag to create a play. Drag selected play handles to adjust by source frames. Esc cancels a drag. Scroll to pan; Ctrl + scroll to zoom.')
+        self.setToolTip('Select a play or seek through the match. Drag play handles to adjust its bounds.')
 
     def set_match(self, clips, markers):
         self.cancel_gesture()
@@ -317,9 +357,9 @@ class MarkerTimeline(QWidget):
             p.drawLine(QPointF(self.x(self.position), 27), QPointF(self.x(self.position), 86))
         p.setPen(QColor(colors['muted']))
         caption = (f'{timecode(self.draft[0])} – {timecode(self.draft[1])}  ·  '
-                   f'{self.draft[1]-self.draft[0]:.2f}s  ·  Esc: cancel') if self.draft else (
+                   f'{self.draft[1]-self.draft[0]:.2f}s') if self.draft else (
                    f'{timecode(self.start)[:8]} – {timecode(self.start+self.span)[:8]}  ·  '
-                   f'{self.span:g}s window  ·  Shift + drag: new play  ·  Scroll: pan  ·  Ctrl + scroll: zoom')
+                   f'{self.span:g}s window')
         p.drawText(QRectF(12, 88, self.width()-24, 22), caption)
 
     def frame_at(self, seconds):
@@ -362,6 +402,13 @@ class MarkerTimeline(QWidget):
             super().keyPressEvent(event)
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton and self.duration:
+            self.setFocus()
+            if 35 <= event.position().y() <= 78:
+                for i in reversed(range(len(self.markers))):
+                    if self.marker_rect(self.markers[i]).contains(event.position()):
+                        self.markerMenuRequested.emit(i, event.globalPosition().toPoint())
+                        return
         if event.button() != Qt.MouseButton.LeftButton or not self.duration:
             return
         self.setFocus()

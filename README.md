@@ -17,7 +17,7 @@ below. Day-to-day use needs no terminal or Python knowledge.
   Drag corners to adjust, right-click to remove, then **Save field**.
 - Click **Find plays**. The processing queue runs one match at a time while you
   keep browsing. It also observes an existing W3 batch and waits for it to finish.
-  **Queue** (Ctrl+Q) opens the single app-wide queue in a separate, nonblocking
+  **Queue** (Ctrl+0) opens the single app-wide queue in a separate, nonblocking
   panel; starting a job keeps you on the match you are viewing.
 - Watch the **entire match** in **Review & export**, including all footage between
   detected plays. Playback automatically continues into the next camera file.
@@ -27,7 +27,7 @@ below. Day-to-day use needs no terminal or Python knowledge.
   **Ctrl+scroll** zooms around the pointer. Choose 15s/30s/60s/2min/5min windows,
   drag the scrollbar, or use **Fit match** for the overview.
 - Review puts the video first, with a compact play inspector at the side.
-  **V** hides the inspector for more viewing space; **Ctrl+B** toggles the match
+  **Alt+6** hides the inspector for more viewing space; **Ctrl+B** toggles the match
   library. The video retains its aspect ratio as the workspace resizes.
 - **Shift + drag** on the timeline creates and saves a play at the length you
   select, in either direction and across camera-file boundaries. A live preview
@@ -40,24 +40,31 @@ below. Day-to-day use needs no terminal or Python knowledge.
   scrub, and resumes afterward only if it was playing beforehand.
   **Save play changes** writes the authoritative
   `review.mlt`; the original is backed up as `review.before-studio.mlt`.
-- To mark a missed play, press **N** at its start, use **I** / **O** to set in/out
-  points at the cursor, and press **Ctrl+S** to save. **Space** plays/pauses,
-  **Left/Right** skip five seconds, and **comma/period** step one frame while
-  paused. Film Hub's local-player behavior is adapted in Python/Qt: **R** replays,
-  **L** repeats the selected play (or whole match), **M** mutes, and speeds range
-  from **0.1× to 10×**. **< / >** slow down / speed up; **0** resets to 1×.
-  **P** opens a normal, resizable video window (or brings it back). **F** toggles
-  fullscreen; **Esc** returns to the normal window. Double-click the video for
-  fullscreen. Speeds and the current match stay synchronized between windows.
-  Shortcuts except
-  Ctrl+S are inactive while typing. Unsaved edits prompt before leaving a marker.
-  Film Hub's shared navy, gray and lavender palette is available in **Light mode**
-  and **Dark mode**, remembered between launches. No Film Hub server is required.
+- To mark a missed play, press **M** at its start, use **I** / **O** to set in/out
+  points at the cursor, and press **Ctrl+S** to save. **M** edits an existing play
+  when the cursor is inside its range. Right-click a timeline play for **Edit**,
+  **Replay**, or **Delete**, or select it and press **Delete**. Undo restores it.
+- Playback and timeline shortcuts follow [Shotcut's reference](https://www.shotcut.org/howtos/keyboard-shortcuts/).
+  **Space** plays/pauses even when a header button has focus. **J/K/L** reverse,
+  pause, and play forwards; repeated J or L increases speed through **10×**.
+  Reverse uses paused frame seeks across source files. **Left/Right** step frames;
+  holding **K** and tapping **J/L** also steps frames. **Page Up/Down** seek one
+  second, with **Shift** for two, **Ctrl** for five, or **Ctrl+Shift** for ten.
+  **< / >** navigate plays; **\** repeats and **Ctrl+M** mutes. The speed menu
+  supports **0.1×–10×**; Scout's **Alt+− / Alt+=** slow down / speed up.
+- **Ctrl+`** opens a normal, resizable video window (or brings it back).
+  **F11**, **Ctrl+Shift+F**, or **F** toggle video fullscreen; **Esc** returns to
+  the normal window. Double-click the video for fullscreen. Speed and the current
+  match stay synchronized between windows. **Ctrl+0** opens Jobs; **Ctrl+Q** quits.
+  Shortcuts keep normal text-field behavior; **Ctrl+S** works while editing.
+  Unsaved edits prompt before leaving a marker. Film Hub's navy, gray and lavender
+  palette is available in **Light mode** and **Dark mode**, remembered between
+  launches. No Film Hub server is required.
 - Playback, marker and timeline controls use compact SVG symbols with accessible
-  names and shortcut tooltips. Press **?** or **F1** for the shortcut guide.
-  **Page Up/Down** jump between plays, **Shift+Left/Right** skip one second,
-  **+/−** zoom, **Ctrl+0** fits the match, **C** centers on the cursor, and **[ / ]**
-  slide half a window. Exact position, window length and marker bounds stay visible.
+  names and action-only tooltips. Shortcut hints appear only in **?**; press
+  **?**, **/**, or **F1** for the scrollable guide. **=/−** zoom, **0** fits the
+  match, and **Ctrl+Shift+P** centers on the cursor. Exact position, window length
+  and marker bounds stay visible.
 - Use **Undo/Redo** (Ctrl+Z / Ctrl+Shift+Z) for marker additions, deletions,
   boundary changes and label edits. Saves and undo/redo preserve your viewing
   position and playback. Undo history lasts until you reload or change matches.

@@ -64,6 +64,45 @@ class MatchPlayerTests(unittest.TestCase):
         self.clips = [Clip(MediaInfo(Path(f'/camera-{i}.mp4'), 10., 160, 90, 25., None), i*10., 0) for i in range(3)]
         self.transport.set_clips(self.clips)
 
+    def tearDown(self):
+        self.transport.pause()
+
+    def test_reverse_shuttle_crosses_sources_pauses_and_stops_at_start(self):
+        from unittest.mock import Mock
+        self.transport.seek(10.5, play=False)
+        self.raw.loaded()
+        self.transport.reverse(2.)
+        self.transport.reverse_clock = Mock(restart=Mock(return_value=500))
+        self.transport.tick_reverse()
+        self.assertAlmostEqual(self.transport.position, 9.5)
+        self.assertEqual(self.transport.index, 0)
+        self.raw.loaded()
+        self.assertFalse(self.raw.playing)
+        self.assertTrue(self.transport.want_play)
+        # Native position callbacks must not replace the global reverse clock.
+        self.raw.positionChanged.emit(9501)
+        self.assertAlmostEqual(self.transport.position, 9.5)
+        self.transport.pause()
+        self.assertFalse(self.transport.reverse_timer.isActive())
+        self.transport.reverse(10.)
+        self.transport.tick_reverse()
+        self.transport.tick_reverse()
+        self.assertEqual(self.transport.position, 0.)
+        self.assertFalse(self.transport.want_play)
+
+    def test_reverse_loop_and_explicit_seek_cancel(self):
+        from unittest.mock import Mock
+        self.transport.seek(10.2, play=False)
+        self.raw.loaded()
+        self.transport.loop_range = (9., 11.)
+        self.transport.reverse(4.)
+        self.transport.reverse_clock = Mock(restart=Mock(return_value=500))
+        self.transport.tick_reverse()
+        self.assertAlmostEqual(self.transport.position, 10.2)
+        self.transport.seek(15., play=False)
+        self.assertEqual(self.transport.reverse_rate, 0.)
+        self.assertFalse(self.transport.reverse_timer.isActive())
+
     def test_seek_into_unmarked_footage_and_exact_source_boundary(self):
         self.transport.seek(10., play=False)
         self.assertEqual(self.transport.index, 1)

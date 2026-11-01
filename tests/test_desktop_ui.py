@@ -107,6 +107,16 @@ class DesktopIntegrationTests(unittest.TestCase):
             by_name = {p.text: p for p in groundtruth.load(review)}
             self.assertEqual((by_name['Other'].start, by_name['Other'].end), (3.2, 3.8))
             self.assertEqual((by_name['Touchdown'].start, by_name['Touchdown'].end), (.8, 3.9))
+            # A right-click Save prompt can reorder and renumber the target.
+            studio.play_in.setValue(3.3)
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Save):
+                studio.show_marker_menu(1, studio.timeline.mapToGlobal(QPoint(40, 50)))
+            menu = studio.timeline_menu
+            menu.actions()[-1].trigger()
+            menu.close()
+            self.assertEqual([p.text for p in groundtruth.load(review)], ['Touchdown'])
+            studio.undo_marker()
+            studio.undo_marker()
             for _ in range(3):
                 studio.undo_marker()
             self.assertEqual(len(groundtruth.load(review)), 1)
@@ -165,7 +175,8 @@ class DesktopIntegrationTests(unittest.TestCase):
             studio.toggle_focus()
             self.assertEqual(studio.play_button.text(), '')
             self.assertFalse(studio.play_button.icon().isNull())
-            self.assertIn('Space', studio.play_button.toolTip())
+            self.assertEqual(studio.play_button.toolTip(), 'Play / pause')
+            self.assertNotIn('Alt+', studio.speed.toolTip())
             # Space controls playback even after clicking a header control,
             # rather than activating that focused button again.
             studio.activateWindow()
@@ -184,14 +195,72 @@ class DesktopIntegrationTests(unittest.TestCase):
                 QTest.keyClick(studio.play_name, Qt.Key.Key_Space)
                 toggle.assert_not_called()
             studio.play_name.undo()
+            studio.load_marker_editor(studio.editing_index)
             # Keyboard actions remain available without text-heavy toolbars.
             studio.timeline.setFocus()
-            QTest.keyClick(studio.timeline, Qt.Key.Key_C)
-            QTest.keyClick(studio.timeline, Qt.Key.Key_M)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_P, Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_M, Qt.KeyboardModifier.ControlModifier)
             self.assertTrue(studio.audio.isMuted())
             self.assertEqual(studio.mute_button.symbol, 'muted')
-            QTest.keyClick(studio.timeline, Qt.Key.Key_M)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_M, Qt.KeyboardModifier.ControlModifier)
             self.assertFalse(studio.audio.isMuted())
+            # Shotcut transport keys and the K-held frame-step chord.
+            studio.transport.seek(.8, play=False)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_J)
+            self.assertEqual(studio.transport.reverse_rate, 1.)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_J)
+            self.assertEqual(studio.transport.reverse_rate, 2.)
+            QTest.keyPress(studio.timeline, Qt.Key.Key_K)
+            self.assertFalse(studio.transport.want_play)
+            self.assertEqual(studio.transport.reverse_rate, 0.)
+            self.assertEqual(studio.speed.currentData(), 1.)
+            before = studio.transport.position
+            QTest.keyClick(studio.timeline, Qt.Key.Key_L)
+            self.assertAlmostEqual(studio.transport.position, before+.04)
+            self.assertFalse(studio.transport.want_play)
+            QTest.keyRelease(studio.timeline, Qt.Key.Key_K)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_J)
+            from unittest.mock import Mock
+            with patch.object(studio.transport, 'reverse_clock', Mock(restart=Mock(return_value=1000))):
+                studio.transport.tick_reverse()
+            self.assertEqual(studio.transport.position, 0.)
+            self.assertEqual(studio.play_button.symbol, 'play')
+            for _ in range(6):
+                QTest.keyClick(studio.timeline, Qt.Key.Key_L)
+            self.assertEqual(studio.speed.currentData(), 10.)
+            self.assertTrue(studio.transport.want_play)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_K)
+            self.assertEqual(studio.speed.currentData(), 1.)
+            studio.speed.setCurrentIndex(studio.speed.findData(10.))
+            QTest.keyClick(studio.timeline, Qt.Key.Key_Space)
+            self.assertEqual(studio.speed.currentData(), 1.)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_Space)
+            studio.reset_speed()
+            studio.transport.seek(.2, play=False)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_PageDown)
+            self.assertAlmostEqual(studio.transport.position, 1.2)
+            QTest.keyClick(studio.timeline, Qt.Key.Key_Left)
+            self.assertAlmostEqual(studio.transport.position, 1.16)
+            # Timeline plays expose direct edit/replay/delete actions.
+            studio.timeline.fit()
+            marker_count = len(studio.data['plays'])
+            QTest.mouseClick(studio.timeline, Qt.MouseButton.RightButton,
+                pos=QPoint(round(studio.timeline.x(2.)), 55))
+            menu = studio.timeline_menu
+            self.assertEqual([a.text() for a in menu.actions() if not a.isSeparator()],
+                             ['Edit play', 'Replay play', 'Delete play'])
+            menu.actions()[-1].trigger()
+            menu.close()
+            self.assertEqual(len(groundtruth.load(review)), marker_count-1)
+            studio.undo_marker()
+            self.assertEqual(len(groundtruth.load(review)), marker_count)
+            studio.timeline.setFocus()
+            QTest.mouseClick(studio.timeline, Qt.MouseButton.LeftButton,
+                pos=QPoint(round(studio.timeline.x(2.)), 55))
+            QTest.keyClick(studio.timeline, Qt.Key.Key_Delete)
+            self.assertEqual(len(groundtruth.load(review)), marker_count-1)
+            studio.undo_marker()
+            self.assertEqual(len(groundtruth.load(review)), marker_count)
             studio.transport.seek(1.8, play=True)
             self.wait_for(lambda: studio.transport.index == 1 and studio.transport.position > 2.1)
             self.wait_for(lambda: studio.transport.position > 3.5)
@@ -213,7 +282,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertFalse(window.isFullScreen())
             window.activateWindow()
             self.app.processEvents()
-            QTest.keyClick(window, Qt.Key.Key_Q, Qt.KeyboardModifier.ControlModifier)
+            QTest.keyClick(window, Qt.Key.Key_0, Qt.KeyboardModifier.ControlModifier)
             self.wait_for(lambda: studio.queue_dock.isVisible())
             studio.show_queue()
             # An already-open window follows a newly selected match's duration.
