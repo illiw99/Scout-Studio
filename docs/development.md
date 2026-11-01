@@ -58,6 +58,9 @@ without explicit authorization.
 
 ## Make changes
 
+EditorConfig supplies UTF-8, LF line endings, final newlines, and four-space
+Python indentation. Markdown keeps intentional hard-break whitespace.
+
 Start with the [code map](code-map.md). Keep changes focused; avoid moving public
 imports or changing review/cache contracts as incidental cleanup. Follow
 [AGENTS.md](../AGENTS.md) when using development agents.

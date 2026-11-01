@@ -94,4 +94,3 @@ may download YOLO weights. Large imports need space for a copy of the footage.
 The desktop dependency is optional; existing command-line usage is unchanged.
 The Linux menu launcher uses this checkout's installed environment. This is not
 a standalone installer for other computers; those need the one-time setup too.
-

@@ -22,7 +22,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = {
     'pyproject.toml', 'README.md', 'LICENSE', 'MANIFEST.in', 'AGENTS.md',
-    'start-studio.sh', 'CHANGELOG.md', 'CONTRIBUTING.md',
+    'start-studio.sh', 'CHANGELOG.md', 'CONTRIBUTING.md', '.editorconfig',
 }
 SOURCE_SUFFIXES = {
     'scout': {'.py', '.svg'}, 'docs': {'.md'}, 'tests': {'.py'},
