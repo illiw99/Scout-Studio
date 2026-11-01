@@ -53,7 +53,8 @@ class Config:
     conf: float = 0.25
     device: str = "auto"          # "auto" | "cuda" | "cuda:0" | "cpu"
     batch: int = 8
-    half: bool = True             # fp16 on CUDA
+    half: bool = True             # legacy switch; False disables fp16
+    quantize: str | int | None = "fp16"  # fp16/fp32, 16/32, or None
 
     # --- field region ------------------------------------------------------
     #: Polygon of the playing surface in normalised (0-1) frame coordinates.

@@ -43,18 +43,31 @@ class Detections:
         return len(self.times)
 
 
+def _precision_name(cfg: Config) -> str:
+    precision = cfg.quantize if cfg.half else None
+    if precision not in (None, "fp16", "fp32", 16, 32):
+        raise ValueError("quantize must be fp16, fp32, 16, 32, or null")
+    return "fp16" if precision in ("fp16", 16) else "fp32"
+
+
 def _cache_key(cfg: Config, clip: Clip) -> str:
     st = clip.path.stat()
     weights = Path(cfg.model)
     weight_stat = weights.stat() if weights.is_file() else None
-    raw = json.dumps({
+    settings = {
         "version": 2, "file": str(clip.path.resolve()), "size": st.st_size,
         "mtime_ns": st.st_mtime_ns,
         "model": cfg.model,
         "weights": (str(weights.resolve()), weight_stat.st_size, weight_stat.st_mtime_ns) if weight_stat else None,
         "imgsz": cfg.imgsz, "conf": cfg.conf,
         "fps": cfg.sample_fps,
-    }, sort_keys=True)
+    }
+    precision = _precision_name(cfg)
+    # Keep all existing default fp16 caches valid. Only explicit nondefault
+    # precision needs a new identity; aliases share the same cache.
+    if precision != "fp16":
+        settings["precision"] = precision
+    raw = json.dumps(settings, sort_keys=True)
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
@@ -103,6 +116,18 @@ def _resolve_device(cfg: Config) -> str | int:
         return "cpu"
 
 
+def _precision_kwargs(cfg: Config, device) -> dict:
+    """Support both current and older Ultralytics precision arguments."""
+    _precision_name(cfg)
+    if device == "cpu":
+        return {}
+    precision = cfg.quantize if cfg.half else None
+    from ultralytics.cfg import DEFAULT_CFG_DICT
+    if "quantize" in DEFAULT_CFG_DICT:
+        return {"quantize": precision}
+    return {"half": precision in ("fp16", 16)}
+
+
 def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detections:
     """Detect people across one clip, using the cache when it is valid."""
     cached = load_cached(cfg, clip)
@@ -114,7 +139,7 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
     from ultralytics import YOLO
     model = model or YOLO(cfg.model)
     device = _resolve_device(cfg)
-    kw = {"half": True} if cfg.half and device != "cpu" else {}
+    kw = _precision_kwargs(cfg, device)
 
     w, h = clip.info.width, clip.info.height
     n_expected = int(clip.info.duration * cfg.sample_fps)
