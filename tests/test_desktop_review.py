@@ -218,7 +218,7 @@ class TimelineWindowTests(unittest.TestCase):
         self.timeline.set_match(clips, [Marked(1, 1800., 1806., 'Play')])
 
     def test_default_window_and_marker_focus_keep_handles_readable(self):
-        self.assertEqual(self.timeline.span, 60.)
+        self.assertEqual(self.timeline.span, 30.)
         self.timeline.focus_range(1800., 1806.)
         self.assertGreaterEqual(self.timeline.marker_rect(self.timeline.markers[0]).width(), 250)
         self.assertLess(self.timeline.start, 1800.)

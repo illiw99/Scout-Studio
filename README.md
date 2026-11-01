@@ -22,7 +22,7 @@ below. Day-to-day use needs no terminal or Python knowledge.
 - Watch the **entire match** in **Review & export**, including all footage between
   detected plays. Playback automatically continues into the next camera file.
   Scrub anywhere on the full-match slider or marker timeline. The timeline shows
-  a sliding 60-second window by default; selecting a play focuses on its range
+  a sliding 30-second window by default; selecting a play focuses on its range
   with context so the handles stay easy to grab. **Scroll** slides through time;
   **Ctrl+scroll** zooms around the pointer. Choose 15s/30s/60s/2min/5min windows,
   drag the scrollbar, or use **Fit match** for the overview.

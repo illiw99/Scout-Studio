@@ -469,7 +469,7 @@ class Studio(QMainWindow):
         self.window_size = QComboBox()
         for text, size in [('15s window', 15), ('30s window', 30), ('60s window', 60), ('2 min window', 120), ('5 min window', 300)]:
             self.window_size.addItem(text, size)
-        self.window_size.setCurrentIndex(2)
+        self.window_size.setCurrentIndex(1)
         self.window_size.activated.connect(lambda _: self.timeline.set_window(self.window_size.currentData()))
         zoom.addWidget(self.window_size)
         self.timeline_scroll = QScrollBar(Qt.Orientation.Horizontal)

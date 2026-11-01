@@ -255,7 +255,7 @@ class MarkerTimeline(QWidget):
         self.selected = -1
         self.position = 0.
         self.draft = None
-        self.start, self.span = 0., max(.001, min(60., self.duration))
+        self.start, self.span = 0., max(.001, min(30., self.duration))
         self.viewChanged.emit()
         self.update()
 
@@ -332,12 +332,17 @@ class MarkerTimeline(QWidget):
             p.drawLine(QPointF(self.x(clip.start), 33), QPointF(self.x(clip.start), 79))
         for i, marker in enumerate(self.markers):
             rect = self.marker_rect(marker)
-            p.setPen(QPen(QColor(colors['focus'] if i == self.selected else colors['border']), 2 if i == self.selected else 1))
-            p.setBrush(QColor(colors['selected'] if i == self.selected else colors['art']))
+            selected = i == self.selected
+            fill = QColor(colors['accent'])
+            fill.setAlpha(110 if selected else 65)
+            p.setPen(QPen(QColor(colors['accent'] if selected else colors['focus']), 2.5 if selected else 1.5))
+            p.setBrush(fill)
             p.drawRoundedRect(rect, 3, 3)
-            if rect.width() > 30:
+            visible = rect.intersected(self.track())
+            if visible.width() > 30:
                 p.setPen(QColor(colors['text']))
-                p.drawText(rect.adjusted(6, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter, str(i+1))
+                text = f'{i+1} · {marker.end-marker.start:.1f}s' if visible.width() > 100 else str(i+1)
+                p.drawText(visible.adjusted(6, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter, text)
             if i == self.selected and marker.end > marker.start:
                 p.setPen(QPen(QColor(colors['accent']), 2))
                 p.setBrush(QColor(colors['raised']))
