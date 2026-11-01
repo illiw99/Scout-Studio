@@ -12,6 +12,7 @@ import datetime as _dt
 import re
 import shutil
 import subprocess
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -102,6 +103,22 @@ def probe(path: str | Path) -> MediaInfo:
                      video_index, audio_index)
 
 
+@lru_cache(maxsize=1)
+def ffmpeg_has_cuda() -> bool:
+    """Whether the selected FFmpeg was built with CUDA decoding support.
+
+    The driver and input codec are checked by attempting the actual decode.
+    """
+    try:
+        result = subprocess.run(
+            [ffmpeg_exe(), "-hide_banner", "-hwaccels"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return result.returncode == 0 and "cuda" in result.stdout.split()
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def iter_frames(
     path: str | Path,
     fps: float,
@@ -110,6 +127,40 @@ def iter_frames(
     start: float = 0.0,
     duration: float | None = None,
     gray: bool = False,
+    *,
+    hwaccel: bool = True,
+) -> Iterator[np.ndarray]:
+    """Stream frames using CUDA when available, otherwise CPU.
+
+    If CUDA fails, restart on CPU and discard already delivered frames so
+    callers see one continuous sequence. Set ``hwaccel=False`` to force CPU.
+    """
+    delivered = 0
+    if hwaccel and ffmpeg_has_cuda():
+        try:
+            for frame in _iter_frames(path, fps, width, height, start, duration, gray,
+                                      cuda=True):
+                delivered += 1
+                yield frame
+            return
+        except RuntimeError as exc:
+            warnings.warn(f"CUDA decode failed for {Path(path).name}; using CPU. {exc}",
+                          RuntimeWarning, stacklevel=2)
+    for i, frame in enumerate(_iter_frames(path, fps, width, height, start, duration, gray)):
+        if i >= delivered:
+            yield frame
+
+
+def _iter_frames(
+    path: str | Path,
+    fps: float,
+    width: int,
+    height: int,
+    start: float = 0.0,
+    duration: float | None = None,
+    gray: bool = False,
+    *,
+    cuda: bool = False,
 ) -> Iterator[np.ndarray]:
     """Yield decoded frames as numpy arrays, resampled to ``fps``.
 
@@ -119,6 +170,8 @@ def iter_frames(
     pix = "gray" if gray else "rgb24"
     chans = 1 if gray else 3
     cmd = [ffmpeg_exe(), "-hide_banner", "-loglevel", "error"]
+    if cuda:
+        cmd += ["-hwaccel", "cuda"]
     if start:
         cmd += ["-ss", f"{start:.3f}"]
     cmd += ["-i", str(path)]
