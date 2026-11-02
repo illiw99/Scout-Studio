@@ -67,7 +67,7 @@ class FolderSourceTests(unittest.TestCase):
         self.assertEqual(loaded.out_dir, self.cfg.out_dir)
         self.assertEqual(loaded.source_dir, self.cfg.source_dir)
 
-    def test_legacy_match_scoping_and_cli_match_output_remain(self):
+    def test_legacy_match_scoping_and_cli_match_output_use_game_storage(self):
         cfg = Config(media_dir=str(self.root), match="sibling", stability_seconds=0)
         self.assertIsNone(cfg.source_dir)
         with patch("scout.timeline.probe", side_effect=self.probe):
@@ -76,7 +76,7 @@ class FolderSourceTests(unittest.TestCase):
                          [self.root / "sibling/camera_1.mp4"])
         args = argparse.Namespace(config=None, match="sibling", out_dir=None,
                                   limit=None)
-        self.assertEqual(cli._load(args).out_dir, "out/sibling")
+        self.assertEqual(cli._load(args).out_dir, ".scout")
         args.out_dir = str(self.root / "custom-output")
         self.assertEqual(cli._load(args).out_dir, args.out_dir)
 

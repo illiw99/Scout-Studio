@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from .config import Config
+from .storage import read_library, validate_name
 from . import (timeline, detect, features, segment, cut, report, field, pick,
                shotcut, groundtruth, evaluate, tune, collect,
                merge, model)
@@ -19,18 +20,70 @@ CONFIG_FILE = "scout.json"
 
 def _load(args) -> Config:
     cfg = Config.load(args.config)
-    for key in ("media_dir", "out_dir", "sample_fps", "model", "cut_mode",
+    saved_match = cfg.match
+    if saved_match is not None:
+        validate_name(saved_match)
+    saved_state = cfg.game_dir / '.scout'
+    workspace_roots = {Config(media_dir=cfg.media_dir).root}
+    if args.config:
+        workspace_roots.add(Path(args.config).resolve().parent)
+    # Keep workspace model files usable when selecting an external source root.
+    model_roots = [cfg.root]
+    if getattr(args, "media_dir", None) is not None:
+        model_roots.insert(0, Config(media_dir=args.media_dir).root)
+    if args.config:
+        model_roots.insert(0, Path(args.config).resolve().parent)
+    models = {}
+    for key in ("model_path", "model"):
+        for root in model_roots:
+            candidate = root / getattr(cfg, key)
+            if candidate.is_file():
+                models[key] = str(candidate.resolve())
+                break
+    for key in ("media_dir", "source_dir", "out_dir", "sample_fps", "model", "cut_mode",
                 "imgsz", "segmenter"):
         v = getattr(args, key, None)
         if v is not None:
             setattr(cfg, key, v)
     match = getattr(args, "match", None)
     if match:
-        if Path(match).name != match or match in (".", ".."):
-            raise ValueError("--match must be a single directory name")
+        validate_name(match)
         cfg.match = match
-        if not args.out_dir:
-            cfg.out_dir = f"out/{match}"
+        if getattr(args, "source_dir", None) is None:
+            # A selected name must never retain an unrelated saved source.
+            cfg.source_dir = None
+            roots = []
+            if args.config:
+                roots.append(Path(args.config).resolve().parent)
+            roots.append(cfg.root)
+            for root in dict.fromkeys(roots):
+                folder = read_library(root)["games"].get(match)
+                if folder:
+                    cfg.source_dir = folder
+                    break
+    # Conventional workspace paths from older saved configs adopt game-local
+    # storage. Explicit CLI output and genuinely custom paths stay authoritative.
+    conventional = {
+        "out_dir": {Path("out"), saved_state},
+        "fields_dir": {Path("fields"), saved_state / 'fields'},
+        "cache_dir": {Path(".scout-cache"), saved_state / 'cache'},
+    }
+    for name in (saved_match, cfg.match):
+        if name:
+            conventional["out_dir"].add(Path("out") / name)
+    for key, values in conventional.items():
+        legacy = values | {root / value for root in workspace_roots for value in values}
+        if Path(getattr(cfg, key)) in legacy and not (key == "out_dir" and getattr(args, "out_dir", None) is not None):
+            setattr(cfg, key, getattr(Config(), key))
+    if cfg.source_dir is not None:
+        for key, candidate in models.items():
+            if getattr(args, key, None) is None:
+                setattr(cfg, key, candidate)
+        if not cfg.path(cfg.model_path).exists():
+            bundled = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+            candidate = bundled / "models" / "play.pkl"
+            if candidate.is_file():
+                cfg.model_path = str(candidate)
     for name in ("sample_fps", "imgsz", "batch", "clip_workers"):
         if getattr(cfg, name) <= 0:
             raise ValueError(f"{name} must be positive")
@@ -73,7 +126,7 @@ def _region_for(cfg: Config, clips, clip):
     import json as _json
     # fields/<stem>.json is the home for these; a file left in the project root
     # still works, so older setups keep running.
-    for side in (pick.field_path(cfg, clip), cfg.path(cfg.fields_dir) / f"{clip.path.stem}.json",
+    for side in (pick.field_path(cfg, clip), cfg.source_path(cfg.fields_dir, clip.path) / f"{clip.path.stem}.json",
                  cfg.path(f"{clip.path.stem}.json")):
         if not side.exists():
             continue
@@ -345,7 +398,7 @@ def cmd_collect(args) -> int:
     cfg = _load(args)
     stems = [x.strip() for x in args.files.split(",") if x.strip()]
     rows = collect.run(cfg, args.game, stems, Path(args.out),
-                       Path(cfg.media_dir), dry_run=args.dry_run)
+                       cfg.game_dir, dry_run=args.dry_run)
     total = sum(r.end - r.start for r in rows)
     where = Path(args.out) / args.game
     print(f"\n  {args.game}: {len(rows)} plays, {total/60:.1f} min of action")
@@ -378,8 +431,8 @@ def cmd_rename(args) -> int:
 def cmd_rename_clips(args) -> int:
     from .rename_clips import rename
     cfg = _load(args)
-    if not cfg.match:
-        raise ValueError('rename-clips requires --match')
+    if not cfg.match and cfg.source_dir is None:
+        raise ValueError('rename-clips requires --match or --source-dir')
     folder = cfg.path(cfg.out_dir) / 'clips'
     if not folder.is_dir():
         raise ValueError(f'clips folder not found: {folder}. Export the reviewed clips first '
@@ -588,9 +641,10 @@ def cmd_run(args) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="scout",
                                  description="Cut flag football footage play by play")
-    ap.add_argument("--match", help="match subdirectory under media; scopes output and setup")
+    ap.add_argument("--match", help="imported game name or match subdirectory under media")
     ap.add_argument("--config", default=CONFIG_FILE, help="config JSON")
     ap.add_argument("--media-dir", dest="media_dir")
+    ap.add_argument("--source-dir", help="use this recording folder in place")
     ap.add_argument("--out-dir", dest="out_dir")
     ap.add_argument("--limit", type=int, help="only the first N files")
     ap.add_argument("--segmenter", choices=["rules", "model"],

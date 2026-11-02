@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import shutil
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,22 +34,28 @@ class Collected:
     dst: Path
 
 
-def _gt_path(out_dir: Path, stem: str) -> Path | None:
+def _gt_path(out_dir: Path, stem: str, warnings: list[str] | None = None) -> Path | None:
     """The reviewed project for a camera file, whatever it ended up called."""
-    d = out_dir / stem
-    if not d.is_dir():
-        return None
-    for p in sorted(d.glob("*.mlt")):
-        if p.stem in ("review", "plays"):
+    for d in (out_dir / stem, out_dir):
+        if not d.is_dir():
             continue
-        if groundtruth.media_for(p):
-            return p
+        for p in sorted(d.glob("*.mlt")):
+            media = groundtruth.media_for(p)
+            if media and Path(media).stem == stem:
+                resources = {prop.text.strip() for prop in ET.parse(p).findall(".//property[@name='resource']")
+                             if prop.text and prop.text.strip() not in ("", "0")}
+                if len(resources) > 1:
+                    if warnings is not None:
+                        warnings.append(f"{stem}: {p.name} contains multiple source videos; use cut for a game-wide review")
+                    continue
+                return p
     return None
 
 
 def plan(cfg: Config, game: str, stems: list[str], dest_root: Path,
          media_dir: Path) -> tuple[list[Collected], list[str]]:
     out_dir = cfg.path(cfg.out_dir)
+    media_dir = media_dir.resolve()
     dest = dest_root / game
     rows: list[Collected] = []
     warnings: list[str] = []
@@ -57,16 +64,27 @@ def plan(cfg: Config, game: str, stems: list[str], dest_root: Path,
     extensions = {e.lower() for e in cfg.extensions}
     sources: dict[str, list[Path]] = {}
     for p in sorted(media_dir.rglob("*")):
-        if p.is_file() and p.suffix.lower() in extensions:
+        if (".scout" not in p.relative_to(media_dir).parts
+                and p.is_file() and p.suffix.lower() in extensions):
             sources.setdefault(p.stem, []).append(p)
 
     for stem in stems:
-        gt = _gt_path(out_dir, stem)
-        clips_dir = out_dir / stem / "clips"
         matches = sources.get(stem, [])
         if len(matches) > 1:
             raise SystemExit(f"{stem}: multiple media files found: "
                              + ", ".join(str(p) for p in matches))
+        state = out_dir
+        if cfg.out_dir == ".scout" and matches:
+            # Unscoped collection can span several recording folders. Locate
+            # their owning state without including generated videos as sources.
+            for folder in matches[0].parents:
+                if not folder.is_relative_to(media_dir):
+                    continue
+                if (folder / ".scout").is_dir():
+                    state = folder / ".scout"
+                    break
+        gt = _gt_path(state, stem, warnings)
+        clips_dir = gt.parent / "clips" if gt else state / "clips"
         duration = 0.0
         try:
             if not matches:

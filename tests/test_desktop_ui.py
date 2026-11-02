@@ -242,7 +242,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             # Supply a review across a camera-file boundary, then edit it natively.
             clips = [Clip(probe(root/'media/Demo'/p.name), i*2., 0) for i, p in enumerate(sources)]
             cfg = library.configuration(root, 'Demo')
-            review = root/'out/Demo/review.mlt'
+            review = root/'media/Demo/.scout/review.mlt'
             shotcut.write_review(cfg, clips, groundtruth.to_plays([groundtruth.Marked(1, .5, 3.5)]), review)
             studio.reload_match()
             self.wait_for(lambda: studio.data is not None and bool(studio.data['plays']) and studio.frame_ready)
@@ -523,7 +523,7 @@ class DesktopIntegrationTests(unittest.TestCase):
                 path = longer/f'camera{i}.mp4'
                 shutil.copyfile(sources[0], path)
                 longer_clips.append(Clip(probe(path), i*2., 0))
-            shotcut.write_review(library.configuration(root, 'Longer'), longer_clips, [], root/'out/Longer/review.mlt')
+            shotcut.write_review(library.configuration(root, 'Longer'), longer_clips, [], root/'media/Longer/.scout/review.mlt')
             studio.select_match('Longer')
             self.assertEqual(studio.fullscreen_slider.maximum(), 0)
             self.wait_for(lambda: bool(studio.data) and studio.frame_ready)
@@ -576,10 +576,11 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertEqual(studio.tabs.currentIndex(), current_tab)
             self.wait_for(lambda: bool(studio.jobs.history) and studio.jobs.current is None, seconds=25)
             self.assertEqual(studio.jobs.history[-1][2], 'Finished')
-            exports = list((root/'out/Demo/clips').glob('*.mp4'))
+            exports = list((root/'media/Demo/.scout/clips').glob('*.mp4'))
             self.assertEqual(len(exports), 1)
             self.assertEqual(exports[0].name, '-Saints_007_reviewed.mp4')
             self.assertAlmostEqual(probe(exports[0]).duration, 2., places=1)
+            self.assertFalse((root / 'out').exists())
             self.wait_for(lambda: not studio.tasks)
             self.assertEqual(errors, [])
             studio.close()

@@ -19,12 +19,11 @@ class Config:
     media_dir: str = "media"
     #: An exact recording folder; match remains its display/registry name.
     source_dir: str | None = None
-    out_dir: str = "out"
-    #: Detections are expensive and independent of where results go, so the
-    #: cache lives outside out/, which gets cleaned between runs.
-    cache_dir: str = ".scout-cache"
+    out_dir: str = ".scout"
+    #: Persistent detections stored with the game.
+    cache_dir: str = ".scout/cache"
     #: Hand-drawn field polygons, one `<file stem>.json` per camera file.
-    fields_dir: str = "fields"
+    fields_dir: str = ".scout/fields"
     #: Measure how players are arranged along the field rather than along the
     #: image.  Measured worth: +0.5 points of F1, and both recall and precision
     #: improved.  The three venues so far sit at +13, +17 and -17 degrees from
@@ -206,10 +205,41 @@ class Config:
         media = Path(self.media_dir)
         return media.parent.resolve() if media.is_absolute() else Path.cwd()
 
+    @property
+    def game_dir(self) -> Path:
+        """The exact source folder that owns this game's application state."""
+        if self.source_dir is not None:
+            return Path(self.source_dir).resolve()
+        media = Path(self.media_dir).resolve()
+        return media / self.match if self.match else media
+
     def path(self, value: str | Path) -> Path:
         """Resolve a configured path against the project directory."""
         p = Path(value)
-        return p if p.is_absolute() else self.root / p
+        if p.is_absolute():
+            return p
+        return (self.game_dir if p.parts and p.parts[0] == ".scout"
+                else self.root) / p
+
+    def source_path(self, value: str | Path, source: Path) -> Path:
+        """Locate default state for a source, including multi-game training."""
+        p = Path(value)
+        if p.is_absolute() or not p.parts or p.parts[0] != '.scout':
+            return self.path(p)
+        source = Path(source).absolute()
+        if (self.source_dir is not None or self.match) and source.is_relative_to(self.game_dir):
+            return self.game_dir / p
+        # A reviewed game can live anywhere and contain nested camera folders.
+        for folder in source.parents:
+            if (folder / '.scout').is_dir():
+                return folder / p
+        media = Path(self.media_dir).resolve()
+        if source.is_relative_to(media):
+            relative = source.relative_to(media)
+            folder = media / relative.parts[0] if len(relative.parts) > 1 else media
+        else:
+            folder = source.parent
+        return folder / p
 
     @classmethod
     def load(cls, path: str | Path | None) -> "Config":

@@ -50,7 +50,7 @@ class CustomExportTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.out = Path(self.directory.name)
-        self.cfg = Config(clip_workers=2)
+        self.cfg = Config(clip_workers=2, source_dir=self.directory.name)
         # Deliberately nonconsecutive play indices: selected plays are numbered
         # in their supplied chronological order, independently of marker IDs.
         self.plays = [SimpleNamespace(index=4, snap=10), SimpleNamespace(index=9, snap=30)]

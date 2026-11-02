@@ -72,7 +72,7 @@ def _cache_key(cfg: Config, clip: Clip) -> str:
 
 
 def cache_path(cfg: Config, clip: Clip) -> Path:
-    d = cfg.path(cfg.cache_dir)
+    d = cfg.source_path(cfg.cache_dir, clip.path)
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{clip.path.stem}.{_cache_key(cfg, clip)}.npz"
 

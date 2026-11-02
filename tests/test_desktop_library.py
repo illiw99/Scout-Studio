@@ -195,7 +195,10 @@ class LibraryTests(unittest.TestCase):
         source = game / 'camera.mp4'
         source.write_bytes(b'original footage')
         clip = Clip(MediaInfo(source, 10, 320, 180, 25, None), 0, 0)
-        cfg = library.configuration(self.root, 'Game')
+        from scout.config import Config
+        cfg = Config(media_dir=str(self.root / 'media'), match='Game',
+                     out_dir=str(self.root / 'out/Game'),
+                     fields_dir=str(self.root / 'fields'), cache_dir=str(self.root / '.scout-cache'))
         library.save_field(cfg, clip, [[0, 0], [1, 0], [1, 1]], 1)
         review = self.root / 'out/Game/review.mlt'
         review.parent.mkdir(parents=True)
@@ -340,7 +343,7 @@ class LibraryTests(unittest.TestCase):
 
     def test_running_batch_is_detected_but_stale_batch_is_ignored(self):
         import os
-        batch = self.root/'out/w3-batch-test'
+        batch = self.root/'.scout/batches/w3-batch-test'
         batch.mkdir(parents=True)
         (batch/'pid').write_text(str(os.getpid()))
         (batch/'status.json').write_text(json.dumps({'A': {'state': 'running'}, 'B': {'state': 'completed'}}))

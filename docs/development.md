@@ -127,7 +127,10 @@ The [agent workflow](multi-agent-workflow.md) describes optional delegation.
 
 ## Runtime data
 
-A library may live outside the source checkout. Typical library folders include `media/`, `fields/`,
-`.scout-cache/`, `models/`, `out/`, and optional `scout.json` settings. Existing
-paths and data remain authoritative. Models intentionally remain separate from
-redistributable application packages.
+A library may live outside the source checkout. Its `.scout-library.json` index
+remembers imported game folders. Each game owns a `.scout/` folder for reviews,
+fields, detection caches, exports and processing logs, shared by CLI and GUI.
+Copied footage can still live under `media/<match>`. Workspace `out/`, `fields/`
+and `.scout-cache/` are legacy migration inputs; new default jobs do not create
+them. Optional `scout.json` settings and trained `models/` remain separate from
+redistributable application packages. Explicit custom destinations are honored.

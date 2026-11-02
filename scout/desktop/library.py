@@ -14,54 +14,13 @@ from scout.config import Config
 from scout import groundtruth, pick, timeline
 
 
-def _library_index(root: Path) -> dict:
-    """Read the persistent folder index; never silently replace a damaged index."""
-    path = root / '.scout-library.json'
-    if not path.exists():
-        return dict(version=1, games={}, removed_legacy=[])
-    try:
-        data = json.loads(path.read_text())
-        games = data['games']
-        removed = data.get('removed_legacy', [])
-        if data['version'] != 1 or not isinstance(games, dict):
-            raise ValueError
-        if not isinstance(removed, list):
-            raise ValueError
-        for name in removed:
-            if not isinstance(name, str):
-                raise ValueError
-            _validate_name(name)
-        for name, folder in games.items():
-            if not isinstance(name, str) or not isinstance(folder, str) or not Path(folder).is_absolute():
-                raise ValueError
-            _validate_name(name)
-        return dict(version=1, games=games, removed_legacy=removed)
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError(f'Cannot read the game library index: {path}. Restore it from a backup before importing games.') from exc
+# Public desktop aliases retained for callers while CLI and GUI share one index.
+from scout.storage import read_library as _library_index, write_library as _save_linked_games
+from scout.storage import validate_name as _validate_name
 
 
 def linked_games(root: Path) -> dict[str, str]:
     return _library_index(root)['games']
-
-
-def _save_linked_games(root: Path, games: dict[str, str], removed_legacy=None) -> None:
-    if removed_legacy is None:
-        removed_legacy = _library_index(root)['removed_legacy']
-    root.mkdir(parents=True, exist_ok=True)
-    fd, temporary = tempfile.mkstemp(prefix='.scout-library-', suffix='.tmp', dir=root)
-    try:
-        with os.fdopen(fd, 'w') as handle:
-            json.dump(dict(version=1, games=games, removed_legacy=sorted(removed_legacy)), handle, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temporary, root / '.scout-library.json')
-    finally:
-        Path(temporary).unlink(missing_ok=True)
-
-
-def _validate_name(name: str) -> None:
-    if not name or name != name.strip() or name in ('.', '..') or '/' in name or '\\' in name or any(ord(c) < 32 for c in name):
-        raise ValueError('Give the match a name without slashes or control characters.')
 
 
 def source_path(root: Path, name: str) -> Path:
@@ -87,9 +46,14 @@ def _adopt_legacy_data(root: Path, name: str, folder: Path) -> None:
         return  # Existing per-game work is authoritative; never replace it.
     new_state = not state.exists()
     state.mkdir(exist_ok=True)
-    cfg = configuration(root, name)
+    # Legacy paths are migration input only. Current CLI/GUI configuration never
+    # writes here; retain this reader for libraries that have not been adopted.
+    cfg = Config.load(root / 'scout.json')
+    cfg.media_dir = str(root / 'media')
+    cfg.source_dir = None
+    cfg.match = name
     sources = {}
-    output = cfg.path(cfg.out_dir)
+    output = root / 'out' / name
     if output.is_dir():
         for path in output.rglob('*'):
             if path.is_symlink():
@@ -99,14 +63,16 @@ def _adopt_legacy_data(root: Path, name: str, folder: Path) -> None:
     for video in _source_videos(folder, cfg.extensions):
         identity = hashlib.sha256(str(video.resolve()).encode()).hexdigest()[:16]
         for filename in (f'{video.stem}-{identity}.json', f'{video.stem}.json'):
-            field = cfg.path(cfg.fields_dir) / filename
+            legacy_fields = root / 'fields' if cfg.fields_dir == '.scout/fields' else cfg.path(cfg.fields_dir)
+            field = legacy_fields / filename
             if field.is_file():
                 sources[Path('fields') / filename] = field
         # Old CLI projects also supported root-level field sidecars.
         sidecar = cfg.root / f'{video.stem}.json'
         if sidecar.is_file():
             sources.setdefault(Path('fields') / sidecar.name, sidecar)
-        for cache in cfg.path(cfg.cache_dir).glob(f'{video.stem}.*.npz'):
+        legacy_cache = root / '.scout-cache' if cfg.cache_dir == '.scout/cache' else cfg.path(cfg.cache_dir)
+        for cache in legacy_cache.glob(f'{video.stem}.*.npz'):
             if cache.is_file():
                 sources[Path('cache') / cache.name] = cache
     created = []
@@ -236,14 +202,13 @@ def configuration(root: Path, name: str) -> Config:
     linked = name in linked_games(root)
     if linked and not folder.is_dir():
         raise ValueError('This game folder is unavailable. Connect its drive and try again.')
-    if linked and (folder / '.scout').is_symlink():
+    if (folder / '.scout').is_symlink():
         raise ValueError('The .scout folder must be stored inside the game folder, not linked elsewhere.')
-    cfg.source_dir = str(folder) if linked else None
-    cfg.media_dir = str(folder if linked else root / 'media')
-    cfg.out_dir = str(folder / '.scout' if linked else root / 'out' / name)
-    if linked:
-        cfg.cache_dir = str(folder / '.scout' / 'cache')
-        cfg.fields_dir = str(folder / '.scout' / 'fields')
+    cfg.source_dir = str(folder)
+    cfg.media_dir = str(folder)
+    cfg.out_dir = str(folder / '.scout')
+    cfg.cache_dir = str(folder / '.scout' / 'cache')
+    cfg.fields_dir = str(folder / '.scout' / 'fields')
     cfg.match = name
     # New libraries use the model shipped with the app unless they have their own.
     if not cfg.path(cfg.model_path).exists():
@@ -289,8 +254,8 @@ def matches(root: Path) -> list[dict]:
             match_path(root, folder.name)
         except ValueError:
             continue
-        files = sorted(p for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in Config().extensions)
-        review = root / 'out' / folder.name / 'review.mlt'
+        files = _source_videos(folder)
+        review = folder / '.scout' / 'review.mlt'
         rows.append(dict(name=folder.name, files=len(files), review=review.exists()))
     for name, value in games.items():
         folder = Path(value)
@@ -434,9 +399,16 @@ def import_videos(root: Path, name: str, sources: list[Path], progress=lambda _:
 
 
 def active_batches(root: Path) -> list[dict]:
-    """Observe the earlier detached batch without taking ownership of it."""
+    """Observe detached batches in workspace or per-game state directories."""
     rows = []
-    for status in sorted((root / 'out').glob('w3-batch-*/status.json')):
+    folders = {Path(folder) for folder in linked_games(root).values()}
+    media = root / 'media'
+    if media.is_dir():
+        folders.update(folder for folder in media.iterdir() if folder.is_dir())
+    statuses = set((root / '.scout' / 'batches').glob('*/status.json'))
+    for folder in folders:
+        statuses.update((folder / '.scout' / 'desktop' / 'batches').glob('*/status.json'))
+    for status in sorted(statuses):
         try:
             pid = int((status.parent / 'pid').read_text())
             os.kill(pid, 0)
@@ -445,7 +417,7 @@ def active_batches(root: Path) -> list[dict]:
             except ValueError:
                 # The older runner writes in place. A live PID still means wait
                 # during the brief interval in which that JSON is being updated.
-                rows.append(dict(name='W3 batch', state='running', log=status.parent / 'batch.log'))
+                rows.append(dict(name='External batch', state='running', log=status.parent / 'batch.log'))
                 continue
             for name, row in data.items():
                 if row.get('state') in ('running', 'queued'):

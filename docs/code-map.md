@@ -6,7 +6,8 @@ when moving responsibilities; read only paths relevant to the task.
 | Concern | Start here |
 | --- | --- |
 | CLI commands and pipeline orchestration | `scout/cli.py`, `scout/__main__.py` |
-| Configuration, paths and tunable defaults | `scout/config.py` |
+| Configuration, per-game/source state paths and tunable defaults | `scout/config.py` |
+| Shared CLI/GUI game-folder index, validation and atomic persistence | `scout/storage.py` |
 | Source discovery (including linked folders and .scout exclusion), clip order and match timeline | `scout/timeline.py` |
 | FFmpeg discovery, probing and frame decoding | `scout/media.py` |
 | YOLO detection, device choice and persistent caches | `scout/detect.py` |
@@ -47,8 +48,9 @@ CLI / native Qt -> ordered media timeline -> cached detection -> features -> pla
 segmentation -> Shotcut review and MP4 export. The native UI edits fields and
 review markers, and queues existing CLI commands as subprocesses.
 
-Runtime state includes `media/`, `fields/`, `.scout-cache/`, `out/`, `games/`,
-configuration and trained `models/`. Treat those as user data even when ignored
+Runtime state includes imported game folders and their `.scout/` state,
+`media/`, `games/`, configuration and trained `models/`. Legacy `fields/`,
+`.scout-cache/` and `out/` are migration inputs. Treat those as user data even when ignored
 by Git. Tests use temporary fixtures; do not validate by modifying a real library.
 Read README only for setup and operational details. The existing CLI setup helper
 in `scout/pick.py` is separate from the native desktop workflow.

@@ -30,7 +30,8 @@ below. Day-to-day use needs no terminal or Python knowledge.
 - The right-click menu also offers **New empty match…** for the older copied
   workflow. For these matches, **Import video files (copy)…** or dropping individual
   videos copies originals into the library and rejects filename collisions.
-  Their existing `media/`, `out/`, field and cache paths remain in use. To restore
+  Their footage stays in `media/`; generated data uses the same per-game `.scout/`
+  layout as linked games, shared with the CLI. To restore
   a deleted copied match, remove `media/<match>/.scout-removed` and restart the app.
 - The sun/moon icon at the top right switches theme. The sidebar keeps only
   **Import game**, search, and the match list; it has no library-switch button.

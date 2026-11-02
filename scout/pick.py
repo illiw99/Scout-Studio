@@ -153,7 +153,7 @@ def _frame_data_uri(img_rgb: np.ndarray) -> str:
 
 def field_path(cfg, clip):
     identity = hashlib.sha256(str(clip.path.resolve()).encode()).hexdigest()[:16]
-    return cfg.path(cfg.fields_dir) / f"{clip.path.stem}-{identity}.json"
+    return cfg.source_path(cfg.fields_dir, clip.path) / f"{clip.path.stem}-{identity}.json"
 
 
 def validate_polygon(value):

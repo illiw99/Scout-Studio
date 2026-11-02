@@ -1189,7 +1189,7 @@ class Studio(QMainWindow):
         name = self.jobs.current[0] if self.jobs.current else self.match
         try:
             cfg = library.configuration(self.root, name) if name else None
-            folder = cfg.path(cfg.out_dir) / 'desktop' if cfg and cfg.source_dir else self.root / 'out'
+            folder = cfg.path(cfg.out_dir) / 'desktop' if cfg else self.root / '.scout' / 'desktop'
             folder.mkdir(parents=True, exist_ok=True)
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
         except (OSError, ValueError) as exc:
@@ -1900,7 +1900,7 @@ def main(argv=None):
         from scout.cli import main as cli
         return cli(argv[argv.index('--scout-cli')+1:])
     parser = argparse.ArgumentParser(description='Scout Studio desktop app')
-    parser.add_argument('--workspace', type=Path, help='library folder containing media/ and out/')
+    parser.add_argument('--workspace', type=Path, help='library folder containing the game index and optional media/')
     args = parser.parse_args(argv)
     # Some OpenCV wheels set Qt5 paths at import time. Use this app's Qt6 plugins.
     os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)

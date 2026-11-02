@@ -77,8 +77,7 @@ class JobQueue(QObject):
                 if value is not None:
                     args.append(f'{flag}={value}')
         # Use bundled model paths in a fresh library through an explicit config.
-        config_dir = (cfg.path(cfg.out_dir) / 'desktop' if cfg.source_dir
-                      else self.root / 'out' / '.desktop')
+        config_dir = cfg.path(cfg.out_dir) / 'desktop'
         config_dir.mkdir(parents=True, exist_ok=True)
         config = config_dir / f'{match}-config.json'
         cfg.save(config)

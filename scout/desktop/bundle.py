@@ -99,7 +99,8 @@ def _exercise(root, checks):
     frames = list(media.iter_frames(source, 2, 160, 96, hwaccel=False))
     assert len(frames) == 4 and frames[0].shape == (96, 160, 3)
     checks['ffmpeg'] = True
-    output = root / 'out' / 'Smoke' / 'clips' / 'clip.mp4'
+    game = root / 'media' / 'Smoke'
+    output = game / '.scout' / 'clips' / 'clip.mp4'
     play = Play(1, .2, .8, .2, .8, .6, 0, 0, 0)
     cut_one(Config(), [clip], play, output)
     assert abs(media.probe(output).duration - .6) < .1
@@ -110,7 +111,7 @@ def _exercise(root, checks):
     command = cli_command()
     config = root / 'scout.json'
     Config().save(config)
-    child = subprocess.run([*command, '--config', str(config), '--out-dir', str(root / 'out' / 'Smoke'),
+    child = subprocess.run([*command, '--config', str(config), '--media-dir', str(root / 'media'),
                     '--match', 'Smoke', 'rename-clips', '--pattern', 'checked_<N>'],
                    cwd=root, check=True, timeout=90, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert (output.parent / 'checked_1.mp4').is_file()
