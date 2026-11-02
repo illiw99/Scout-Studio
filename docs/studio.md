@@ -21,6 +21,12 @@ below. Day-to-day use needs no terminal or Python knowledge.
   deleted; unsaved edits use the usual save/discard prompt. An unavailable drive
   leaves the game listed; reconnect it at the same location and refresh the match.
   If two folders have the same name, rename one before importing it.
+- Existing copied matches can also use the new scheme: choose their existing
+  `media/<match>` folder with **Import game**. Studio brings saved output, reviews,
+  field sidecars and matching detection caches into `.scout/` while retaining the
+  originals. Existing `.scout/` work takes priority. Footage stays in place;
+  old clip exports share disk storage where hard links are supported. Importing
+  a different folder with the same name still reports a collision.
 - The right-click menu also offers **New empty match…** for the older copied
   workflow. For these matches, **Import video files (copy)…** or dropping individual
   videos copies originals into the library and rejects filename collisions.
@@ -108,7 +114,9 @@ One-time setup for a source checkout:
 ```
 
 You can also launch with `./start-studio.sh` or `scout-studio`. Studio remembers
-its workspace and game-folder index across restarts. An optional
+its workspace and game-folder index across restarts. If a remembered workspace
+no longer exists, it falls back to this checkout's library or the default Videos
+library. An optional
 `scout-studio --workspace /path/to/library` selects a different workspace at
 launch; existing copied matches and optional `scout.json` settings still work.
 New libraries use the included play model. The first detection run may download

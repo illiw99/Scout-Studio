@@ -55,6 +55,19 @@ class DesktopIntegrationTests(unittest.TestCase):
             callbacks[1][0]({'changed': False})
             self.assertFalse(state.match_busy('B'))
 
+    def test_missing_saved_workspace_falls_back_to_existing_checkout(self):
+        from scout.desktop.app import workspace_path
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'media').mkdir()
+            with patch('scout.desktop.app.Path.cwd', return_value=root):
+                self.assertEqual(workspace_path(remembered=root/'deleted-smoke-test'), root)
+                other = root/'other'
+                other.mkdir()
+                self.assertEqual(workspace_path(remembered=other), other)
+                explicit = root/'new-workspace'
+                self.assertEqual(workspace_path(explicit, root), explicit)
+
     def test_delete_match_confirmation_guards_and_empty_library(self):
         from PySide6.QtCore import QSettings
         from PySide6.QtWidgets import QMessageBox

@@ -14,31 +14,44 @@ from scout.config import Config
 from scout import groundtruth, pick, timeline
 
 
-def linked_games(root: Path) -> dict[str, str]:
+def _library_index(root: Path) -> dict:
     """Read the persistent folder index; never silently replace a damaged index."""
     path = root / '.scout-library.json'
     if not path.exists():
-        return {}
+        return dict(version=1, games={}, removed_legacy=[])
     try:
         data = json.loads(path.read_text())
         games = data['games']
+        removed = data.get('removed_legacy', [])
         if data['version'] != 1 or not isinstance(games, dict):
             raise ValueError
+        if not isinstance(removed, list):
+            raise ValueError
+        for name in removed:
+            if not isinstance(name, str):
+                raise ValueError
+            _validate_name(name)
         for name, folder in games.items():
             if not isinstance(name, str) or not isinstance(folder, str) or not Path(folder).is_absolute():
                 raise ValueError
             _validate_name(name)
-        return games
+        return dict(version=1, games=games, removed_legacy=removed)
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(f'Cannot read the game library index: {path}. Restore it from a backup before importing games.') from exc
 
 
-def _save_linked_games(root: Path, games: dict[str, str]) -> None:
+def linked_games(root: Path) -> dict[str, str]:
+    return _library_index(root)['games']
+
+
+def _save_linked_games(root: Path, games: dict[str, str], removed_legacy=None) -> None:
+    if removed_legacy is None:
+        removed_legacy = _library_index(root)['removed_legacy']
     root.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix='.scout-library-', suffix='.tmp', dir=root)
     try:
         with os.fdopen(fd, 'w') as handle:
-            json.dump(dict(version=1, games=games), handle, indent=2)
+            json.dump(dict(version=1, games=games, removed_legacy=sorted(removed_legacy)), handle, indent=2)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, root / '.scout-library.json')
@@ -65,6 +78,107 @@ def _source_videos(folder: Path, extensions=None) -> list[Path]:
                    and '.scout' not in p.relative_to(folder).parts), key=timeline.filename_key)
 
 
+def _adopt_legacy_data(root: Path, name: str, folder: Path) -> None:
+    """Seed per-game storage without changing any legacy files or newer state."""
+    state = folder / '.scout'
+    if state.is_symlink():
+        raise ValueError('The .scout folder must be stored inside the game folder, not linked elsewhere.')
+    if state.exists() and any(state.iterdir()):
+        return  # Existing per-game work is authoritative; never replace it.
+    new_state = not state.exists()
+    state.mkdir(exist_ok=True)
+    cfg = configuration(root, name)
+    sources = {}
+    output = cfg.path(cfg.out_dir)
+    if output.is_dir():
+        for path in output.rglob('*'):
+            if path.is_symlink():
+                raise ValueError(f'Cannot migrate linked output safely: {path}')
+            if path.is_file():
+                sources[path.relative_to(output)] = path
+    for video in _source_videos(folder, cfg.extensions):
+        identity = hashlib.sha256(str(video.resolve()).encode()).hexdigest()[:16]
+        for filename in (f'{video.stem}-{identity}.json', f'{video.stem}.json'):
+            field = cfg.path(cfg.fields_dir) / filename
+            if field.is_file():
+                sources[Path('fields') / filename] = field
+        # Old CLI projects also supported root-level field sidecars.
+        sidecar = cfg.root / f'{video.stem}.json'
+        if sidecar.is_file():
+            sources.setdefault(Path('fields') / sidecar.name, sidecar)
+        for cache in cfg.path(cfg.cache_dir).glob(f'{video.stem}.*.npz'):
+            if cache.is_file():
+                sources[Path('cache') / cache.name] = cache
+    created = []
+    created_directories = []
+    snapshots = {path: (path.stat().st_size, path.stat().st_mtime_ns) for path in sources.values()}
+    try:
+        with tempfile.TemporaryDirectory(prefix='.legacy-import-', dir=state) as temporary:
+            staging = Path(temporary)
+            for relative, source in sources.items():
+                target = staging / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                # Exported video bytes can be shared; mutable reviews, fields and
+                # caches get independent copies so later edits preserve originals.
+                if source.suffix.lower() in cfg.extensions:
+                    try:
+                        os.link(source, target)
+                    except OSError:
+                        shutil.copy2(source, target)
+                else:
+                    shutil.copy2(source, target)
+                if source.suffix.lower() == '.mlt':
+                    # Relative MLT resources must keep their original base after
+                    # relocation. Preserve the original file byte-for-byte.
+                    tree = ET.parse(target)
+                    document = tree.getroot()
+                    base = Path(document.get('root', str(source.parent)))
+                    if not base.is_absolute():
+                        base = source.parent / base
+                    resources = document.findall(".//property[@name='resource']")
+                    if any(p.text and not Path(p.text).is_absolute()
+                           and (base / p.text).is_file() for p in resources):
+                        document.set('root', str(base.resolve()))
+                        tree.write(target, encoding='utf-8', xml_declaration=True)
+            if any((path.stat().st_size, path.stat().st_mtime_ns) != stamp
+                   for path, stamp in snapshots.items()):
+                raise ValueError('Saved match data changed while importing. Wait for processing or editing to finish and try again.')
+            for relative in sources:
+                target = state / relative
+                parent = target.parent
+                missing = []
+                while parent != state and not parent.exists():
+                    missing.append(parent)
+                    parent = parent.parent
+                target.parent.mkdir(parents=True, exist_ok=True)
+                created_directories.extend(reversed(missing))
+                try:
+                    os.link(staging / relative, target)  # Exclusive, never overwrite.
+                    created.append(target)
+                except FileExistsError:
+                    raise
+                except OSError:
+                    # Some removable filesystems cannot create hard links.
+                    with target.open('xb') as destination:
+                        created.append(target)
+                        with (staging / relative).open('rb') as source:
+                            shutil.copyfileobj(source, destination)
+    except BaseException:
+        for target in reversed(created):
+            target.unlink()
+        for directory in reversed(created_directories):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass  # Preserve concurrent files.
+        if new_state:
+            try:
+                state.rmdir()
+            except OSError:
+                pass
+        raise
+
+
 def import_folder(root: Path, folder: Path) -> str:
     """Remember a game folder in place, without copying or moving its videos."""
     folder = folder.expanduser().resolve()
@@ -77,10 +191,16 @@ def import_folder(root: Path, folder: Path) -> str:
         if Path(games[name]) == folder:
             return name
         raise ValueError('Another imported game already has this folder name. Rename one folder before importing it.')
-    if (root / 'media' / name).exists():
+    legacy = root / 'media' / name
+    same_legacy = legacy.exists() and legacy.resolve() == folder
+    if legacy.exists() and not same_legacy:
         raise ValueError('A match with this name already exists in the library. Rename the game folder before importing it.')
     if not _source_videos(folder):
         raise ValueError('This folder has no supported videos. Choose the folder containing the game footage.')
+    if same_legacy:
+        if active_batches(root):
+            raise ValueError('Wait for existing processing to finish before importing a previous match.')
+        _adopt_legacy_data(root, name, folder)
     # Verify that game data can be saved here before registering the folder.
     state = folder / '.scout'
     if state.is_symlink():
@@ -89,7 +209,10 @@ def import_folder(root: Path, folder: Path) -> str:
     with tempfile.TemporaryFile(dir=state):
         pass
     games[name] = str(folder)
-    _save_linked_games(root, games)
+    removed = set(_library_index(root)['removed_legacy'])
+    if same_legacy:
+        removed.discard(name)
+    _save_linked_games(root, games, removed)
     return name
 
 
@@ -136,8 +259,13 @@ def remove_match(root: Path, name: str) -> None:
     """Hide a match without moving or deleting footage or review resources."""
     games = linked_games(root)
     if name in games:
+        folder = Path(games[name])
+        legacy = root / 'media' / name
+        removed = set(_library_index(root)['removed_legacy'])
+        if legacy.resolve() == folder.resolve():
+            removed.add(name)
         del games[name]
-        _save_linked_games(root, games)
+        _save_linked_games(root, games, removed)
         return
     folder = match_path(root, name)
     if not folder.is_dir():
@@ -151,8 +279,9 @@ def matches(root: Path) -> list[dict]:
     media = root / 'media'
     rows = []
     games = linked_games(root)
+    removed = set(_library_index(root)['removed_legacy'])
     for folder in sorted(media.iterdir()) if media.exists() else []:
-        if folder.name in games:
+        if folder.name in games or folder.name in removed:
             continue
         if not folder.is_dir() or folder.name.startswith('.') or (folder / '.scout-removed').exists():
             continue

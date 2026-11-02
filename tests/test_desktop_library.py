@@ -188,6 +188,102 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(index.read_bytes(), original)
         self.assertEqual(list(root.glob('.scout-library-*.tmp')), [])
 
+    def legacy_fixture(self):
+        from scout import groundtruth, shotcut
+        game = self.root / 'media/Game'
+        game.mkdir(parents=True)
+        source = game / 'camera.mp4'
+        source.write_bytes(b'original footage')
+        clip = Clip(MediaInfo(source, 10, 320, 180, 25, None), 0, 0)
+        cfg = library.configuration(self.root, 'Game')
+        library.save_field(cfg, clip, [[0, 0], [1, 0], [1, 1]], 1)
+        review = self.root / 'out/Game/review.mlt'
+        review.parent.mkdir(parents=True)
+        shotcut.write_review(cfg, [clip], groundtruth.to_plays([groundtruth.Marked(1, 1, 3)]), review)
+        cache = self.root / '.scout-cache/camera.saved.npz'
+        cache.parent.mkdir()
+        cache.write_bytes(b'saved detections')
+        exported = review.parent / 'clips/old.mp4'
+        exported.parent.mkdir()
+        exported.write_bytes(b'previous export')
+        return game, clip, review, cache, exported
+
+    def test_previous_match_adopts_saved_work_without_moving_or_overwriting(self):
+        from scout import pick
+        game, clip, review, cache, exported = self.legacy_fixture()
+        original = review.read_bytes()
+        self.assertEqual(library.import_folder(self.root, game), 'Game')
+        cfg = library.configuration(self.root, 'Game')
+        self.assertEqual(cfg.source_dir, str(game))
+        self.assertEqual((game / '.scout/review.mlt').read_bytes(), original)
+        self.assertEqual((game / '.scout/cache' / cache.name).read_bytes(), cache.read_bytes())
+        self.assertTrue(pick.field_path(cfg, clip).is_file())
+        self.assertEqual((game / '.scout/clips/old.mp4').read_bytes(), exported.read_bytes())
+        with patch('scout.timeline.probe', return_value=clip.info), patch('scout.media.probe', return_value=clip.info):
+            loaded = library.load_match(self.root, 'Game')
+        self.assertEqual(len(loaded['plays']), 1)
+        self.assertTrue(all(loaded['regions']))
+        self.assertEqual([c.path for c in loaded['clips']], [clip.path])
+        (game / '.scout/review.mlt').write_bytes(b'newer game review')
+        (game / '.scout/cache' / cache.name).write_bytes(b'newer cache')
+        self.assertEqual(review.read_bytes(), original)
+        self.assertEqual(cache.read_bytes(), b'saved detections')
+        library.remove_match(self.root, 'Game')
+        self.assertEqual(library.matches(self.root), [])
+        library.import_folder(self.root, game)
+        self.assertEqual((game / '.scout/review.mlt').read_bytes(), b'newer game review')
+        self.assertEqual(review.read_bytes(), original)
+
+    def test_previous_match_relative_review_keeps_original_source_base(self):
+        from scout import groundtruth
+        game, clip, review, _, _ = self.legacy_fixture()
+        review.write_text(review.read_text().replace(str(clip.path), '../../media/Game/camera.mp4'))
+        original = review.read_bytes()
+        library.import_folder(self.root, game)
+        with patch('scout.media.probe', return_value=clip.info):
+            self.assertEqual([c.path for c in groundtruth.project_clips(game / '.scout/review.mlt')], [clip.path])
+        self.assertEqual(review.read_bytes(), original)
+
+    def test_previous_match_migration_failure_leaves_originals_and_can_retry(self):
+        game, _, review, _, _ = self.legacy_fixture()
+        original = review.read_bytes()
+        with patch('scout.desktop.library.shutil.copy2', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                library.import_folder(self.root, game)
+        self.assertEqual(library.linked_games(self.root), {})
+        self.assertEqual(review.read_bytes(), original)
+        library.import_folder(self.root, game)
+        self.assertEqual((game / '.scout/review.mlt').read_bytes(), original)
+
+    def test_previous_match_migration_supports_filesystems_without_hardlinks(self):
+        game, _, review, _, exported = self.legacy_fixture()
+        with patch('scout.desktop.library.os.link', side_effect=OSError('no hardlinks')):
+            library.import_folder(self.root, game)
+        self.assertEqual((game / '.scout/review.mlt').read_bytes(), review.read_bytes())
+        self.assertEqual((game / '.scout/clips/old.mp4').read_bytes(), exported.read_bytes())
+
+    def test_previous_match_unregister_failure_preserves_visibility(self):
+        game, _, _, _, _ = self.legacy_fixture()
+        library.import_folder(self.root, game)
+        with patch('scout.desktop.library.os.replace', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                library.remove_match(self.root, 'Game')
+        self.assertFalse((game / '.scout-removed').exists())
+        self.assertEqual([r['name'] for r in library.matches(self.root)], ['Game'])
+
+    def test_offline_previous_match_stays_removed_after_reconnection(self):
+        game, _, review, _, _ = self.legacy_fixture()
+        original = review.read_bytes()
+        library.import_folder(self.root, game)
+        offline = game.with_name('disconnected')
+        game.rename(offline)
+        library.remove_match(self.root, 'Game')
+        offline.rename(game)
+        self.assertEqual(library.matches(self.root), [])
+        library.import_folder(self.root, game)
+        self.assertTrue(library.matches(self.root)[0]['linked'])
+        self.assertEqual((game / '.scout/review.mlt').read_bytes(), original)
+
     def test_import_copies_without_touching_originals(self):
         source = self.root/'camera.MP4'
         source.write_bytes(b'video')

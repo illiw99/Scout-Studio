@@ -917,6 +917,9 @@ class Studio(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, 'Import game folder', str(Path.home()))
         if not folder or not self.resolve_dirty():
             return
+        if self.match_busy(Path(folder).name):
+            self.show_error('This match is processing. Wait for it to finish before importing its folder.')
+            return
         root, token = self.root, self.load_token
         self.importing = True
         self.update_actions()
@@ -1882,6 +1885,15 @@ class Studio(QMainWindow):
         event.accept()
 
 
+def workspace_path(requested=None, remembered=None):
+    """Honor explicit workspaces, but recover from a disappeared saved folder."""
+    if requested:
+        return Path(requested)
+    if remembered and Path(remembered).is_dir():
+        return Path(remembered)
+    return Path.cwd() if (Path.cwd() / 'media').is_dir() else Path.home() / 'Videos' / 'Scout'
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     if '--scout-cli' in argv:
@@ -1904,9 +1916,7 @@ def main(argv=None):
     app.setStyle('Fusion')
     app.setStyleSheet(STYLE)
     settings = QSettings('Scout', 'Studio')
-    root = args.workspace or settings.value('library')
-    if not root:
-        root = Path.cwd() if (Path.cwd() / 'media').is_dir() else Path.home() / 'Videos' / 'Scout'
+    root = workspace_path(args.workspace, settings.value('library'))
     window = Studio(root)
     window.show()
     return app.exec()
