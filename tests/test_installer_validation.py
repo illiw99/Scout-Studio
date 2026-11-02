@@ -1,7 +1,13 @@
 """An incomplete installed-app smoke report must never pass the release gate."""
 import importlib.util
+import contextlib
+import io
+import json
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
+from unittest.mock import patch
 
 
 def checker():
@@ -13,6 +19,31 @@ def checker():
 
 
 class InstallerValidationTests(unittest.TestCase):
+    def test_failed_app_prints_report_and_preserves_exit_failure(self):
+        module = checker()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            report = root / 'smoke-report.json'
+            def fail(*args, **kwargs):
+                report.write_text(json.dumps(dict(ok=False, error='torchvision::nms missing')))
+                kwargs['stdout'].write('native extension load failed\n')
+                raise subprocess.CalledProcessError(1, args)
+            with patch.object(module, 'run', side_effect=fail), contextlib.redirect_stdout(io.StringIO()) as output:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    module.exercise_installed_app(root/'PlayChop', report, '1.0.0', root, {})
+            self.assertIn('torchvision::nms missing', output.getvalue())
+            self.assertIn('native extension load failed', output.getvalue())
+            self.assertTrue((root / 'smoke-process.log').is_file())
+
+    def test_success_without_new_report_cannot_reuse_stale_success(self):
+        module = checker()
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            report = root / 'smoke-report.json'
+            report.write_text(json.dumps(dict(ok=True, frozen=True, version='1.0.0')))
+            with patch.object(module, 'run'), self.assertRaises(FileNotFoundError):
+                module.exercise_installed_app(root/'PlayChop', report, '1.0.0', root, {})
+
     def test_rejects_source_execution_wrong_version_and_partial_success(self):
         validate = checker().validate_report
         checks = dict.fromkeys(('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli'), True)

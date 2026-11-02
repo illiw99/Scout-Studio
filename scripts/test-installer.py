@@ -33,6 +33,25 @@ def validate_report(report: dict, version: str) -> None:
         assert checks.get(key) is True, f'Missing/failed smoke check {key}: {report}'
 
 
+def exercise_installed_app(executable: Path, report: Path, version: str,
+                           work: Path, env: dict) -> None:
+    """Keep frozen-app errors visible even when its GUI has no console."""
+    report.unlink(missing_ok=True)
+    log = report.with_name('smoke-process.log')
+    with log.open('w', encoding='utf-8') as stream:
+        try:
+            run(executable, '--smoke-test', report, cwd=work, env=env,
+                stdout=stream, stderr=subprocess.STDOUT)
+        finally:
+            stream.flush()
+            if report.is_file():
+                print(report.read_text(encoding='utf-8'), flush=True)
+            output = log.read_text(encoding='utf-8', errors='replace')
+            if output:
+                print(output[-12000:], flush=True)
+    validate_report(json.loads(report.read_text(encoding='utf-8')), version)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('artifacts', type=Path)
@@ -91,9 +110,7 @@ def main() -> None:
             env.update({'ULTRALYTICS_OFFLINE': 'true', 'YOLO_CONFIG_DIR': str(work / 'yolo'),
                         'MPLCONFIGDIR': str(work / 'matplotlib')})
             report = artifacts / 'smoke-report.json'
-            run(executable, '--smoke-test', report, cwd=work, env=env)
-            validate_report(json.loads(report.read_text(encoding='utf-8')), info['version'])
-            print(report.read_text(encoding='utf-8'))
+            exercise_installed_app(executable, report, info['version'], work, env)
         finally:
             for log in work.glob('*.log'):
                 shutil.copy2(log, artifacts / log.name)

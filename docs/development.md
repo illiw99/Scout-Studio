@@ -74,6 +74,12 @@ downloading CUDA libraries on hosted test runners. Desktop regression tests need
 the PulseAudio client library (`libpulse0`) even with Qt's offscreen backend;
 installer build runners also install ALSA (`libasound2`).
 
+The installer spec explicitly collects TorchVision's native operator libraries,
+including modern `_C_stable` and `image_stable` extension names. Python import
+analysis alone misses these dynamically loaded files. The installed-app smoke
+check executes native NMS; failures print their JSON report and retain a
+`smoke-process.log` diagnostic artifact.
+
 The **Standalone installers** GitHub workflow runs on pull requests, pushes to
 `main`, version tags and manual dispatch. It builds Windows x64, Ubuntu x64,
 macOS Apple Silicon and macOS Intel independently using Python 3.12 and

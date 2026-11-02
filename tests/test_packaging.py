@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import ast
 import importlib.util
 import io
 from pathlib import Path
@@ -63,6 +64,25 @@ class ArtifactPolicyTests(unittest.TestCase):
     def test_accepts_required_assets(self):
         self.checker.validate_members(['scout/py.typed', 'scout/desktop/scout.svg',
                                        'scout/__init__.py'], wheel=True)
+
+
+@unittest.skipUnless(importlib.util.find_spec('PyInstaller'), 'installer build tools are not installed')
+class NativeVisionBundleTests(unittest.TestCase):
+    def test_installed_torchvision_operator_libraries_enter_binary_collection(self):
+        from PyInstaller.utils.hooks import collect_dynamic_libs
+        spec = Path(__file__).resolve().parents[1] / 'packaging/playchop.spec'
+        tree = ast.parse(spec.read_text())
+        assignment = next(node for node in tree.body if isinstance(node, ast.Assign)
+                          and any(isinstance(target, ast.Name) and target.id == 'binaries'
+                                  for target in node.targets))
+        binaries = eval(compile(ast.Expression(assignment.value), str(spec), 'eval'),
+                        {'collect_dynamic_libs': collect_dynamic_libs})
+        operators = [(Path(source), destination) for source, destination in binaries
+                     if Path(source).name.startswith('_C')]
+        self.assertTrue(operators, 'TorchVision native NMS operators are absent from the bundle')
+        for source, destination in operators:
+            self.assertTrue(source.is_file())
+            self.assertEqual(destination, 'torchvision')
 
 
 if __name__ == '__main__':

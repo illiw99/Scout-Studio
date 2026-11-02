@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules, copy_metadata
 
 root = Path(SPECPATH).parent
 version = os.environ['PLAYCHOP_BUILD_VERSION']
@@ -14,11 +14,17 @@ for package in ('scout-flag', 'ultralytics', 'torch', 'torchvision', 'imageio-ff
     datas += copy_metadata(package)
 hiddenimports = ['PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
                  'PySide6.QtSvg', 'PySide6.QtTest', 'cv2', 'imageio_ffmpeg', 'matplotlib.backends.backend_agg']
+# TorchVision loads its operators with torch.ops.load_library, not a Python
+# import. Modern wheels use _C_stable/image_stable while older hooks name _C.
+# Explicit extension patterns also cover non-lib-prefixed .so files on Linux.
+binaries = collect_dynamic_libs('torchvision', search_patterns=[
+    '*.so', '*.so.*', '*.pyd', '*.dll', '*.dylib',
+])
 # Dynamic estimator/model imports are not all visible to static analysis.
 for package in ('scout', 'ultralytics', 'sklearn'):
     hiddenimports += collect_submodules(package, filter=lambda name: '.tests' not in name)
 a = Analysis([str(root / 'packaging' / 'launcher.py')], pathex=[str(root)],
-             binaries=[], datas=datas, hiddenimports=hiddenimports,
+             binaries=binaries, datas=datas, hiddenimports=hiddenimports,
              hookspath=[], hooksconfig={'matplotlib': {'backends': ['Agg']}},
              runtime_hooks=[], excludes=['PyQt5', 'PyQt6', 'PySide2', 'tkinter',
                                          'IPython', 'pytest'], noarchive=False)
