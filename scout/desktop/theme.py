@@ -53,6 +53,18 @@ QListWidget::item:selected { background: $selected; color: $accent; }
 QListWidget::item:hover { background: $raised; }
 QListWidget#playList::item { padding: 7px 6px; margin: 1px 0; font-size: 12px; }
 QDockWidget::title { background: $raised; color: $text; padding: 8px; }
+QDockWidget#globalQueue { background: $surface; border: 1px solid $border; }
+QFrame#queueHeader { background: $surface; border-bottom: 1px solid $border; }
+QWidget#queuePage { background: $surface; }
+QLabel#queueTitle { font-size: 17px; font-weight: 700; }
+QLabel#queueState { color: $accent; background: $selected; border-radius: 10px; padding: 5px 10px; font-size: 11px; font-weight: 600; }
+QLabel#queueSection { color: $muted; font-size: 10px; font-weight: 600; letter-spacing: 1px; }
+QPushButton#queueControl { background: transparent; border: none; }
+QPushButton#queueControl:hover { background: $raised; }
+QPushButton#queueCancel { background: transparent; color: $danger; border-color: $border; }
+QPushButton#queueCancel:disabled { color: $muted; }
+QListWidget#queueJobs { background: $input; border: 1px solid $border; border-radius: 8px; }
+QListWidget#queueJobs::item { padding: 8px 10px; margin: 1px 3px; }
 QTabWidget::pane { border: none; }
 QTabBar::tab { background: transparent; color: $muted; padding: 13px 18px; border-bottom: 2px solid $border; }
 QTabBar::tab:selected { color: $accent; border-bottom: 2px solid $focus; }

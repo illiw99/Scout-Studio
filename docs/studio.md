@@ -43,7 +43,9 @@ below. Day-to-day use needs no terminal or Python knowledge.
 - Click **Find plays**. The processing queue runs one match at a time while you
   keep browsing. It also observes an existing W3 batch and waits for it to finish.
   **Queue** (Ctrl+0) opens the single app-wide queue in a separate, nonblocking
-  panel; starting a job keeps you on the match you are viewing.
+  panel with a themed header and live status/progress badge. Its dock icon moves
+  it into the main window; the close icon only hides it, so processing continues.
+  Starting a job keeps you on the match you are viewing.
 - Watch the **entire match** in **Review & export**, including all footage between
   detected plays. Playback automatically continues into the next camera file.
   Scrub anywhere on the full-match slider or marker timeline. The timeline shows

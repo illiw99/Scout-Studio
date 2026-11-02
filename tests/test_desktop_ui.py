@@ -68,6 +68,48 @@ class DesktopIntegrationTests(unittest.TestCase):
                 explicit = root/'new-workspace'
                 self.assertEqual(workspace_path(explicit, root), explicit)
 
+    def test_queue_header_docks_and_hides_without_stopping_processing(self):
+        from PySide6.QtCore import QSettings
+        from scout.desktop.app import Studio
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            settings = QSettings(str(root/'preferences.ini'), QSettings.Format.IniFormat)
+            with patch('scout.desktop.app.QSettings', return_value=settings):
+                studio = Studio(root)
+            self.addCleanup(studio.close)
+            studio.jobs.timer.stop()
+            studio.timer.stop()
+            studio.show()
+            studio.show_queue()
+            self.app.processEvents()
+            self.assertIs(studio.queue_dock.titleBarWidget(), studio.queue_header)
+            self.assertTrue(studio.queue_dock.isFloating())
+            studio.queue_dock_button.click()
+            self.assertFalse(studio.queue_dock.isFloating())
+            studio.queue_dock_button.click()
+            self.assertTrue(studio.queue_dock.isFloating())
+            try:
+                studio.jobs.current = ('Demo', 'run')
+                studio.refresh_queue()
+                self.assertEqual(studio.queue_state.text(), 'Running')
+                studio.job_output('Detecting: 42%\n')
+                self.assertEqual(studio.job_progress.value(), 42)
+                self.assertEqual(studio.queue_state.text(), 'Running · 42%')
+                studio.queue_close_button.click()
+                self.assertFalse(studio.queue_dock.isVisible())
+                self.assertEqual(studio.jobs.current, ('Demo', 'run'))
+                studio.show_queue()
+                self.assertTrue(studio.queue_dock.isVisible())
+                studio.jobs.cancelling = True
+                studio.refresh_queue()
+                self.assertEqual(studio.queue_state.text(), 'Cancelling')
+            finally:
+                studio.jobs.current = None
+                studio.jobs.cancelling = False
+                studio.refresh_queue()
+            self.assertEqual(studio.queue_state.text(), 'Idle')
+            self.assertFalse(studio.cancel_button.isEnabled())
+
     def test_delete_match_confirmation_guards_and_empty_library(self):
         from PySide6.QtCore import QSettings
         from PySide6.QtWidgets import QMessageBox

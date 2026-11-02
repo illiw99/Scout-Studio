@@ -247,6 +247,28 @@ class Studio(QMainWindow):
         self.queue_dock = QDockWidget('Processing · all matches', self)
         self.queue_dock.setObjectName('globalQueue')
         self.queue_dock.setAllowedAreas(Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        self.queue_header = QFrame()
+        self.queue_header.setObjectName('queueHeader')
+        header_layout = QHBoxLayout(self.queue_header)
+        header_layout.setContentsMargins(18, 14, 12, 14)
+        header_layout.setSpacing(10)
+        headings = QVBoxLayout()
+        headings.setSpacing(3)
+        headings.addWidget(label('Processing queue', 'queueTitle'))
+        headings.addWidget(label('All matches · runs in the background', 'muted'))
+        header_layout.addLayout(headings, 1)
+        self.queue_state = label('Idle', 'queueState')
+        header_layout.addWidget(self.queue_state)
+        self.queue_dock_button = IconButton('dock', 'Dock queue to the main window', self.toggle_queue_docking)
+        self.queue_dock_button.setObjectName('queueControl')
+        header_layout.addWidget(self.queue_dock_button)
+        self.queue_close_button = IconButton('close', 'Hide queue · processing continues', self.queue_dock.hide)
+        self.queue_close_button.setObjectName('queueControl')
+        header_layout.addWidget(self.queue_close_button)
+        # A custom dock title bar removes the platform's floating-window chrome.
+        # Unhandled mouse events still reach QDockWidget for drag/double-click.
+        self.queue_dock.setTitleBarWidget(self.queue_header)
+        self.queue_dock.topLevelChanged.connect(self.queue_docking_changed)
         self.queue_dock.setWidget(self.queue_tab())
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.queue_dock)
         self.queue_dock.setFloating(True)
@@ -504,8 +526,10 @@ class Studio(QMainWindow):
 
     def queue_tab(self):
         page = QWidget()
+        page.setObjectName('queuePage')
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 18, 0, 0)
+        layout.setContentsMargins(18, 14, 18, 18)
+        layout.setSpacing(12)
         self.queue_label = label('Ready when you are.', 'muted')
         self.queue_label.setWordWrap(True)
         layout.addWidget(self.queue_label)
@@ -513,19 +537,25 @@ class Studio(QMainWindow):
         self.job_progress.setRange(0, 100)
         self.job_progress.setFormat('Current video · %p%')
         self.job_progress.setValue(0)
+        self.job_progress.setTextVisible(False)
+        self.job_progress.setFixedHeight(5)
+        self.job_progress.valueChanged.connect(self.queue_progress_changed)
         layout.addWidget(self.job_progress)
         self.queue_list = QListWidget()
+        self.queue_list.setObjectName('queueJobs')
         self.queue_list.setMaximumHeight(165)
         layout.addWidget(self.queue_list)
+        layout.addWidget(label('ACTIVITY LOG', 'queueSection'))
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumBlockCount(1000)
         layout.addWidget(self.log_view, 1)
         row = QHBoxLayout()
-        self.cancel_button = button('Cancel app queue', self.jobs.cancel)
+        self.cancel_button = button('Cancel queue', self.jobs.cancel)
+        self.cancel_button.setObjectName('queueCancel')
         row.addWidget(self.cancel_button)
         row.addStretch()
-        row.addWidget(button('Open processing logs', self.open_logs))
+        row.addWidget(button('Open logs', self.open_logs))
         layout.addLayout(row)
         return page
 
@@ -713,6 +743,19 @@ class Studio(QMainWindow):
         self.queue_dock.setVisible(not self.queue_dock.isVisible())
         if self.queue_dock.isVisible():
             self.queue_dock.raise_()
+
+    def toggle_queue_docking(self):
+        self.queue_dock.setFloating(not self.queue_dock.isFloating())
+
+    def queue_docking_changed(self, floating):
+        self.queue_dock_button.set_symbol('dock' if floating else 'popout')
+        title = 'Dock queue to the main window' if floating else 'Open queue in a separate window'
+        self.queue_dock_button.setToolTip(title)
+        self.queue_dock_button.setAccessibleName(title)
+
+    def queue_progress_changed(self, value):
+        if self.queue_state.text().startswith('Running'):
+            self.queue_state.setText(f'Running · {value}%' if self.job_progress.maximum() > 0 and value > 0 else 'Running')
 
     def show_review_options(self):
         self.review_options.popup(QCursor.pos())
@@ -1120,6 +1163,12 @@ class Studio(QMainWindow):
         for match, cmd, state in self.jobs.history[-6:]:
             self.queue_list.addItem(f'{match}  ·  {cmd}  ·  {state.lower()}')
         busy = bool(external or self.jobs.current)
+        self.queue_state.setText('Cancelling' if self.jobs.current and self.jobs.cancelling else
+                                 'Running' if busy else 'Queued' if self.jobs.pending else 'Idle')
+        self.queue_list.setVisible(self.queue_list.count() > 0)
+        if self.queue_list.count():
+            row_height = max(32, self.queue_list.sizeHintForRow(0))
+            self.queue_list.setFixedHeight(min(165, row_height*self.queue_list.count()+12))
         self.queue_label.setText('External processing is running. New jobs wait here and start automatically afterward.' if external else
                                  'Processing one match at a time. You can browse other matches while Scout works.' if busy else
                                  'Ready when you are. Jobs run one at a time.')
@@ -1128,6 +1177,7 @@ class Studio(QMainWindow):
             self.job_progress.setRange(0, 0)
         elif not busy:
             self.job_progress.setRange(0, 100)
+        self.queue_progress_changed(self.job_progress.value())
         count = len(external)+len(self.jobs.pending)+bool(self.jobs.current)
         self.queue_button.setText(f'Queue · {count}' if count else 'Queue · idle')
         self.update_actions()
