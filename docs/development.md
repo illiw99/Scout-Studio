@@ -17,6 +17,17 @@ python -m pip install -e '.[desktop,dev]'
 The `desktop` extra supplies PySide6. The `dev` extra supplies build tooling and
 Python 3.10's optional TOML parser. Tests use the standard-library `unittest`.
 
+On minimal Ubuntu systems, install Qt's graphics runtime before running desktop
+tests, including offscreen tests:
+
+```bash
+sudo apt-get update
+sudo apt-get install --no-install-recommends -y libegl1 libgl1 libopengl0
+```
+
+GitHub Actions installs these libraries in the Python 3.12 desktop job. The
+Python 3.10 job checks the CLI without the optional desktop extra.
+
 ## Run checks
 
 ```bash

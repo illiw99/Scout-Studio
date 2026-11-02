@@ -11,6 +11,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '${{ matrix.python }}'
+      - name: Install Qt graphics runtime
+        if: matrix.python == '3.12'
+        # Qt needs these shared libraries even with QT_QPA_PLATFORM=offscreen.
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libegl1 libgl1 libopengl0
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e '.[dev]'
       - run: python -m pip install -e '.[desktop]'
