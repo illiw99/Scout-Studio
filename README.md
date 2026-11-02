@@ -18,6 +18,11 @@ normal desktop window; a command-line interface is available for automation.
 
 ## Start Scout Studio
 
+For installation without Python, use the Windows, Linux or macOS installers
+produced by the [release workflow](docs/development.md#build-standalone-installers-and-releases).
+See [standalone installation](docs/installation.md#standalone-installers) for downloads
+and platform requirements.
+
 From a source checkout, using Python 3.10 or newer:
 
 ```bash

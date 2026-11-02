@@ -2,7 +2,43 @@
 
 [README](../README.md) · [Development](development.md)
 
-Python 3.10+ is required. Run from this repository:
+## Standalone installers
+
+Download an installer from [GitHub Releases](https://github.com/illiw99/PlayChop/releases).
+Installers appear after a version tag completes all build and installation checks.
+Python, the native Qt GUI, CPU detection dependencies and FFmpeg are bundled.
+
+| Platform | Download | Install |
+| --- | --- | --- |
+| Windows x64 | `PlayChop-<version>-windows-x86_64.exe` | Run setup; open PlayChop from Start. No administrator account is needed. |
+| Ubuntu 22.04+ / compatible Debian x64 | `PlayChop-<version>-linux-x86_64.deb` | Run `sudo apt install ./PlayChop-<version>-linux-x86_64.deb`; open PlayChop from Applications. |
+| macOS Apple Silicon | `PlayChop-<version>-macos-arm64.dmg` | Open the disk image and drag PlayChop to Applications. |
+| macOS Intel | `PlayChop-<version>-macos-x86_64.dmg` | Open the disk image and drag PlayChop to Applications. |
+
+Windows and macOS installers currently have no publisher signing certificate or
+Apple notarization. Their security systems may warn or block launch. Only allow
+an installer you obtained from this repository's release and whose SHA-256 matches
+`SHA256SUMS.txt`. Managed computers may require administrator approval. CI checks
+installation and playback; it does not establish SmartScreen reputation or
+Gatekeeper approval. macOS builds target the listed GitHub runner's OS generation;
+older macOS versions are not verified.
+
+Choose a library folder when opening Studio. Footage, fields, reviews, configuration
+and exports live outside the installed application; uninstalling keeps that library.
+Installers exclude personal footage, detector weights and trained play classifiers.
+The first detection run needs network access to fetch YOLO weights. Model-based
+play detection needs your library's configured `model_path`; without a trained
+classifier, set `"segmenter": "rules"` in the library's `scout.json`. Existing
+review libraries can be edited and exported without a classifier.
+
+Standalone builds use CPU PyTorch on Windows/Linux and the bundled FFmpeg on all
+platforms. For CUDA inference or a custom system FFmpeg, use the Python installation
+below. Remove the Linux package with `sudo apt remove playchop`, use Windows
+Installed apps, or move the macOS application to Trash.
+
+## Python installation
+
+Python 3.10+ is required for a source installation. Run from this repository:
 
 ```bash
 python3 -m venv .venv

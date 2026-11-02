@@ -28,6 +28,9 @@ these changes have not been published as a release.
 
 ### Repository and packaging
 
+- Native Windows, Ubuntu and macOS installers bundle Python, Qt and FFmpeg.
+- GitHub Actions tests fresh installations, playback/export and removal before
+  publishing installers and checksums for a matching version tag.
 - User guides are separated from installation, CLI, and development instructions.
 - Package metadata, MIT license, source manifest, and artifact validation are explicit.
 - The optional native app supports `scout-studio` and `python -m scout.desktop`.

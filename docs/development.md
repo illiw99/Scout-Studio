@@ -67,6 +67,47 @@ credentials, caches, and generated exports are excluded. A wheel is a Python
 package, not a standalone operating-system installer. Do not publish artifacts
 without explicit authorization.
 
+## Build standalone installers and releases
+
+The **Standalone installers** GitHub workflow runs on pull requests, pushes to
+`main`, version tags and manual dispatch. It builds Windows x64, Ubuntu x64,
+macOS Apple Silicon and macOS Intel independently using Python 3.12 and
+PyInstaller. Python, Qt, detection dependencies and FFmpeg are included; user
+data, detector weights and trained classifiers are excluded.
+
+Each installer is downloaded into a fresh runner with no checkout or application
+dependencies. CI installs it, launches the installed executable from a temporary
+working directory, verifies dependency imports, synthetic video generation and
+decoding, clip export, CLI child dispatch, the native window and video playback,
+then uninstalls it. Linux uses Xvfb. JSON reports and installer logs are retained
+as diagnostic artifacts. Builds also run the source regression suite on Linux.
+
+For a local build on the target operating system, use a separate build environment:
+
+```bash
+python -m pip install -r packaging/build-requirements.txt
+python -m pip install '.[desktop]'
+python scripts/build-installers.py
+```
+
+Use the workflow's CPU Torch and Intel macOS compatibility constraints when
+reproducing a CI build. Windows needs Inno Setup, Linux `dpkg-deb`, and macOS
+`hdiutil`. Outputs are in `dist/installers/`. `scripts/test-installer.py` changes
+system installation state: run it only on disposable CI machines. It takes the
+downloaded installer artifact directory and does not need the source package.
+
+To release, update `scout.__version__` and the changelog, commit, and push a
+matching tag such as `v1.0.0`. The workflow rejects mismatched tags. After all four
+builds and installation checks pass, it creates a GitHub Release with the four
+installers and `SHA256SUMS.txt`. Branch and manual runs provide Actions artifacts
+without publishing a release. Only the release job has repository write
+permission. Tag pushes publish automatically, so push release tags deliberately.
+
+Windows code signing and Apple Developer signing/notarization are not configured.
+Add those credentials and signing steps before distributing to environments that
+require trusted publishers. CI does not bypass or validate operating-system
+download security prompts.
+
 ## Make changes
 
 EditorConfig supplies UTF-8, LF line endings, final newlines, and four-space

@@ -7,9 +7,11 @@ recursive-include scout *.py *.svg py.typed
 recursive-include docs *.md
 recursive-include tests *.py
 recursive-include scripts *.py *.sh
+recursive-include packaging *.py *.spec *.iss *.txt
 include .codex/config.toml
 recursive-include .codex/agents *.toml
 include .github/workflows/tests.yml
+include .github/workflows/installers.yml
 # User libraries, configuration, trained models and generated/editor files
 # are deliberately absent. Bytecode must never enter either artifact.
 global-exclude *.py[cod] *~ *.bak *.swp *.swo .DS_Store

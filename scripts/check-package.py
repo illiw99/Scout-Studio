@@ -27,6 +27,7 @@ ROOT_FILES = {
 SOURCE_SUFFIXES = {
     'scout': {'.py', '.svg'}, 'docs': {'.md'}, 'tests': {'.py'},
     'scripts': {'.py', '.sh'},
+    'packaging': {'.py', '.spec', '.iss', '.txt'},
 }
 
 
@@ -38,7 +39,7 @@ def source_files(root: Path) -> list[Path]:
                      if path.is_file() and '__pycache__' not in path.parts
                      and (path.suffix in suffixes or path.name == 'py.typed'))
     paths.extend(root / name for name in (
-        '.codex/config.toml', '.github/workflows/tests.yml',
+        '.codex/config.toml', '.github/workflows/tests.yml', '.github/workflows/installers.yml',
     ))
     paths.extend(sorted((root / '.codex/agents').glob('*.toml')))
     return [path for path in paths if path.is_file()]
@@ -67,7 +68,7 @@ def validate_members(names: list[str], *, wheel: bool) -> None:
         else:
             allowed = (path.parts[0] in SOURCE_SUFFIXES or path.parts[0] in ROOT_FILES
                        or name in {'PKG-INFO', 'setup.cfg', '.codex/config.toml',
-                                   '.github/workflows/tests.yml'}
+                                   '.github/workflows/tests.yml', '.github/workflows/installers.yml'}
                        or (path.parts[:2] == ('.codex', 'agents') and path.suffix == '.toml')
                        or path.parts[0].endswith('.egg-info'))
         if path.parts[0] in SOURCE_SUFFIXES:
@@ -116,7 +117,8 @@ def check(root: Path = ROOT) -> None:
                      for member in members]
             validate_members(names, wheel=False)
             assert {'LICENSE', 'README.md', 'scripts/check-package.py',
-                    'tests/test_packaging.py', 'scout/py.typed',
+                    'tests/test_packaging.py', 'packaging/launcher.py',
+                    'packaging/playchop.spec', '.github/workflows/installers.yml', 'scout/py.typed',
                     'scout/desktop/scout.svg'} <= set(names)
             # Extract only validated regular files, with no links or traversal.
             for member, name in zip(members, names):
