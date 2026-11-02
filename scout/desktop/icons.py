@@ -8,6 +8,8 @@ from PySide6.QtWidgets import QPushButton
 from .theme import active_colors
 
 PATHS = {
+    'sun': 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5',
+    'moon': 'M21 13a9 9 0 0 1-10-10 9 9 0 1 0 10 10Z',
     'previous': 'M5 5v14m14-14L8 12l11 7Z',
     'next': 'M19 5v14M5 5l11 7-11 7Z',
     'play': 'm9 5 11 7-11 7Z',

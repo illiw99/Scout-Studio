@@ -158,7 +158,7 @@ class Studio(QMainWindow):
         self.timer.start(3000)
         self.refresh_library()
         self.refresh_queue()
-        self.statusBar().showMessage('Your footage stays on this computer. Drop videos anywhere to import.')
+        self.statusBar().showMessage('Import a game folder to use its videos in place. Right-click a match for actions.')
 
     def build_ui(self):
         shell = QWidget()
@@ -176,7 +176,8 @@ class Studio(QMainWindow):
         side.addWidget(label('SCOUT', 'brand'))
         side.addWidget(label('YOUR GAME. EVERY PLAY.', 'eyebrow'))
         side.addSpacing(20)
-        side.addWidget(button('+  Import footage', self.import_dialog, True))
+        self.import_game_button = button('+  Import game', self.import_game, True)
+        side.addWidget(self.import_game_button)
         self.search = QLineEdit()
         self.search.setPlaceholderText('Search matches…')
         self.search.textChanged.connect(self.filter_library)
@@ -184,17 +185,10 @@ class Studio(QMainWindow):
         side.addWidget(label('MATCH LIBRARY', 'eyebrow'))
         self.match_list = QListWidget()
         self.match_list.currentItemChanged.connect(self.match_changed)
+        self.match_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.match_list.customContextMenuRequested.connect(self.match_context_menu)
+        self.match_list.setToolTip('Right-click a match for actions')
         side.addWidget(self.match_list, 1)
-        side.addWidget(button('+  New match', self.new_match))
-        self.delete_match_button = button('Delete match…', self.delete_match)
-        side.addWidget(self.delete_match_button)
-        self.theme_button = button('Light mode', self.toggle_theme)
-        side.addWidget(self.theme_button)
-        self.library_label = label(str(self.root), 'muted')
-        self.library_label.setWordWrap(True)
-        side.addWidget(self.library_label)
-        self.library_button = button('Change library…', self.change_library)
-        side.addWidget(self.library_button)
         outer.addWidget(sidebar)
         body = QVBoxLayout()
         body.setContentsMargins(14, 10, 14, 8)
@@ -211,7 +205,7 @@ class Studio(QMainWindow):
         titles.addWidget(self.workspace_label)
         self.title = label('Welcome to Scout Studio', 'title')
         titles.addWidget(self.title)
-        self.subtitle = label('Import your footage, draw the field, and find every play.', 'muted')
+        self.subtitle = label('Import a game folder, draw the field, and find every play.', 'muted')
         titles.addWidget(self.subtitle)
         header.addLayout(titles, 1)
         self.run_button = button('Find plays  →', self.enqueue_run, True)
@@ -220,6 +214,8 @@ class Studio(QMainWindow):
         self.queue_button = button('Queue', self.show_queue)
         self.queue_button.setToolTip('One processing queue for the whole library')
         header.addWidget(self.queue_button)
+        self.theme_button = IconButton('sun', 'Switch to light mode', self.toggle_theme)
+        header.addWidget(self.theme_button)
         body.addLayout(header)
         metrics = QHBoxLayout()
         self.metrics = []
@@ -237,7 +233,7 @@ class Studio(QMainWindow):
         self.metrics_container.setLayout(metrics)
         metrics.setContentsMargins(0, 0, 0, 0)
         body.addWidget(self.metrics_container)
-        self.banner = label('01  Import footage    →    02  Draw fields    →    03  Find plays    →    04  Review & export', 'muted')
+        self.banner = label('01  Import game    →    02  Draw fields    →    03  Find plays    →    04  Review & export', 'muted')
         self.banner.setWordWrap(True)
         body.addWidget(self.banner)
         self.tabs = QTabWidget()
@@ -551,14 +547,22 @@ class Studio(QMainWindow):
         QMessageBox.warning(self, 'Scout needs your attention', message)
 
     def refresh_library(self, select=None):
-        self.rows = library.matches(self.root)
+        try:
+            self.rows = library.matches(self.root)
+        except (OSError, ValueError) as exc:
+            self.show_error(str(exc))
+            return
         self.match_list.blockSignals(True)
         self.match_list.clear()
         chosen = None
         for row in self.rows:
             badge = 'Review ready' if row['review'] else 'Field setup'
+            if not row.get('available', True):
+                badge = 'Folder unavailable'
             item = QListWidgetItem(f"{row['name'].replace('_', ' ')}\n{row['files']} videos  ·  {badge}")
             item.setData(Qt.ItemDataRole.UserRole, row['name'])
+            if row.get('linked'):
+                item.setToolTip(str(row['folder']))
             self.match_list.addItem(item)
             if row['name'] == (select or self.match):
                 chosen = item
@@ -763,7 +767,7 @@ class Studio(QMainWindow):
     def update_actions(self):
         data = self.data
         busy = bool(self.match_busy())
-        self.delete_match_button.setEnabled(bool(self.match) and not busy and not self.importing and not self.loading)
+        self.import_game_button.setEnabled(not self.importing)
         ready = bool(data and data['clips'] and all(data['regions']))
         review = bool(data and data['review'].exists())
         self.run_button.setEnabled(ready and not review and not busy and not self.importing and not self.dirty)
@@ -786,7 +790,6 @@ class Studio(QMainWindow):
         self.clear_button.setEnabled(editable)
         self.frame_slider.setEnabled(bool(data and data['clips'] and self.frame_ready))
         self.next_button.setEnabled(bool(data and self.videos.currentIndex() < len(data['clips'])-1))
-        self.library_button.setEnabled(not self.jobs.current and not self.jobs.pending and not self.importing and not self.tasks)
         if busy:
             self.banner.setText('Processing is scheduled for this match. Field changes unlock when it finishes.')
         elif review:
@@ -880,6 +883,56 @@ class Studio(QMainWindow):
         if self.data and self.videos.currentIndex() < self.videos.count()-1:
             self.videos.setCurrentIndex(self.videos.currentIndex()+1)
 
+    def match_context_menu(self, position):
+        item = self.match_list.itemAt(position)
+        if item:
+            self.match_list.setCurrentItem(item)
+            name = item.data(Qt.ItemDataRole.UserRole)
+            if self.match != name:
+                return  # Switching was cancelled by the unsaved-edit prompt.
+        else:
+            name = None
+        root = self.root
+        menu = QMenu(self)
+        menu.aboutToHide.connect(menu.deleteLater)
+        menu.addAction('Import game folder…', self.import_game).setEnabled(not self.importing)
+        menu.addAction('New empty match…', self.new_match).setEnabled(not self.importing)
+        if name:
+            def act(callback):
+                if self.root == root and self.match == name:
+                    callback()
+            menu.addSeparator()
+            menu.addAction('Refresh match', lambda: act(self.reload_match)).setEnabled(not self.importing)
+            menu.addAction('Open game folder', lambda: act(self.open_game_folder))
+            menu.addAction('Open output folder', lambda: act(self.open_output))
+            if name not in library.linked_games(root):
+                menu.addAction('Import video files (copy)…', lambda: act(self.import_dialog)).setEnabled(not self.importing)
+            menu.addSeparator()
+            menu.addAction('Delete match…', lambda: act(self.delete_match)).setEnabled(self.can_delete_match())
+        menu.popup(self.match_list.viewport().mapToGlobal(position))
+
+    def import_game(self):
+        if self.importing:
+            return
+        folder = QFileDialog.getExistingDirectory(self, 'Import game folder', str(Path.home()))
+        if not folder or not self.resolve_dirty():
+            return
+        root, token = self.root, self.load_token
+        self.importing = True
+        self.update_actions()
+        self.statusBar().showMessage('Importing game folder… Videos stay in place.')
+        def success(name):
+            self.importing = False
+            auto_select = self.load_token == token and not self.dirty and not self.marker_dirty
+            self.refresh_library(name if auto_select else None)
+            self.update_actions()
+            self.statusBar().showMessage(f'{name} imported. Videos stay in the game folder.', 10000)
+        def failure(message):
+            self.importing = False
+            self.update_actions()
+            self.show_error(message)
+        self.task(lambda _: library.import_folder(root, Path(folder)), success, failure)
+
     def import_dialog(self, files=None):
         if self.importing:
             return
@@ -891,7 +944,10 @@ class Studio(QMainWindow):
             library.match_path(self.root, name)
             if self.match_busy(name):
                 raise ValueError('This match is processing. Wait for it to finish before adding footage.')
-            if (self.root / 'out' / name / 'review.mlt').exists():
+            if name in library.linked_games(self.root):
+                raise ValueError('This game uses its original folder. Add videos there, then refresh the game.')
+            cfg = library.configuration(self.root, name)
+            if (cfg.path(cfg.out_dir) / 'review.mlt').exists():
                 raise ValueError('This match already has a review. Import into a new match to keep its timeline intact.')
         except ValueError as exc:
             self.show_error(str(exc))
@@ -928,7 +984,7 @@ class Studio(QMainWindow):
         if ok:
             try:
                 path = library.match_path(self.root, name)
-                if path.exists():
+                if path.exists() or name.strip() in library.linked_games(self.root):
                     raise ValueError('A match with this name already exists.')
                 if not self.resolve_dirty():
                     return
@@ -937,15 +993,21 @@ class Studio(QMainWindow):
             except (OSError, ValueError) as exc:
                 self.show_error(str(exc))
 
+    def can_delete_match(self):
+        return bool(self.match) and not self.loading and not self.importing and not self.match_busy()
+
     def delete_match(self):
-        if not self.match or self.loading or self.importing or self.match_busy():
+        if not self.can_delete_match():
             return
         name = self.match
         root = self.root
+        linked = name in library.linked_games(root)
+        restore = ('Import the game folder again to restore it.' if linked else
+                   'To restore the match, delete the .scout-removed file in its media folder.')
         answer = QMessageBox.question(self, 'Delete match',
             f'Remove “{name}” from your match library?\n\n'
             'Footage, field setup, saved reviews and exports will stay on disk. '
-            'To restore the match, delete the .scout-removed file in its media folder.',
+            + restore,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel)
         if answer != QMessageBox.StandardButton.Yes:
@@ -983,41 +1045,10 @@ class Studio(QMainWindow):
         for metric in self.metrics:
             metric.setText('—')
         self.title.setText('Your next game starts here.')
-        self.subtitle.setText('Import footage or create a new match.')
+        self.subtitle.setText('Import a game folder to get started.')
         self.refresh_library()
         self.update_actions()
         self.statusBar().showMessage(f'{name} removed from the library. Files kept on disk.', 10000)
-
-    def change_library(self):
-        if not self.resolve_dirty():
-            return
-        folder = QFileDialog.getExistingDirectory(self, 'Choose a Scout library folder', str(self.root))
-        if folder:
-            self.root = Path(folder).resolve()
-            self.jobs.root = self.root
-            self.jobs.history.clear()
-            self.match = None
-            self.data = None
-            self.load_token += 1
-            self.frame_token += 1
-            self.transport.set_clips([])
-            self.timeline.set_match([], [])
-            self.sync_player_window()
-            self.settings.setValue('library', str(self.root))
-            self.library_label.setText(str(self.root))
-            self.refresh_library()
-            if not self.rows:
-                self.title.setText('Your next game starts here.')
-                self.subtitle.setText('Import footage to start your new library.')
-                self.videos.clear()
-                self.plays.clear()
-                self.canvas.image = self.canvas.image.__class__()
-                self.canvas.points = []
-                self.canvas.update()
-                for metric in self.metrics:
-                    metric.setText('—')
-            self.refresh_queue()
-            self.update_actions()
 
     def enqueue_run(self):
         if self.data and all(self.data['regions']) and not self.data['review'].exists() and self.resolve_dirty():
@@ -1031,8 +1062,11 @@ class Studio(QMainWindow):
         import hashlib
         match, root = self.match, self.root
         review, expected_hash = self.data['review'], self.data['review_hash']
+        cfg = self.data['cfg']
+        preferences = (QSettings(str(review.parent / 'preferences.ini'), QSettings.Format.IniFormat)
+                       if cfg.source_dir else self.settings)
         dialog = ExportDialog(self.match, to_plays(self.data['plays']),
-                              review.parent / 'clips', self.settings, self)
+                              review.parent / 'clips', preferences, self)
         self.transport.pause()
         self.reset_speed()
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -1130,14 +1164,33 @@ class Studio(QMainWindow):
 
     def open_output(self):
         if self.match:
-            folder = self.root / 'out' / self.match
-            folder.mkdir(parents=True, exist_ok=True)
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+            try:
+                cfg = library.configuration(self.root, self.match)
+                folder = cfg.path(cfg.out_dir)
+                folder.mkdir(parents=True, exist_ok=True)
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+            except (OSError, ValueError) as exc:
+                self.show_error(str(exc))
+
+    def open_game_folder(self):
+        if self.match:
+            try:
+                folder = library.source_path(self.root, self.match)
+                if not folder.is_dir():
+                    raise ValueError('This game folder is unavailable. Connect its drive and try again.')
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+            except (OSError, ValueError) as exc:
+                self.show_error(str(exc))
 
     def open_logs(self):
-        folder = self.root / 'out'
-        folder.mkdir(parents=True, exist_ok=True)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        name = self.jobs.current[0] if self.jobs.current else self.match
+        try:
+            cfg = library.configuration(self.root, name) if name else None
+            folder = cfg.path(cfg.out_dir) / 'desktop' if cfg and cfg.source_dir else self.root / 'out'
+            folder.mkdir(parents=True, exist_ok=True)
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+        except (OSError, ValueError) as exc:
+            self.show_error(str(exc))
 
     def preview_play(self, index, edge='start', pause=False):
         if not self.data or not 0 <= index < len(self.data['plays']):
@@ -1757,7 +1810,10 @@ class Studio(QMainWindow):
         app = QApplication.instance()
         app.setProperty('studioTheme', self.theme_mode)
         app.setStyleSheet(stylesheet(self.theme_mode))
-        self.theme_button.setText('Dark mode' if self.theme_mode == 'light' else 'Light mode')
+        title = 'Switch to dark mode' if self.theme_mode == 'light' else 'Switch to light mode'
+        self.theme_button.set_symbol('moon' if self.theme_mode == 'light' else 'sun')
+        self.theme_button.setToolTip(title)
+        self.theme_button.setAccessibleName(title)
         self.canvas.update()
         self.timeline.update()
         for control in self.findChildren(IconButton):
@@ -1803,7 +1859,10 @@ class Studio(QMainWindow):
 
     def dropEvent(self, event):
         files = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
-        self.import_dialog(files)
+        if any(path.is_dir() for path in files):
+            self.show_error('Use Import game to choose a game folder. Drop individual videos to copy them into an empty match.')
+        else:
+            self.import_dialog(files)
         event.acceptProposedAction()
 
     def closeEvent(self, event):

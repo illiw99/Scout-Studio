@@ -3,6 +3,8 @@ media/
 out/
 games/
 .scout-cache/
+.scout/
+.scout-library.json
 fields/
 /scout.json
 

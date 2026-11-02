@@ -62,13 +62,17 @@ def stable_set(paths: list[Path], seconds: float) -> set[Path]:
 
 
 def discover(cfg: Config, wait_for_stable: bool = True) -> list[Path]:
-    """Media files under ``cfg.media_dir``, ordered, excluding ones still copying."""
-    root = Path(cfg.media_dir)
+    """Ordered source files, excluding application state and files still copying.
+
+    A linked source folder takes precedence over the legacy media tree.
+    """
+    root = Path(cfg.source_dir if cfg.source_dir is not None else cfg.media_dir)
     if not root.is_dir():
         raise SystemExit(f"no media directory: {root}")
     exts = {e.lower() for e in cfg.extensions}
     files = sorted((p for p in root.rglob("*")
-                   if p.is_file() and p.suffix.lower() in exts), key=filename_key)
+                   if ".scout" not in p.relative_to(root).parts
+                   and p.is_file() and p.suffix.lower() in exts), key=filename_key)
     if not files:
         raise SystemExit(f"no video files in {root}")
     if not wait_for_stable:

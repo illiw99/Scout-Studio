@@ -75,7 +75,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes) as question:
                 studio.jobs.pending.append(('Alpha', ['run']))
                 studio.update_actions()
-                self.assertFalse(studio.delete_match_button.isEnabled())
+                self.assertFalse(studio.can_delete_match())
                 studio.delete_match()
                 question.assert_not_called()
                 studio.jobs.pending.clear()
@@ -93,7 +93,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertIsNone(studio.match)
             self.assertIsNone(studio.data)
             self.assertEqual(studio.match_list.count(), 0)
-            self.assertFalse(studio.delete_match_button.isEnabled())
+            self.assertFalse(studio.can_delete_match())
             self.assertFalse(studio.transport.clips)
             self.assertTrue((root/'media/Beta/.scout-removed').exists())
             # A broken review must still allow removing its match.
@@ -103,10 +103,90 @@ class DesktopIntegrationTests(unittest.TestCase):
                 studio.refresh_library('Broken')
                 self.wait_for(lambda: not studio.loading)
             error.assert_called_once()
-            self.assertTrue(studio.delete_match_button.isEnabled())
+            self.assertTrue(studio.can_delete_match())
             with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
                 studio.delete_match()
             self.assertIsNone(studio.match)
+
+    def test_linked_game_folder_restart_export_and_context_menu(self):
+        from PySide6.QtCore import QSettings, QUrl
+        from PySide6.QtWidgets import QMenu, QMessageBox, QPushButton
+        from scout import groundtruth, shotcut, timeline
+        from scout.media import ffmpeg_exe, run
+        from scout.desktop import library
+        from scout.desktop.app import Studio
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            root, game = base/'library', base/'recordings/Away game'
+            game.mkdir(parents=True)
+            source = game/'camera.mp4'
+            run([ffmpeg_exe(), '-v', 'error', '-f', 'lavfi', '-i',
+                 'color=c=red:s=160x90:r=25:d=2', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(source)])
+            original = source.read_bytes()
+            preferences = QSettings(str(base/'preferences.ini'), QSettings.Format.IniFormat)
+            with patch('scout.desktop.app.QSettings', return_value=preferences):
+                studio = Studio(root)
+            errors = []
+            studio.show_error = errors.append
+            self.addCleanup(studio.close)
+            with patch('scout.desktop.app.QFileDialog.getExistingDirectory', return_value=str(game)):
+                studio.import_game_button.click()
+                self.wait_for(lambda: studio.data is not None and studio.frame_ready and not studio.importing)
+            self.assertEqual(studio.match, game.name)
+            self.assertFalse((root/'media').exists())
+            sidebar_buttons = [b.text() for b in studio.sidebar.findChildren(QPushButton)]
+            self.assertEqual(sidebar_buttons, ['+  Import game'])
+            self.assertEqual(studio.theme_button.text(), '')
+            self.assertEqual(studio.theme_button.symbol, 'sun')
+            studio.theme_button.click()
+            self.assertEqual(studio.theme_button.symbol, 'moon')
+            studio.theme_button.click()
+            cfg = studio.data['cfg']
+            clips = studio.data['clips']
+            library.save_field(cfg, clips[0], [[0, 0], [1, 0], [1, 1]], .5)
+            review = game/'.scout/review.mlt'
+            shotcut.write_review(cfg, clips, groundtruth.to_plays([groundtruth.Marked(1, .4, 1.4)]), review)
+            studio.reload_match()
+            self.wait_for(lambda: studio.data is not None and bool(studio.data['plays']) and studio.frame_ready)
+            studio.jobs.add(game.name, 'cut', dict(name_pattern='Game_<N>', review_hash=studio.data['review_hash']))
+            self.wait_for(lambda: studio.jobs.current is None and bool(studio.jobs.history))
+            self.wait_for(lambda: not studio.loading and not studio.tasks)
+            self.assertEqual(studio.jobs.history[-1][2], 'Finished')
+            self.assertTrue((game/'.scout/clips/Game_1.mp4').is_file())
+            self.assertTrue((game/'.scout/desktop/Away game-cut.log').is_file())
+            self.assertTrue((game/'.scout/desktop/Away game-config.json').is_file())
+            self.assertEqual(timeline.discover(cfg, wait_for_stable=False), [source])
+            self.assertFalse((root/'out').exists())
+            self.assertEqual(source.read_bytes(), original)
+            with patch('scout.desktop.app.QDesktopServices.openUrl') as opened:
+                studio.open_output()
+            opened.assert_called_once_with(QUrl.fromLocalFile(str(game/'.scout')))
+            # Reopening the application reads the folder index and saved review.
+            self.assertTrue(studio.close())
+            with patch('scout.desktop.app.QSettings', return_value=preferences):
+                reopened = Studio(root)
+            reopened.show_error = errors.append
+            self.addCleanup(reopened.close)
+            reopened.show()
+            self.wait_for(lambda: reopened.data is not None and reopened.frame_ready)
+            self.assertEqual(reopened.match, game.name)
+            self.assertEqual(len(reopened.data['clips']), 1)
+            self.assertEqual(len(reopened.data['plays']), 1)
+            self.assertTrue(all(reopened.data['regions']))
+            position = reopened.match_list.visualItemRect(reopened.match_list.item(0)).center()
+            with patch('scout.desktop.app.QMenu.popup'):
+                reopened.match_context_menu(position)
+            menu = reopened.findChildren(QMenu)[-1]
+            actions = {a.text(): a for a in menu.actions()}
+            self.assertIn('Open game folder', actions)
+            self.assertIn('Delete match…', actions)
+            saved_review = review.read_bytes()
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
+                actions['Delete match…'].trigger()
+            self.assertIsNone(reopened.match)
+            self.assertEqual(review.read_bytes(), saved_review)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertEqual(errors, [])
 
     def test_import_field_edit_preview_and_queued_export(self):
         from PySide6.QtCore import QPoint, Qt, QSettings

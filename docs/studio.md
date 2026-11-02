@@ -6,16 +6,31 @@ Scout Studio provides a native desktop window for the complete match workflow.
 Open **Scout Studio** from the Linux Applications menu after the one-time setup
 below. Day-to-day use needs no terminal or Python knowledge.
 
-- Browse and search matches in a local library, or create a new match.
-- Select a match and click **Delete match…** below **New match** to remove it
-  from the library list. Confirm the dialog; unsaved edits use the usual save/discard
-  prompt. Footage, field setup, saved reviews and exports stay on disk. To restore
-  the match, delete `media/<match>/.scout-removed` in your library folder (enable
-  hidden files in your file manager), then reopen the library. Deletion is disabled
-  while the match is loading or processing, or footage is importing. Its name stays
-  reserved while its media folder exists.
-- Import camera videos with the file picker or drag them into the window.
-  Imports copy the originals, report progress, and reject filename collisions.
+- Click **Import game** and choose the folder containing the game's videos.
+  Its folder name becomes the match name. Videos stay in place; nested camera
+  folders are included. Each game can live on a different drive or in a different
+  folder. The library remembers imported folders across app restarts.
+- Game data lives inside that game's hidden `.scout/` folder: `review.mlt` and
+  other review files, `fields/` polygons, `cache/` detections, `clips/` exports,
+  `desktop/` processing configurations and logs, and `preferences.ini` export
+  naming preferences. Generated videos under `.scout/` never become input footage.
+  Use **Open output folder** in the match's right-click menu to find these files.
+- Right-click a match for refresh, game/output folder, and **Delete match…**
+  actions. Deletion removes its library entry and preserves all files. Import
+  its folder again to restore it with its saved work. Busy matches cannot be
+  deleted; unsaved edits use the usual save/discard prompt. An unavailable drive
+  leaves the game listed; reconnect it at the same location and refresh the match.
+  If two folders have the same name, rename one before importing it.
+- The right-click menu also offers **New empty match…** for the older copied
+  workflow. For these matches, **Import video files (copy)…** or dropping individual
+  videos copies originals into the library and rejects filename collisions.
+  Their existing `media/`, `out/`, field and cache paths remain in use. To restore
+  a deleted copied match, remove `media/<match>/.scout-removed` and restart the app.
+- The sun/moon icon at the top right switches theme. The sidebar keeps only
+  **Import game**, search, and the match list; it has no library-switch button.
+  Folder locations are saved atomically in `.scout-library.json` in the Studio
+  library folder (the workspace selected at launch). Keep this index when backing
+  up the library; game footage and saved work stay in the individual game folders.
 - Select each video, scrub to a reference frame, and click around its field.
   Drag corners to adjust, right-click to remove, then **Save field**.
 - Click **Find plays**. The processing queue runs one match at a time while you
@@ -64,7 +79,7 @@ below. Day-to-day use needs no terminal or Python knowledge.
   match stay synchronized between windows. **Ctrl+0** opens Jobs; **Ctrl+Q** quits.
   Shortcuts keep normal text-field behavior; **Ctrl+S** works while editing.
   Unsaved edits prompt before leaving a marker. Film Hub's navy, gray and lavender
-  palette is available in **Light mode** and **Dark mode**, remembered between
+  palette has light and dark modes, selected with the top-right sun/moon icon and remembered between
   launches. No Film Hub server is required.
 - Playback, marker and timeline controls use compact SVG symbols with accessible
   names and action-only tooltips. Shortcut hints appear only in **?**; press
@@ -82,7 +97,7 @@ below. Day-to-day use needs no terminal or Python knowledge.
   Use **<N>** anywhere in the pattern, such as `Saints_<N>_offense`, choose the
   first number and digit width (`007`), or keep automatic padding. Preferences
   are remembered per match; original play-number/time names are also available.
-  MP4s are created from the saved review. The **…** menu holds
+  MP4s are created from the saved review. The review **…** menu also holds
   refresh, output-folder and optional Shotcut actions. The review workflow is built in.
 
 One-time setup for a source checkout:
@@ -92,11 +107,13 @@ One-time setup for a source checkout:
 .venv/bin/python scripts/install_studio.py
 ```
 
-You can also launch with `./start-studio.sh` or `scout-studio`. Select another
-library with **Change library**; the app remembers your choice. A library is a
-folder containing `media/`, `fields/`, `out/`, and optional `scout.json` settings.
-New libraries use this checkout's included play model. The first detection run
-may download YOLO weights. Large imports need space for a copy of the footage.
+You can also launch with `./start-studio.sh` or `scout-studio`. Studio remembers
+its workspace and game-folder index across restarts. An optional
+`scout-studio --workspace /path/to/library` selects a different workspace at
+launch; existing copied matches and optional `scout.json` settings still work.
+New libraries use the included play model. The first detection run may download
+YOLO weights. Folder imports need space only for generated game data; the optional
+copied-video workflow also needs space for copies of the footage.
 
 The desktop dependency is optional; existing command-line usage is unchanged.
 The Linux menu launcher uses this checkout's installed environment. This is not

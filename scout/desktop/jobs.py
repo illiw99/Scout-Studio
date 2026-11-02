@@ -69,8 +69,7 @@ class JobQueue(QObject):
         match, command = self.current
         # Review protection is also checked by the CLI, including queued jobs.
         cfg = configuration(self.root, match)
-        args = ['--config', str(self.root / 'scout.json'), '--media-dir', str(self.root / 'media'),
-                '--match', match, command]
+        args = ['--config', str(self.root / 'scout.json'), command]
         if command == 'cut':
             for key, flag in [('name_pattern', '--name-pattern'), ('start_number', '--start-number'),
                               ('number_width', '--number-width'), ('review_hash', '--review-hash')]:
@@ -78,7 +77,8 @@ class JobQueue(QObject):
                 if value is not None:
                     args.append(f'{flag}={value}')
         # Use bundled model paths in a fresh library through an explicit config.
-        config_dir = self.root / 'out' / '.desktop'
+        config_dir = (cfg.path(cfg.out_dir) / 'desktop' if cfg.source_dir
+                      else self.root / 'out' / '.desktop')
         config_dir.mkdir(parents=True, exist_ok=True)
         config = config_dir / f'{match}-config.json'
         cfg.save(config)

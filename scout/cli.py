@@ -41,7 +41,7 @@ def _load(args) -> Config:
 
 def _clips(cfg: Config, args) -> list:
     paths = None
-    if cfg.match:
+    if cfg.match and cfg.source_dir is None:
         paths = timeline.discover(cfg)
         base = Path(cfg.media_dir).resolve() / cfg.match
         paths = [p for p in paths if p.resolve().is_relative_to(base)]

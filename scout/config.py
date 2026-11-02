@@ -17,6 +17,8 @@ class Config:
     # --- input -------------------------------------------------------------
     match: str | None = None
     media_dir: str = "media"
+    #: An exact recording folder; match remains its display/registry name.
+    source_dir: str | None = None
     out_dir: str = "out"
     #: Detections are expensive and independent of where results go, so the
     #: cache lives outside out/, which gets cleaned between runs.
@@ -197,7 +199,10 @@ class Config:
         Taken as the parent of the media folder, so pointing --media-dir at a
         project elsewhere picks up that project's fields, cache and output
         rather than creating empty ones beside the shell's current directory.
+        An exact source_dir uses the game folder itself as its root.
         """
+        if self.source_dir is not None:
+            return Path(self.source_dir).resolve()
         media = Path(self.media_dir)
         return media.parent.resolve() if media.is_absolute() else Path.cwd()
 

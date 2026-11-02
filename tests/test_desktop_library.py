@@ -68,6 +68,126 @@ class LibraryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             library.remove_match(self.root, 'escape')
 
+    def test_folder_import_persists_without_copying_and_routes_game_data(self):
+        from scout import detect
+        game = self.root / 'external' / 'Away game'
+        game.mkdir(parents=True)
+        source = game / 'camera.mp4'
+        source.write_bytes(b'original footage')
+        state = game / '.scout'
+        (state / 'clips').mkdir(parents=True)
+        (state / 'clips/export.mp4').write_bytes(b'generated clip')
+        root = self.root / 'library'
+        self.assertEqual(library.import_folder(root, game), 'Away game')
+        self.assertEqual(library.import_folder(root, game), 'Away game')
+        # Re-reading from disk simulates a fresh process with no in-memory index.
+        self.assertEqual(library.linked_games(root), {'Away game': str(game)})
+        self.assertEqual(library.matches(root)[0]['files'], 1)
+        self.assertFalse((root / 'media').exists())
+        cfg = library.configuration(root, 'Away game')
+        self.assertEqual(cfg.source_dir, str(game))
+        self.assertEqual(cfg.root, game)
+        self.assertEqual(cfg.path(cfg.out_dir), state)
+        self.assertEqual(cfg.path(cfg.fields_dir), state / 'fields')
+        self.assertEqual(cfg.path(cfg.cache_dir), state / 'cache')
+        clip = Clip(MediaInfo(source, 10, 320, 180, 25, None), 0, 0)
+        library.save_field(cfg, clip, [[0, 0], [1, 0], [1, 1]], 1)
+        self.assertTrue(list((state / 'fields').glob('*.json')))
+        self.assertEqual(detect.cache_path(cfg, clip).parent, state / 'cache')
+        with patch('scout.timeline.probe', return_value=clip.info):
+            loaded = library.load_match(root, 'Away game')
+        self.assertEqual([c.path for c in loaded['clips']], [source])
+        self.assertEqual(loaded['review'], state / 'review.mlt')
+        self.assertTrue(all(loaded['regions']))
+        self.assertEqual(source.read_bytes(), b'original footage')
+        with self.assertRaises(ValueError):
+            library.import_videos(root, 'Away game', [source])
+
+    def test_linked_game_removal_and_reimport_preserve_saved_work(self):
+        game = self.root / 'external' / 'Game'
+        game.mkdir(parents=True)
+        (game / 'source.mp4').write_bytes(b'original')
+        root = self.root / 'library'
+        library.import_folder(root, game)
+        review = game / '.scout/review.mlt'
+        review.write_bytes(b'user edited review')
+        library.remove_match(root, 'Game')
+        self.assertEqual(library.matches(root), [])
+        self.assertEqual(review.read_bytes(), b'user edited review')
+        self.assertFalse((game / '.scout-removed').exists())
+        library.import_folder(root, game)
+        self.assertTrue(library.matches(root)[0]['review'])
+        self.assertEqual(review.read_bytes(), b'user edited review')
+
+    def test_folder_import_rejects_collisions_empty_folders_and_external_state(self):
+        root = self.root / 'library'
+        first, second = self.root / 'a/Game', self.root / 'b/Game'
+        for game in (first, second):
+            game.mkdir(parents=True)
+            (game / 'source.mp4').write_bytes(b'original')
+        library.import_folder(root, first)
+        with self.assertRaises(ValueError):
+            library.import_folder(root, second)
+        self.assertEqual(library.linked_games(root), {'Game': str(first)})
+        empty = self.root / 'Empty'
+        (empty / '.scout/clips').mkdir(parents=True)
+        (empty / '.scout/clips/export.mp4').write_bytes(b'generated')
+        with self.assertRaises(ValueError):
+            library.import_folder(root, empty)
+        legacy = self.root / 'external/Legacy'
+        legacy.mkdir(parents=True)
+        (legacy / 'source.mp4').write_bytes(b'original')
+        (root / 'media/Legacy').mkdir(parents=True)
+        with self.assertRaises(ValueError):
+            library.import_folder(root, legacy)
+        external = self.root / 'state elsewhere'
+        external.mkdir()
+        unsafe = self.root / 'Unsafe'
+        unsafe.mkdir()
+        (unsafe / 'source.mp4').write_bytes(b'original')
+        (unsafe / '.scout').symlink_to(external, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            library.import_folder(root, unsafe)
+        self.assertEqual(list(external.iterdir()), [])
+
+    def test_offline_game_stays_indexed_and_can_be_removed_without_recreating_folder(self):
+        game = self.root / 'drive/Game'
+        game.mkdir(parents=True)
+        (game / 'source.mp4').write_bytes(b'original')
+        root = self.root / 'library'
+        library.import_folder(root, game)
+        moved = game.with_name('unavailable')
+        game.rename(moved)
+        row, = library.matches(root)
+        self.assertEqual(row['name'], 'Game')
+        self.assertFalse(row['available'])
+        with self.assertRaises(ValueError):
+            library.load_match(root, 'Game')
+        library.remove_match(root, 'Game')
+        self.assertFalse(game.exists())
+        self.assertEqual(library.matches(root), [])
+        self.assertEqual((moved / 'source.mp4').read_bytes(), b'original')
+
+    def test_invalid_index_and_failed_atomic_save_preserve_existing_index(self):
+        root = self.root / 'library'
+        root.mkdir()
+        index = root / '.scout-library.json'
+        index.write_text('{invalid JSON')
+        game = self.root / 'Game'
+        game.mkdir()
+        (game / 'source.mp4').write_bytes(b'original')
+        with self.assertRaises(ValueError):
+            library.import_folder(root, game)
+        self.assertEqual(index.read_text(), '{invalid JSON')
+        index.unlink()
+        library.import_folder(root, game)
+        original = index.read_bytes()
+        with patch('scout.desktop.library.os.replace', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                library.remove_match(root, 'Game')
+        self.assertEqual(index.read_bytes(), original)
+        self.assertEqual(list(root.glob('.scout-library-*.tmp')), [])
+
     def test_import_copies_without_touching_originals(self):
         source = self.root/'camera.MP4'
         source.write_bytes(b'video')

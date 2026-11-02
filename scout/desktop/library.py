@@ -14,10 +14,88 @@ from scout.config import Config
 from scout import groundtruth, pick, timeline
 
 
+def linked_games(root: Path) -> dict[str, str]:
+    """Read the persistent folder index; never silently replace a damaged index."""
+    path = root / '.scout-library.json'
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text())
+        games = data['games']
+        if data['version'] != 1 or not isinstance(games, dict):
+            raise ValueError
+        for name, folder in games.items():
+            if not isinstance(name, str) or not isinstance(folder, str) or not Path(folder).is_absolute():
+                raise ValueError
+            _validate_name(name)
+        return games
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f'Cannot read the game library index: {path}. Restore it from a backup before importing games.') from exc
+
+
+def _save_linked_games(root: Path, games: dict[str, str]) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.scout-library-', suffix='.tmp', dir=root)
+    try:
+        with os.fdopen(fd, 'w') as handle:
+            json.dump(dict(version=1, games=games), handle, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, root / '.scout-library.json')
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def _validate_name(name: str) -> None:
+    if not name or name != name.strip() or name in ('.', '..') or '/' in name or '\\' in name or any(ord(c) < 32 for c in name):
+        raise ValueError('Give the match a name without slashes or control characters.')
+
+
+def source_path(root: Path, name: str) -> Path:
+    _validate_name(name)
+    folder = linked_games(root).get(name)
+    return Path(folder) if folder else match_path(root, name)
+
+
+def _source_videos(folder: Path, extensions=None) -> list[Path]:
+    if not folder.is_dir():
+        return []
+    return sorted((p for p in folder.rglob('*') if p.is_file()
+                   and p.suffix.lower() in (extensions or Config().extensions)
+                   and '.scout' not in p.relative_to(folder).parts), key=timeline.filename_key)
+
+
+def import_folder(root: Path, folder: Path) -> str:
+    """Remember a game folder in place, without copying or moving its videos."""
+    folder = folder.expanduser().resolve()
+    name = folder.name
+    _validate_name(name)
+    if not folder.is_dir():
+        raise ValueError('The game folder is unavailable. Connect its drive and try again.')
+    games = linked_games(root)
+    if name in games:
+        if Path(games[name]) == folder:
+            return name
+        raise ValueError('Another imported game already has this folder name. Rename one folder before importing it.')
+    if (root / 'media' / name).exists():
+        raise ValueError('A match with this name already exists in the library. Rename the game folder before importing it.')
+    if not _source_videos(folder):
+        raise ValueError('This folder has no supported videos. Choose the folder containing the game footage.')
+    # Verify that game data can be saved here before registering the folder.
+    state = folder / '.scout'
+    if state.is_symlink():
+        raise ValueError('The .scout folder must be stored inside the game folder, not linked elsewhere.')
+    state.mkdir(exist_ok=True)
+    with tempfile.TemporaryFile(dir=state):
+        pass
+    games[name] = str(folder)
+    _save_linked_games(root, games)
+    return name
+
+
 def match_path(root: Path, name: str) -> Path:
     name = name.strip()
-    if not name or name in ('.', '..') or '/' in name or '\\' in name or any(ord(c) < 32 for c in name):
-        raise ValueError('Give the match a name without slashes or control characters.')
+    _validate_name(name)
     path = root / 'media' / name
     if not path.resolve().is_relative_to((root / 'media').resolve()):
         raise ValueError('This match points outside your library.')
@@ -25,10 +103,24 @@ def match_path(root: Path, name: str) -> Path:
 
 
 def configuration(root: Path, name: str) -> Config:
-    match_path(root, name)
+    folder = source_path(root, name)
     cfg = Config.load(root / 'scout.json')
-    cfg.media_dir = str(root / 'media')
-    cfg.out_dir = str(root / 'out' / name)
+    # Resolve library models before changing the source root.
+    for key in ('model_path', 'model'):
+        candidate = root / getattr(cfg, key)
+        if candidate.is_file():
+            setattr(cfg, key, str(candidate.resolve()))
+    linked = name in linked_games(root)
+    if linked and not folder.is_dir():
+        raise ValueError('This game folder is unavailable. Connect its drive and try again.')
+    if linked and (folder / '.scout').is_symlink():
+        raise ValueError('The .scout folder must be stored inside the game folder, not linked elsewhere.')
+    cfg.source_dir = str(folder) if linked else None
+    cfg.media_dir = str(folder if linked else root / 'media')
+    cfg.out_dir = str(folder / '.scout' if linked else root / 'out' / name)
+    if linked:
+        cfg.cache_dir = str(folder / '.scout' / 'cache')
+        cfg.fields_dir = str(folder / '.scout' / 'fields')
     cfg.match = name
     # New libraries use the model shipped with the app unless they have their own.
     if not cfg.path(cfg.model_path).exists():
@@ -42,6 +134,11 @@ def configuration(root: Path, name: str) -> Config:
 
 def remove_match(root: Path, name: str) -> None:
     """Hide a match without moving or deleting footage or review resources."""
+    games = linked_games(root)
+    if name in games:
+        del games[name]
+        _save_linked_games(root, games)
+        return
     folder = match_path(root, name)
     if not folder.is_dir():
         raise ValueError('This match no longer exists.')
@@ -52,10 +149,11 @@ def remove_match(root: Path, name: str) -> None:
 
 def matches(root: Path) -> list[dict]:
     media = root / 'media'
-    if not media.exists():
-        return []
     rows = []
-    for folder in sorted(media.iterdir()):
+    games = linked_games(root)
+    for folder in sorted(media.iterdir()) if media.exists() else []:
+        if folder.name in games:
+            continue
         if not folder.is_dir() or folder.name.startswith('.') or (folder / '.scout-removed').exists():
             continue
         try:
@@ -65,14 +163,21 @@ def matches(root: Path) -> list[dict]:
         files = sorted(p for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in Config().extensions)
         review = root / 'out' / folder.name / 'review.mlt'
         rows.append(dict(name=folder.name, files=len(files), review=review.exists()))
-    return rows
+    for name, value in games.items():
+        folder = Path(value)
+        rows.append(dict(name=name, files=len(_source_videos(folder)),
+                         review=(folder / '.scout' / 'review.mlt').exists(),
+                         linked=True, available=folder.is_dir(), folder=folder))
+    return sorted(rows, key=lambda row: row['name'])
 
 
 def load_match(root: Path, name: str) -> dict:
     from scout.cli import _region_for
     cfg = configuration(root, name)
-    paths = sorted(p for p in match_path(root, name).rglob('*')
-                   if p.is_file() and p.suffix.lower() in cfg.extensions)
+    folder = source_path(root, name)
+    if not folder.is_dir():
+        raise ValueError('This game folder is unavailable. Connect its drive or restore the folder to its imported location.')
+    paths = _source_videos(folder, cfg.extensions)
     clips = timeline.build(cfg, paths) if paths else []
     regions = [_region_for(cfg, clips, c) for c in clips]
     review = cfg.path(cfg.out_dir) / 'review.mlt'
@@ -154,6 +259,8 @@ def save_field(cfg: Config, clip, polygon: list, at: float) -> None:
 def import_videos(root: Path, name: str, sources: list[Path], progress=lambda _: None) -> int:
     """Copy into staging first, then commit without replacing existing footage."""
     from scout.media import probe
+    if name in linked_games(root):
+        raise ValueError('This game uses its original folder. Add videos there, then refresh the game.')
     dest = match_path(root, name)
     sources = [p.resolve() for p in sources]
     if not sources:
