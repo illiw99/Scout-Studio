@@ -94,7 +94,9 @@ class JobQueue(QObject):
         self.process.setProcessEnvironment(env)
         self.process.setWorkingDirectory(str(self.root))
         if getattr(sys, 'frozen', False):
-            self.process.start(sys.executable, ['--scout-cli', *args])
+            from .bundle import cli_command
+            executable, *prefix = cli_command()
+            self.process.start(executable, [*prefix, *args])
         else:
             # The absolute package parent lets other workspace folders work too.
             env.insert('PYTHONPATH', str(Path(__file__).resolve().parents[2]) + os.pathsep + os.environ.get('PYTHONPATH', ''))

@@ -12,6 +12,7 @@ import datetime as _dt
 import re
 import shutil
 import subprocess
+import sys
 import warnings
 from dataclasses import dataclass
 from functools import lru_cache
@@ -29,10 +30,11 @@ _CREATED = re.compile(r"creation_time\s*:\s*(\S+)")
 
 @lru_cache(maxsize=1)
 def ffmpeg_exe() -> str:
-    """System ffmpeg if present, otherwise the pip-installed static build."""
-    exe = shutil.which("ffmpeg")
-    if exe:
-        return exe
+    """Standalone apps use their bundled build; source installs prefer system."""
+    if not getattr(sys, 'frozen', False):
+        exe = shutil.which("ffmpeg")
+        if exe:
+            return exe
     import imageio_ffmpeg
 
     return imageio_ffmpeg.get_ffmpeg_exe()
