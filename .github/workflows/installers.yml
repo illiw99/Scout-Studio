@@ -64,7 +64,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0
+          sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libpulse0 libasound2
       - name: Install Inno Setup
         if: runner.os == 'Windows'
         shell: pwsh
