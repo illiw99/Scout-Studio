@@ -55,6 +55,59 @@ class DesktopIntegrationTests(unittest.TestCase):
             callbacks[1][0]({'changed': False})
             self.assertFalse(state.match_busy('B'))
 
+    def test_delete_match_confirmation_guards_and_empty_library(self):
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QMessageBox
+        from scout.desktop.app import Studio
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'media/Alpha').mkdir(parents=True)
+            (root / 'media/Beta').mkdir()
+            preferences = QSettings(str(root/'preferences.ini'), QSettings.Format.IniFormat)
+            with patch('scout.desktop.app.QSettings', return_value=preferences):
+                studio = Studio(root)
+            self.addCleanup(studio.close)
+            self.wait_for(lambda: studio.data is not None and not studio.loading)
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Cancel):
+                studio.delete_match()
+            self.assertEqual(studio.match_list.count(), 2)
+            self.assertFalse((root/'media/Alpha/.scout-removed').exists())
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes) as question:
+                studio.jobs.pending.append(('Alpha', ['run']))
+                studio.update_actions()
+                self.assertFalse(studio.delete_match_button.isEnabled())
+                studio.delete_match()
+                question.assert_not_called()
+                studio.jobs.pending.clear()
+                studio.importing = True
+                studio.delete_match()
+                question.assert_not_called()
+                studio.importing = False
+                with patch.object(studio, 'resolve_dirty', return_value=False):
+                    studio.delete_match()
+                self.assertFalse((root/'media/Alpha/.scout-removed').exists())
+                studio.delete_match()
+                self.wait_for(lambda: studio.match == 'Beta' and studio.data is not None and not studio.loading)
+                self.assertEqual(studio.match_list.count(), 1)
+                studio.delete_match()
+            self.assertIsNone(studio.match)
+            self.assertIsNone(studio.data)
+            self.assertEqual(studio.match_list.count(), 0)
+            self.assertFalse(studio.delete_match_button.isEnabled())
+            self.assertFalse(studio.transport.clips)
+            self.assertTrue((root/'media/Beta/.scout-removed').exists())
+            # A broken review must still allow removing its match.
+            (root/'media/Broken').mkdir()
+            with patch('scout.desktop.app.library.load_match', side_effect=ValueError('broken review')), \
+                    patch.object(studio, 'show_error') as error:
+                studio.refresh_library('Broken')
+                self.wait_for(lambda: not studio.loading)
+            error.assert_called_once()
+            self.assertTrue(studio.delete_match_button.isEnabled())
+            with patch('scout.desktop.app.QMessageBox.question', return_value=QMessageBox.StandardButton.Yes):
+                studio.delete_match()
+            self.assertIsNone(studio.match)
+
     def test_import_field_edit_preview_and_queued_export(self):
         from PySide6.QtCore import QPoint, Qt, QSettings
         from PySide6.QtTest import QTest

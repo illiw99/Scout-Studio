@@ -40,13 +40,23 @@ def configuration(root: Path, name: str) -> Config:
     return cfg
 
 
+def remove_match(root: Path, name: str) -> None:
+    """Hide a match without moving or deleting footage or review resources."""
+    folder = match_path(root, name)
+    if not folder.is_dir():
+        raise ValueError('This match no longer exists.')
+    # Exclusive creation also refuses symlinks and an already removed match.
+    with (folder / '.scout-removed').open('x') as marker:
+        marker.write('Removed from Scout Studio. Delete this file to restore the match.\n')
+
+
 def matches(root: Path) -> list[dict]:
     media = root / 'media'
     if not media.exists():
         return []
     rows = []
     for folder in sorted(media.iterdir()):
-        if not folder.is_dir() or folder.name.startswith('.'):
+        if not folder.is_dir() or folder.name.startswith('.') or (folder / '.scout-removed').exists():
             continue
         try:
             match_path(root, folder.name)

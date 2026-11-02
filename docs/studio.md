@@ -7,6 +7,13 @@ Open **Scout Studio** from the Linux Applications menu after the one-time setup
 below. Day-to-day use needs no terminal or Python knowledge.
 
 - Browse and search matches in a local library, or create a new match.
+- Select a match and click **Delete match…** below **New match** to remove it
+  from the library list. Confirm the dialog; unsaved edits use the usual save/discard
+  prompt. Footage, field setup, saved reviews and exports stay on disk. To restore
+  the match, delete `media/<match>/.scout-removed` in your library folder (enable
+  hidden files in your file manager), then reopen the library. Deletion is disabled
+  while the match is loading or processing, or footage is importing. Its name stays
+  reserved while its media folder exists.
 - Import camera videos with the file picker or drag them into the window.
   Imports copy the originals, report progress, and reject filename collisions.
 - Select each video, scrub to a reference frame, and click around its field.

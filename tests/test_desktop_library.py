@@ -42,6 +42,32 @@ class LibraryTests(unittest.TestCase):
             library.save_field(cfg, clip, polygon, 120.)
         self.assertEqual(_region_for(cfg, [clip], clip)['ref_time'], 30.)
 
+    def test_remove_match_preserves_resources_and_can_be_restored(self):
+        files = ['media/game/camera.mp4', 'out/game/review.mlt',
+                 'out/game/clip.mp4', 'fields/game.json', '.scout-cache/detection.json']
+        for name in files:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'preserve exactly')
+        (self.root / 'media/other').mkdir()
+        library.remove_match(self.root, 'game')
+        self.assertEqual([r['name'] for r in library.matches(self.root)], ['other'])
+        for name in files:
+            self.assertEqual((self.root / name).read_bytes(), b'preserve exactly')
+        with self.assertRaises(FileExistsError):
+            library.remove_match(self.root, 'game')
+        (self.root / 'media/game/.scout-removed').unlink()
+        self.assertEqual([r['name'] for r in library.matches(self.root)], ['game', 'other'])
+
+    def test_remove_match_rejects_missing_and_unsafe_paths(self):
+        for name in ('missing', '../outside'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                library.remove_match(self.root, name)
+        (self.root / 'media').mkdir()
+        (self.root / 'media/escape').symlink_to(self.root, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            library.remove_match(self.root, 'escape')
+
     def test_import_copies_without_touching_originals(self):
         source = self.root/'camera.MP4'
         source.write_bytes(b'video')

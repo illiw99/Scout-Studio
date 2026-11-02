@@ -186,6 +186,8 @@ class Studio(QMainWindow):
         self.match_list.currentItemChanged.connect(self.match_changed)
         side.addWidget(self.match_list, 1)
         side.addWidget(button('+  New match', self.new_match))
+        self.delete_match_button = button('Delete match…', self.delete_match)
+        side.addWidget(self.delete_match_button)
         self.theme_button = button('Light mode', self.toggle_theme)
         side.addWidget(self.theme_button)
         self.library_label = label(str(self.root), 'muted')
@@ -637,6 +639,7 @@ class Studio(QMainWindow):
         def failure(message):
             if token == self.load_token:
                 self.loading = False
+                self.update_actions()
                 self.subtitle.setText('Could not load this match. Check its footage and saved review.')
                 self.show_error(message)
         self.task(lambda _: library.load_match(root, name), success, failure)
@@ -760,6 +763,7 @@ class Studio(QMainWindow):
     def update_actions(self):
         data = self.data
         busy = bool(self.match_busy())
+        self.delete_match_button.setEnabled(bool(self.match) and not busy and not self.importing and not self.loading)
         ready = bool(data and data['clips'] and all(data['regions']))
         review = bool(data and data['review'].exists())
         self.run_button.setEnabled(ready and not review and not busy and not self.importing and not self.dirty)
@@ -932,6 +936,57 @@ class Studio(QMainWindow):
                 self.refresh_library(name.strip())
             except (OSError, ValueError) as exc:
                 self.show_error(str(exc))
+
+    def delete_match(self):
+        if not self.match or self.loading or self.importing or self.match_busy():
+            return
+        name = self.match
+        root = self.root
+        answer = QMessageBox.question(self, 'Delete match',
+            f'Remove “{name}” from your match library?\n\n'
+            'Footage, field setup, saved reviews and exports will stay on disk. '
+            'To restore the match, delete the .scout-removed file in its media folder.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        if not self.resolve_dirty():
+            return
+        # Modal dialogs run the event loop; recheck before changing the library.
+        if self.root != root or self.match != name or self.loading or self.importing or self.match_busy():
+            return
+        try:
+            library.remove_match(root, name)
+        except (OSError, ValueError) as exc:
+            self.show_error(str(exc))
+            return
+        self.match = None
+        self.data = None
+        self.loading = False
+        self.dirty = False
+        self.marker_dirty = False
+        self.frame_ready = False
+        self.editing_index = -1
+        self.undo_stack.clear()
+        self.redo_stack.clear()
+        self.load_token += 1
+        self.frame_token += 1
+        self.transport.set_clips([])
+        self.timeline.set_match([], [])
+        self.play_slider.setRange(0, 0)
+        self.sync_player_window()
+        self.videos.clear()
+        self.plays.clear()
+        self.canvas.image = self.canvas.image.__class__()
+        self.canvas.points = []
+        self.canvas.update()
+        for metric in self.metrics:
+            metric.setText('—')
+        self.title.setText('Your next game starts here.')
+        self.subtitle.setText('Import footage or create a new match.')
+        self.refresh_library()
+        self.update_actions()
+        self.statusBar().showMessage(f'{name} removed from the library. Files kept on disk.', 10000)
 
     def change_library(self):
         if not self.resolve_dirty():
