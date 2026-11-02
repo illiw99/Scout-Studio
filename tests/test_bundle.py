@@ -1,7 +1,10 @@
 """Standalone dispatch and FFmpeg selection must survive frozen execution."""
 import json
+import importlib.util
+import os
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -10,6 +13,46 @@ from scout.desktop import bundle
 
 
 class BundleTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec('PySide6'), 'desktop extra is not installed')
+    def test_smoke_teardown_unloads_and_destroys_media_objects(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtTest import QTest
+        from scout.desktop.app import Studio
+        from scout.timeline import Clip
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            settings = QSettings(str(root/'preferences.ini'), QSettings.Format.IniFormat)
+            with patch('scout.desktop.app.QSettings', return_value=settings):
+                window = Studio(root)
+            player = window.player
+            destroyed = []
+            window.destroyed.connect(lambda: destroyed.append('window'))
+            player.destroyed.connect(lambda: destroyed.append('player'))
+            source = root/'source.mp4'
+            media.run([media.ffmpeg_exe(), '-v', 'error', '-f', 'lavfi', '-i',
+                       'color=c=blue:s=160x96:r=25:d=2', '-c:v', 'libx264',
+                       '-pix_fmt', 'yuv420p', str(source)])
+            window.show()
+            window.transport.set_clips([Clip(media.probe(source), 0, 0)])
+            window.transport.seek(0, play=True)
+            # Observe real source unloading before the QObject is destroyed.
+            player.sourceChanged.connect(lambda url: destroyed.append('source cleared') if url.isEmpty() else None)
+            try:
+                deadline = time.monotonic() + 10
+                while not window.video_widget.videoSink().videoFrame().isValid() and time.monotonic() < deadline:
+                    app.processEvents()
+                    QTest.qWait(20)
+                self.assertTrue(window.video_widget.videoSink().videoFrame().isValid())
+            finally:
+                bundle._dispose_smoke_window(window, app)
+            self.assertIn('source cleared', destroyed)
+            self.assertIn('player', destroyed)
+            self.assertIn('window', destroyed)
+            source.unlink()
+
     def test_windows_frozen_queue_uses_console_companion(self):
         with patch.object(bundle.sys, 'frozen', True, create=True), \
              patch.object(bundle.sys, 'platform', 'win32'), \

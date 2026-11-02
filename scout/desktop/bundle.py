@@ -62,6 +62,22 @@ def smoke_test(report_path: Path) -> int:
     return 0 if report['ok'] else 1
 
 
+def _dispose_smoke_window(window, app):
+    """Release decoder/file handles before removing Windows smoke fixtures."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    # stop() alone retains the media source and its open file on Windows.
+    # Clear transport intent too, so queued playback callbacks cannot reopen it.
+    window.transport.set_clips([])
+    window.player.setVideoOutput(None)
+    window.player.setAudioOutput(None)
+    window.close()
+    window.deleteLater()
+    # A single processEvents() does not guarantee DeferredDelete delivery when
+    # there is no running exec() event loop, as in this standalone smoke check.
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.processEvents()
+
+
 def _exercise(root, checks):
     os.environ['YOLO_CONFIG_DIR'] = str(root / 'yolo')
     os.environ['MPLCONFIGDIR'] = str(root / 'matplotlib')
@@ -149,6 +165,4 @@ def _exercise(root, checks):
         assert window.video_widget.videoSink().videoFrame().isValid(), window.player.errorString()
         checks['playback'] = True
     finally:
-        window.player.stop()
-        window.close()
-        app.processEvents()
+        _dispose_smoke_window(window, app)
