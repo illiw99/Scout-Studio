@@ -34,6 +34,8 @@ these changes have not been published as a release.
 
 ### Repository and packaging
 
+- Windows executable, setup and shortcuts use the Scout logo, with a shared
+  taskbar identity and installed-icon verification.
 - Application, installer, shortcut and release branding consistently use
   Scout Studio, with Scout-Studio filenames.
 - macOS installer creation retries transient disk-image lock failures, verifies

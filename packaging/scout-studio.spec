@@ -33,6 +33,7 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='Scout-Studio',
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
           console=os.name != 'nt' and not sys.platform == 'darwin',
           disable_windowed_traceback=False, argv_emulation=False,
+          icon=str(root / 'scout/desktop/scout.ico') if os.name == 'nt' else None,
           target_arch=None, codesign_identity=None, entitlements_file=None)
 executables = [exe]
 if os.name == 'nt':
@@ -40,7 +41,7 @@ if os.name == 'nt':
     # Ship a separate console entry for background jobs and their diagnostics.
     executables.append(EXE(pyz, a.scripts, [], exclude_binaries=True,
                            name='Scout-Studio-CLI', debug=False, strip=False, upx=False,
-                           console=True))
+                           console=True, icon=str(root / 'scout/desktop/scout.ico')))
 coll = COLLECT(*executables, a.binaries, a.datas, strip=False, upx=False, name='Scout-Studio')
 if sys.platform == 'darwin':
     app = BUNDLE(coll, name='Scout Studio.app', bundle_identifier='org.scoutstudio.studio',

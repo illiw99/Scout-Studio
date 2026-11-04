@@ -30,6 +30,7 @@ from .review import MatchPlayer, MarkerTimeline, timecode
 from .icons import IconButton
 from .labels import label_for, time_label
 from .player_window import PlayerWindow, PlayFrame
+from .identity import application_icon_path, configure_windows_app_id
 
 
 def match_list_text(row):
@@ -152,8 +153,7 @@ class Studio(QMainWindow):
         self.setMinimumSize(980, 620)
         self.resize(1520, 980)
         self.setAcceptDrops(True)
-        icon = Path(__file__).with_name('scout.svg')
-        self.setWindowIcon(QIcon(str(icon)))
+        self.setWindowIcon(QIcon(str(application_icon_path())))
         self.shuttle_hold = False
         self.build_ui()
         QApplication.instance().installEventFilter(self)
@@ -1985,9 +1985,11 @@ def main(argv=None):
     if sys.platform == 'linux':
         for cursor_lib in (Path(sys.prefix) / 'lib' / 'scout-native').glob('usr/lib/*/libxcb-cursor.so.0'):
             ctypes.CDLL(str(cursor_lib), mode=ctypes.RTLD_GLOBAL)
+    configure_windows_app_id()
     app = QApplication([sys.argv[0]])
     app.setApplicationName('Scout Studio')
     app.setOrganizationName('Scout')
+    app.setWindowIcon(QIcon(str(application_icon_path())))
     app.setStyle('Fusion')
     app.setStyleSheet(STYLE)
     settings = QSettings('Scout', 'Studio')

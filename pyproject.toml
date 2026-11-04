@@ -52,4 +52,4 @@ include = ["scout", "scout.*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-scout = ["py.typed", "desktop/*.svg"]
+scout = ["py.typed", "desktop/*.svg", "desktop/*.ico"]

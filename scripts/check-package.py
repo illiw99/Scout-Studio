@@ -25,7 +25,7 @@ ROOT_FILES = {
     'start-studio.sh', 'CHANGELOG.md', 'CONTRIBUTING.md', '.editorconfig',
 }
 SOURCE_SUFFIXES = {
-    'scout': {'.py', '.svg'}, 'docs': {'.md'}, 'tests': {'.py'},
+    'scout': {'.py', '.svg', '.ico'}, 'docs': {'.md'}, 'tests': {'.py'},
     'scripts': {'.py', '.sh'},
     'packaging': {'.py', '.spec', '.iss', '.txt'},
 }
@@ -120,7 +120,7 @@ def check(root: Path = ROOT) -> None:
             assert {'LICENSE', 'README.md', 'scripts/check-package.py',
                     'tests/test_packaging.py', 'packaging/launcher.py',
                     'packaging/scout-studio.spec', '.github/workflows/installers.yml', 'scout/py.typed',
-                    'scout/desktop/scout.svg'} <= set(names)
+                    'scout/desktop/scout.svg', 'scout/desktop/scout.ico'} <= set(names)
             # Extract only validated regular files, with no links or traversal.
             for member, name in zip(members, names):
                 target = unpacked / name
@@ -137,7 +137,7 @@ def check(root: Path = ROOT) -> None:
         with zipfile.ZipFile(wheel) as archive:
             names = archive.namelist()
             validate_members(names, wheel=True)
-            assert {'scout/py.typed', 'scout/desktop/scout.svg',
+            assert {'scout/py.typed', 'scout/desktop/scout.svg', 'scout/desktop/scout.ico',
                     'scout/desktop/__main__.py'} <= set(names)
             metadata_name, = [name for name in names if name.endswith('.dist-info/METADATA')]
             metadata = BytesParser().parsebytes(archive.read(metadata_name))

@@ -124,6 +124,13 @@ Add those credentials and signing steps before distributing to environments that
 require trusted publishers. CI does not bypass or validate operating-system
 download security prompts.
 
+Windows app/setup executables embed `scout/desktop/scout.ico`, compiled from the
+existing SVG logo at shell icon sizes. After changing the SVG, regenerate it with
+`python scripts/build-icons.py` (desktop extra required). Package checks require
+both assets, and the Windows installation check compares the executable's
+embedded icon resources against the bundled ICO. The app and shortcuts share
+the `org.scoutstudio.studio` taskbar identity.
+
 ## Make changes
 
 EditorConfig supplies UTF-8, LF line endings, final newlines, and four-space

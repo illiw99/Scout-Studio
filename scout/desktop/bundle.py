@@ -139,7 +139,9 @@ def _exercise(root, checks):
 
     from PySide6.QtCore import QLibraryInfo, QSettings
     from PySide6.QtWidgets import QApplication
+    from PySide6.QtGui import QIcon
     from PySide6.QtTest import QTest
+    from scout.desktop.identity import application_icon_path, configure_windows_app_id
     os.environ['QT_QPA_PLATFORM_PLUGIN_PATH'] = QLibraryInfo.path(QLibraryInfo.LibraryPath.PluginsPath)
     if 'cv2' in os.environ.get('QT_QPA_FONTDIR', ''):
         os.environ.pop('QT_QPA_FONTDIR', None)
@@ -149,9 +151,11 @@ def _exercise(root, checks):
             ctypes.CDLL(str(library), mode=ctypes.RTLD_GLOBAL)
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
     QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(root / 'settings'))
+    assert configure_windows_app_id(), 'Windows rejected the taskbar identity'
     app = QApplication.instance() or QApplication(['Scout Studio installer check'])
     app.setApplicationName('Scout Studio')
     app.setOrganizationName('Scout')
+    app.setWindowIcon(QIcon(str(application_icon_path())))
     from scout.desktop.app import Studio
     window = Studio(root / 'empty-library')
     try:

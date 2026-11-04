@@ -30,7 +30,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Timestamp play labels and custom-name preservation | `scout/desktop/labels.py` |
 | Persistent game-folder index, in-place/copy imports, per-game Scout paths, fields and conflict-safe review saves | `scout/desktop/library.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
-| Native theme and app icon | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/scout.svg` |
+| Native theme, application identity and app icons | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/identity.py`, `scout/desktop/scout.svg`, `scout/desktop/scout.ico`, `scripts/build-icons.py` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
 | Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |
 | Standalone installer builds, disk-image retries, install checks and tag releases | `packaging/`, `scripts/build-installers.py`, `scripts/test-installer.py`, `tests/test_installer_build.py`, `.github/workflows/installers.yml` |

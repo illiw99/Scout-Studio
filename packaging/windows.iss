@@ -15,14 +15,15 @@ OutputBaseFilename={#OutputName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile={#RepoRoot}\scout\desktop\scout.ico
 UninstallDisplayName=Scout Studio
 UninstallDisplayIcon={app}\Scout-Studio.exe
 LicenseFile={#RepoRoot}\LICENSE
 [Files]
 Source: "{#BundleDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{group}\Scout Studio"; Filename: "{app}\Scout-Studio.exe"
-Name: "{userdesktop}\Scout Studio"; Filename: "{app}\Scout-Studio.exe"; Tasks: desktopicon
+Name: "{group}\Scout Studio"; Filename: "{app}\Scout-Studio.exe"; IconFilename: "{app}\Scout-Studio.exe"; AppUserModelID: "org.scoutstudio.studio"
+Name: "{userdesktop}\Scout Studio"; Filename: "{app}\Scout-Studio.exe"; IconFilename: "{app}\Scout-Studio.exe"; AppUserModelID: "org.scoutstudio.studio"; Tasks: desktopicon
 [Tasks]
 Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
 [Run]

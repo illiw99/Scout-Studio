@@ -16,6 +16,7 @@ from pathlib import Path
 import plistlib
 import shutil
 import subprocess
+import struct
 import tempfile
 import time
 
@@ -31,6 +32,55 @@ def validate_report(report: dict, version: str) -> None:
     checks = report.get('checks', {})
     for key in ('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli'):
         assert checks.get(key) is True, f'Missing/failed smoke check {key}: {report}'
+
+
+def verify_windows_icon(executable: Path, icon: Path) -> None:
+    """Compare embedded PE icon images with our bundled logo without running it."""
+    import ctypes
+    from ctypes import wintypes
+
+    data = icon.read_bytes()
+    reserved, kind, count = struct.unpack_from('<HHH', data)
+    assert (reserved, kind) == (0, 1) and count, 'Invalid Scout Studio icon'
+    expected = []
+    for index in range(count):
+        *_, size, offset = struct.unpack_from('<BBBBHHII', data, 6 + index * 16)
+        expected.append(data[offset:offset + size])
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.LoadLibraryExW.argtypes = [wintypes.LPCWSTR, wintypes.HANDLE, wintypes.DWORD]
+    kernel.LoadLibraryExW.restype = wintypes.HMODULE
+    kernel.FindResourceW.argtypes = [wintypes.HMODULE, ctypes.c_void_p, ctypes.c_void_p]
+    kernel.FindResourceW.restype = wintypes.HANDLE
+    kernel.SizeofResource.argtypes = [wintypes.HMODULE, wintypes.HANDLE]
+    kernel.SizeofResource.restype = wintypes.DWORD
+    kernel.LoadResource.argtypes = [wintypes.HMODULE, wintypes.HANDLE]
+    kernel.LoadResource.restype = wintypes.HANDLE
+    kernel.LockResource.argtypes = [wintypes.HANDLE]
+    kernel.LockResource.restype = ctypes.c_void_p
+    kernel.FreeLibrary.argtypes = [wintypes.HMODULE]
+    kernel.FreeLibrary.restype = wintypes.BOOL
+    # DATAFILE | IMAGE_RESOURCE maps resources only, never executable code/DLLs.
+    module = kernel.LoadLibraryExW(str(executable), None, 0x02 | 0x20)
+    if not module:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        def resource(kind, name):
+            info = kernel.FindResourceW(module, ctypes.c_void_p(name), ctypes.c_void_p(kind))
+            if not info:
+                raise AssertionError(f'Missing Windows icon resource: {executable}')
+            size = kernel.SizeofResource(module, info)
+            pointer = kernel.LockResource(kernel.LoadResource(module, info))
+            if not size or not pointer:
+                raise AssertionError(f'Unreadable Windows icon: {executable}')
+            return ctypes.string_at(pointer, size)
+        # PyInstaller embeds the primary icon in RT_GROUP_ICON with identifier 1.
+        group = resource(14, 1)
+        assert struct.unpack_from('<HHH', group) == (0, 1, count), 'Unexpected Windows icon sizes'
+        embedded = [resource(3, struct.unpack_from('<BBBBHHIH', group, 6 + index * 14)[-1])
+                    for index in range(count)]
+        assert embedded == expected, f'Executable uses a different logo: {executable}'
+    finally:
+        kernel.FreeLibrary(module)
 
 
 def exercise_installed_app(executable: Path, report: Path, version: str,
@@ -79,6 +129,9 @@ def main() -> None:
                 executable = destination / 'Scout-Studio.exe'
                 installed = True
                 assert (destination / 'Scout-Studio-CLI.exe').is_file()
+                icon = destination / '_internal/scout/desktop/scout.ico'
+                verify_windows_icon(executable, icon)
+                verify_windows_icon(destination / 'Scout-Studio-CLI.exe', icon)
             elif system == 'Linux':
                 if Path('/opt/Scout-Studio').exists() or Path('/usr/share/applications/scout-studio.desktop').exists():
                     raise RuntimeError('Refusing to replace an existing Scout Studio installation')

@@ -3,7 +3,7 @@ global-exclude *
 include pyproject.toml README.md LICENSE MANIFEST.in AGENTS.md start-studio.sh
 include CHANGELOG.md CONTRIBUTING.md
 include .editorconfig
-recursive-include scout *.py *.svg py.typed
+recursive-include scout *.py *.svg *.ico py.typed
 recursive-include docs *.md
 recursive-include tests *.py
 recursive-include scripts *.py *.sh

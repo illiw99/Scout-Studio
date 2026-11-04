@@ -63,7 +63,7 @@ class ArtifactPolicyTests(unittest.TestCase):
                     self.checker.validate_members([name], wheel=False)
 
     def test_accepts_required_assets(self):
-        self.checker.validate_members(['scout/py.typed', 'scout/desktop/scout.svg',
+        self.checker.validate_members(['scout/py.typed', 'scout/desktop/scout.svg', 'scout/desktop/scout.ico',
                                        'scout/__init__.py'], wheel=True)
 
 

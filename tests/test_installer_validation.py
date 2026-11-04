@@ -1,13 +1,15 @@
 """An incomplete installed-app smoke report must never pass the release gate."""
 import importlib.util
 import contextlib
+import ctypes
 import io
 import json
 from pathlib import Path
 import subprocess
+import struct
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 def checker():
@@ -19,6 +21,39 @@ def checker():
 
 
 class InstallerValidationTests(unittest.TestCase):
+    def test_embedded_windows_logo_is_verified_and_resource_handle_is_closed(self):
+        module = checker()
+        icon = Path(__file__).resolve().parents[1] / 'scout/desktop/scout.ico'
+        data = icon.read_bytes()
+        count = struct.unpack_from('<H', data, 4)[0]
+        entries, resources = [], {}
+        for index in range(count):
+            row = struct.unpack_from('<BBBBHHII', data, 6 + index * 16)
+            frame = data[row[-1]:row[-1] + row[-2]]
+            resources[(3 << 16) | (index + 1)] = frame
+            entries.append(struct.pack('<BBBBHHIH', *row[:6], len(frame), index + 1))
+        resources[(14 << 16) | 1] = struct.pack('<HHH', 0, 1, count) + b''.join(entries)
+        for corrupted in (False, True):
+            with self.subTest(corrupted=corrupted):
+                payloads = dict(resources)
+                if corrupted:
+                    payloads[(3 << 16) | 1] = b'wrong icon'
+                buffers = {key: ctypes.create_string_buffer(value) for key, value in payloads.items()}
+                kernel = Mock()
+                kernel.LoadLibraryExW.return_value = 123
+                kernel.FindResourceW.side_effect = lambda module, name, kind: (kind.value << 16) | name.value
+                kernel.SizeofResource.side_effect = lambda module, resource: len(payloads[resource])
+                kernel.LoadResource.side_effect = lambda module, resource: resource
+                kernel.LockResource.side_effect = lambda resource: ctypes.addressof(buffers[resource])
+                with patch.object(ctypes, 'WinDLL', create=True, return_value=kernel):
+                    if corrupted:
+                        with self.assertRaisesRegex(AssertionError, 'different logo'):
+                            module.verify_windows_icon(Path('Scout-Studio.exe'), icon)
+                    else:
+                        module.verify_windows_icon(Path('Scout-Studio.exe'), icon)
+                self.assertEqual(kernel.LoadLibraryExW.call_args.args[-1], 0x22)
+                kernel.FreeLibrary.assert_called_once_with(123)
+
     def test_failed_app_prints_report_and_preserves_exit_failure(self):
         module = checker()
         with tempfile.TemporaryDirectory() as folder:
