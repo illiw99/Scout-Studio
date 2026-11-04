@@ -6,7 +6,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules, copy_metadata
 
 root = Path(SPECPATH).parent
-version = os.environ['PLAYCHOP_BUILD_VERSION']
+version = os.environ['SCOUT_STUDIO_BUILD_VERSION']
 datas = [(str(root / 'LICENSE'), '.')]
 for package in ('scout', 'ultralytics', 'imageio_ffmpeg', 'matplotlib'):
     datas += collect_data_files(package, excludes=['**/*.pt', '**/*.onnx', '**/tests/**'])
@@ -29,7 +29,7 @@ a = Analysis([str(root / 'packaging' / 'launcher.py')], pathex=[str(root)],
              runtime_hooks=[], excludes=['PyQt5', 'PyQt6', 'PySide2', 'tkinter',
                                          'IPython', 'pytest'], noarchive=False)
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='PlayChop',
+exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='Scout-Studio',
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,
           console=os.name != 'nt' and not sys.platform == 'darwin',
           disable_windowed_traceback=False, argv_emulation=False,
@@ -39,12 +39,14 @@ if os.name == 'nt':
     # A noconsole executable loses Python stdout even with QProcess pipes.
     # Ship a separate console entry for background jobs and their diagnostics.
     executables.append(EXE(pyz, a.scripts, [], exclude_binaries=True,
-                           name='PlayChopCLI', debug=False, strip=False, upx=False,
+                           name='Scout-Studio-CLI', debug=False, strip=False, upx=False,
                            console=True))
-coll = COLLECT(*executables, a.binaries, a.datas, strip=False, upx=False, name='PlayChop')
+coll = COLLECT(*executables, a.binaries, a.datas, strip=False, upx=False, name='Scout-Studio')
 if sys.platform == 'darwin':
-    app = BUNDLE(coll, name='PlayChop.app', bundle_identifier='org.playchop.studio',
-                 info_plist={'CFBundleShortVersionString': version,
+    app = BUNDLE(coll, name='Scout Studio.app', bundle_identifier='org.scoutstudio.studio',
+                 info_plist={'CFBundleName': 'Scout Studio',
+                             'CFBundleDisplayName': 'Scout Studio',
+                             'CFBundleShortVersionString': version,
                              'CFBundleVersion': version,
                              'NSHighResolutionCapable': True,
-                             'NSMicrophoneUsageDescription': 'PlayChop plays imported video audio.'})
+                             'NSMicrophoneUsageDescription': 'Scout Studio plays imported video audio.'})

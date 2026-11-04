@@ -17,7 +17,7 @@ from scout.processes import background_options
 def cli_command():
     """Windows GUI bundles use a console companion so QProcess retains logs."""
     if getattr(sys, 'frozen', False):
-        executable = (str(Path(sys.executable).with_name('PlayChopCLI.exe'))
+        executable = (str(Path(sys.executable).with_name('Scout-Studio-CLI.exe'))
                       if sys.platform == 'win32' else sys.executable)
         return [executable, '--scout-cli']
     return [sys.executable, '-m', 'scout']
@@ -50,7 +50,7 @@ def smoke_test(report_path: Path) -> int:
     """
     report = dict(ok=False, version=__version__, frozen=bool(getattr(sys, 'frozen', False)), checks={})
     try:
-        with tempfile.TemporaryDirectory(prefix='playchop-smoke-') as directory:
+        with tempfile.TemporaryDirectory(prefix='scout-studio-smoke-') as directory:
             _exercise(Path(directory), report['checks'])
         report['ok'] = True
     except Exception:
@@ -149,7 +149,7 @@ def _exercise(root, checks):
             ctypes.CDLL(str(library), mode=ctypes.RTLD_GLOBAL)
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
     QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(root / 'settings'))
-    app = QApplication.instance() or QApplication(['PlayChop installer check'])
+    app = QApplication.instance() or QApplication(['Scout Studio installer check'])
     app.setApplicationName('Scout Studio')
     app.setOrganizationName('Scout')
     from scout.desktop.app import Studio

@@ -48,8 +48,8 @@ def create_dmg(stage: Path, installer: Path, log_dir: Path) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.dmg-build-', dir=installer.parent) as temporary:
         for attempt in range(1, 6):
-            candidate = Path(temporary) / f'PlayChop-{attempt}.dmg'
-            command = ['hdiutil', 'create', '-volname', 'PlayChop', '-srcfolder', str(stage),
+            candidate = Path(temporary) / f'Scout-Studio-{attempt}.dmg'
+            command = ['hdiutil', 'create', '-volname', 'Scout Studio', '-srcfolder', str(stage),
                        '-fs', 'HFS+', '-format', 'UDZO', str(candidate)]
             log = log_dir / f'create-{attempt}.log'
             with log.open('w', encoding='utf-8') as stream:
@@ -91,14 +91,14 @@ def build() -> None:
     output = ROOT / 'dist/installers'
     work.mkdir(parents=True, exist_ok=True)
     output.mkdir(parents=True, exist_ok=True)
-    os.environ['PLAYCHOP_BUILD_VERSION'] = version
+    os.environ['SCOUT_STUDIO_BUILD_VERSION'] = version
     run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
         '--distpath', work / 'dist', '--workpath', work / 'pyinstaller',
-        ROOT / 'packaging/playchop.spec')
-    bundle = work / 'dist/PlayChop'
+        ROOT / 'packaging/scout-studio.spec')
+    bundle = work / 'dist/Scout-Studio'
     if system == 'Windows':
         compiler = shutil.which('iscc') or str(Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)')) / 'Inno Setup 6/ISCC.exe')
-        name = f'PlayChop-{version}-windows-x86_64'
+        name = f'Scout-Studio-{version}-windows-x86_64'
         run(compiler, f'/DAppVersion={version}', f'/DOutputDir={output}',
             f'/DOutputName={name}', f'/DRepoRoot={ROOT}', f'/DBundleDir={bundle}',
             ROOT / 'packaging/windows.iss')
@@ -107,31 +107,31 @@ def build() -> None:
         stage = work / 'deb'
         if stage.exists():
             shutil.rmtree(stage)
-        app = stage / 'opt/playchop'
+        app = stage / 'opt/Scout-Studio'
         shutil.copytree(bundle, app, symlinks=True)
         control = stage / 'DEBIAN'
         control.mkdir()
         (control / 'control').write_text(
-            f'Package: playchop\nVersion: {version}\nSection: video\nPriority: optional\n'
-            'Architecture: amd64\nMaintainer: PlayChop contributors\n'
+            f'Package: scout-studio\nVersion: {version}\nSection: video\nPriority: optional\n'
+            'Architecture: amd64\nMaintainer: Scout Studio contributors\n'
             'Depends: libc6 (>= 2.35), libgl1, libegl1, libopengl0, libglib2.0-0, '
             'libxkbcommon0, libxcb-cursor0, libxcb-icccm4, libxcb-keysyms1, '
             'libxcb-shape0, libxcb-xinerama0, libxcb-xkb1, libxkbcommon-x11-0, '
             'libxcb-image0, libxcb-render-util0, libdbus-1-3, libfontconfig1, '
             'libasound2, libpulse0\n'
             'Description: Native football video review and play detection\n', encoding='utf-8')
-        launch = stage / 'usr/bin/playchop'
+        launch = stage / 'usr/bin/Scout-Studio'
         launch.parent.mkdir(parents=True)
-        launch.symlink_to('/opt/playchop/PlayChop')
+        launch.symlink_to('/opt/Scout-Studio/Scout-Studio')
         applications = stage / 'usr/share/applications'
         applications.mkdir(parents=True)
-        (applications / 'playchop.desktop').write_text(
-            '[Desktop Entry]\nType=Application\nName=PlayChop\nExec=/opt/playchop/PlayChop\n'
-            'Icon=playchop\nTerminal=false\nCategories=AudioVideo;Video;\n', encoding='utf-8')
+        (applications / 'scout-studio.desktop').write_text(
+            '[Desktop Entry]\nType=Application\nName=Scout Studio\nExec=/opt/Scout-Studio/Scout-Studio\n'
+            'Icon=scout-studio\nTerminal=false\nCategories=AudioVideo;Video;\n', encoding='utf-8')
         icons = stage / 'usr/share/icons/hicolor/scalable/apps'
         icons.mkdir(parents=True)
-        shutil.copy2(ROOT / 'scout/desktop/scout.svg', icons / 'playchop.svg')
-        installer = output / f'PlayChop-{version}-linux-x86_64.deb'
+        shutil.copy2(ROOT / 'scout/desktop/scout.svg', icons / 'scout-studio.svg')
+        installer = output / f'Scout-Studio-{version}-linux-x86_64.deb'
         run('dpkg-deb', '--root-owner-group', '--build', stage, installer)
     else:
         stage = work / 'dmg'
@@ -139,9 +139,9 @@ def build() -> None:
             shutil.rmtree(stage)
         stage.mkdir()
         # ditto preserves the symlinks and metadata of PyInstaller's .app bundle.
-        run('ditto', work / 'dist/PlayChop.app', stage / 'PlayChop.app')
+        run('ditto', work / 'dist/Scout Studio.app', stage / 'Scout Studio.app')
         (stage / 'Applications').symlink_to('/Applications')
-        installer = output / f'PlayChop-{version}-macos-{arch}.dmg'
+        installer = output / f'Scout-Studio-{version}-macos-{arch}.dmg'
         create_dmg(stage, installer, work / 'dmg-logs')
     digest = sha256(installer)
     (output / f'{installer.name}.sha256').write_text(f'{digest}  {installer.name}\n', encoding='utf-8')

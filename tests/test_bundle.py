@@ -56,8 +56,8 @@ class BundleTests(unittest.TestCase):
     def test_windows_frozen_queue_uses_console_companion(self):
         with patch.object(bundle.sys, 'frozen', True, create=True), \
              patch.object(bundle.sys, 'platform', 'win32'), \
-             patch.object(bundle.sys, 'executable', '/installed/PlayChop.exe'):
-            self.assertEqual(bundle.cli_command(), ['/installed/PlayChopCLI.exe', '--scout-cli'])
+             patch.object(bundle.sys, 'executable', '/installed/Scout-Studio.exe'):
+            self.assertEqual(bundle.cli_command(), ['/installed/Scout-Studio-CLI.exe', '--scout-cli'])
 
     def test_frozen_app_uses_bundled_ffmpeg_even_with_system_install(self):
         media.ffmpeg_exe.cache_clear()

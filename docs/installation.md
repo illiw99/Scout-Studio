@@ -4,16 +4,16 @@
 
 ## Standalone installers
 
-Download an installer from [GitHub Releases](https://github.com/illiw99/PlayChop/releases).
+Download an installer from [GitHub Releases](https://github.com/illiw99/Scout-Studio/releases).
 Installers appear after a version tag completes all build and installation checks.
 Python, the native Qt GUI, CPU detection dependencies and FFmpeg are bundled.
 
 | Platform | Download | Install |
 | --- | --- | --- |
-| Windows x64 | `PlayChop-<version>-windows-x86_64.exe` | Run setup; open PlayChop from Start. No administrator account is needed. |
-| Ubuntu 22.04+ / compatible Debian x64 | `PlayChop-<version>-linux-x86_64.deb` | Run `sudo apt install ./PlayChop-<version>-linux-x86_64.deb`; open PlayChop from Applications. |
-| macOS Apple Silicon | `PlayChop-<version>-macos-arm64.dmg` | Open the disk image and drag PlayChop to Applications. |
-| macOS Intel | `PlayChop-<version>-macos-x86_64.dmg` | Open the disk image and drag PlayChop to Applications. |
+| Windows x64 | `Scout-Studio-<version>-windows-x86_64.exe` | Run setup; open Scout Studio from Start. No administrator account is needed. |
+| Ubuntu 22.04+ / compatible Debian x64 | `Scout-Studio-<version>-linux-x86_64.deb` | Run `sudo apt install ./Scout-Studio-<version>-linux-x86_64.deb`; open Scout Studio from Applications. |
+| macOS Apple Silicon | `Scout-Studio-<version>-macos-arm64.dmg` | Open the disk image and drag Scout Studio to Applications. |
+| macOS Intel | `Scout-Studio-<version>-macos-x86_64.dmg` | Open the disk image and drag Scout Studio to Applications. |
 
 Windows and macOS installers currently have no publisher signing certificate or
 Apple notarization. Their security systems may warn or block launch. Only allow
@@ -33,7 +33,7 @@ review libraries can be edited and exported without a classifier.
 
 Standalone builds use CPU PyTorch on Windows/Linux and the bundled FFmpeg on all
 platforms. For CUDA inference or a custom system FFmpeg, use the Python installation
-below. Remove the Linux package with `sudo apt remove playchop`, use Windows
+below. Remove the Linux package with `sudo apt remove scout-studio`, use Windows
 Installed apps, or move the macOS application to Trash.
 
 ## Python installation

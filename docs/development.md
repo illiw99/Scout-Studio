@@ -2,7 +2,7 @@
 
 [README](../README.md) · [Installation](installation.md) · [Code map](code-map.md)
 
-PlayChop uses the `scout` import package and `scout-flag` distribution. The CLI
+Scout Studio uses the `scout` import package and `scout-flag` distribution. The CLI
 and native application share the same detection, review, and export pipeline.
 Keep the application in Python and native Qt.
 

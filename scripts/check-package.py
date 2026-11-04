@@ -119,7 +119,7 @@ def check(root: Path = ROOT) -> None:
             validate_members(names, wheel=False)
             assert {'LICENSE', 'README.md', 'scripts/check-package.py',
                     'tests/test_packaging.py', 'packaging/launcher.py',
-                    'packaging/playchop.spec', '.github/workflows/installers.yml', 'scout/py.typed',
+                    'packaging/scout-studio.spec', '.github/workflows/installers.yml', 'scout/py.typed',
                     'scout/desktop/scout.svg'} <= set(names)
             # Extract only validated regular files, with no links or traversal.
             for member, name in zip(members, names):
@@ -142,6 +142,7 @@ def check(root: Path = ROOT) -> None:
             metadata_name, = [name for name in names if name.endswith('.dist-info/METADATA')]
             metadata = BytesParser().parsebytes(archive.read(metadata_name))
             assert metadata['Name'] == 'scout-flag'
+            assert metadata['Author'] == 'Scout Studio contributors'
             assert metadata['Version'] == version
             assert metadata['Requires-Python'] == '>=3.10'
             assert metadata['License-Expression'] == 'MIT'

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "PlayChop contributors" }]
+authors = [{ name = "Scout Studio contributors" }]
 keywords = ["flag-football", "video", "ffmpeg", "play-detection"]
 classifiers = [
     "Environment :: Console",

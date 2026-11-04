@@ -174,5 +174,5 @@ jobs:
         shell: bash
         run: |
           gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
-            --title "PlayChop ${GITHUB_REF_NAME#v}" \
+            --title "Scout Studio ${GITHUB_REF_NAME#v}" \
             --notes 'Standalone native installers. Windows and macOS builds are unsigned; see the installation guide for platform security prompts. SHA256SUMS.txt verifies download integrity.'

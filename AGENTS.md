@@ -1,6 +1,6 @@
 # Project agent workflow
 
-This repository is PlayChop (package `scout`): Python 3.10+ detection and
+This repository is Scout Studio (package `scout`): Python 3.10+ detection and
 FFmpeg tools, with a native PySide6 desktop application in `scout/desktop/`.
 Keep the application Python/native Qt; do not introduce JavaScript or browser UI.
 Read `docs/code-map.md` first; open README sections and source only as needed.

@@ -30,7 +30,7 @@ class InstallerValidationTests(unittest.TestCase):
                 raise subprocess.CalledProcessError(1, args)
             with patch.object(module, 'run', side_effect=fail), contextlib.redirect_stdout(io.StringIO()) as output:
                 with self.assertRaises(subprocess.CalledProcessError):
-                    module.exercise_installed_app(root/'PlayChop', report, '1.0.0', root, {})
+                    module.exercise_installed_app(root/'Scout-Studio', report, '1.0.0', root, {})
             self.assertIn('torchvision::nms missing', output.getvalue())
             self.assertIn('native extension load failed', output.getvalue())
             self.assertTrue((root / 'smoke-process.log').is_file())
@@ -42,7 +42,7 @@ class InstallerValidationTests(unittest.TestCase):
             report = root / 'smoke-report.json'
             report.write_text(json.dumps(dict(ok=True, frozen=True, version='1.0.0')))
             with patch.object(module, 'run'), self.assertRaises(FileNotFoundError):
-                module.exercise_installed_app(root/'PlayChop', report, '1.0.0', root, {})
+                module.exercise_installed_app(root/'Scout-Studio', report, '1.0.0', root, {})
 
     def test_rejects_source_execution_wrong_version_and_partial_success(self):
         validate = checker().validate_report

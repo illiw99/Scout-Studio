@@ -34,6 +34,8 @@ these changes have not been published as a release.
 
 ### Repository and packaging
 
+- Application, installer, shortcut and release branding consistently use
+  Scout Studio, with Scout-Studio filenames.
 - macOS installer creation retries transient disk-image lock failures, verifies
   the image before publishing it, and preserves build diagnostics.
 - Game data now lives in the visible `Scout/` folder. An explicit migration tool

@@ -1,4 +1,4 @@
-# PlayChop
+# Scout Studio
 
 **Scout Studio** is a native desktop application for reviewing flag-football
 film, finding plays, and exporting clips. Watch the full match, refine play

@@ -71,7 +71,7 @@ class ArtifactPolicyTests(unittest.TestCase):
 class NativeVisionBundleTests(unittest.TestCase):
     def test_installed_torchvision_operator_libraries_enter_binary_collection(self):
         from PyInstaller.utils.hooks import collect_dynamic_libs
-        spec = Path(__file__).resolve().parents[1] / 'packaging/playchop.spec'
+        spec = Path(__file__).resolve().parents[1] / 'packaging/scout-studio.spec'
         tree = ast.parse(spec.read_text())
         assignment = next(node for node in tree.body if isinstance(node, ast.Assign)
                           and any(isinstance(target, ast.Name) and target.id == 'binaries'

@@ -66,7 +66,7 @@ def main() -> None:
             digest.update(block)
     expected = (artifacts / (installer.name + '.sha256')).read_text(encoding='utf-8').split()[0]
     assert digest.hexdigest() == expected, 'Installer checksum mismatch'
-    with tempfile.TemporaryDirectory(prefix='playchop-install-test-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='scout-studio-install-test-') as temporary:
         work = Path(temporary)
         system = info['platform']
         installed = False
@@ -76,29 +76,32 @@ def main() -> None:
                 destination = work / 'installed'
                 run(installer, '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
                     '/SP-', f'/DIR={destination}', f'/LOG={work / "setup.log"}')
-                executable = destination / 'PlayChop.exe'
+                executable = destination / 'Scout-Studio.exe'
                 installed = True
+                assert (destination / 'Scout-Studio-CLI.exe').is_file()
             elif system == 'Linux':
-                if Path('/opt/playchop').exists() or Path('/usr/share/applications/playchop.desktop').exists():
-                    raise RuntimeError('Refusing to replace an existing PlayChop installation')
+                if Path('/opt/Scout-Studio').exists() or Path('/usr/share/applications/scout-studio.desktop').exists():
+                    raise RuntimeError('Refusing to replace an existing Scout Studio installation')
                 run('sudo', 'apt-get', 'install', '-y', installer)
-                executable = Path('/opt/playchop/PlayChop')
+                executable = Path('/opt/Scout-Studio/Scout-Studio')
                 installed = True
-                assert Path('/usr/bin/playchop').is_symlink()
-                assert Path('/usr/share/applications/playchop.desktop').is_file()
+                assert Path('/usr/bin/Scout-Studio').is_symlink()
+                assert os.readlink('/usr/bin/Scout-Studio') == '/opt/Scout-Studio/Scout-Studio'
+                assert Path('/usr/share/applications/scout-studio.desktop').is_file()
+                assert Path('/usr/share/icons/hicolor/scalable/apps/scout-studio.svg').is_file()
             elif system == 'Darwin':
-                destination = Path('/Applications/PlayChop.app')
+                destination = Path('/Applications/Scout Studio.app')
                 if destination.exists():
-                    raise RuntimeError('Refusing to replace an existing PlayChop.app')
+                    raise RuntimeError('Refusing to replace an existing Scout Studio.app')
                 mounted = plistlib.loads(run('hdiutil', 'attach', '-nobrowse', '-readonly',
                     '-plist', installer, stdout=subprocess.PIPE).stdout)
                 mount = next(Path(item['mount-point']) for item in mounted['system-entities'] if 'mount-point' in item)
                 try:
-                    run('sudo', 'ditto', mount / 'PlayChop.app', destination)
+                    run('sudo', 'ditto', mount / 'Scout Studio.app', destination)
                     installed = True
                 finally:
                     run('hdiutil', 'detach', mount)
-                executable = destination / 'Contents/MacOS/PlayChop'
+                executable = destination / 'Contents/MacOS/Scout-Studio'
             else:
                 raise ValueError(f'Unsupported platform: {system}')
             assert executable.is_file(), executable
@@ -120,13 +123,13 @@ def main() -> None:
                     run(destination / 'unins000.exe', '/VERYSILENT', '/SUPPRESSMSGBOXES',
                         '/NORESTART')
                     deadline = time.monotonic() + 60
-                    while (destination / 'PlayChop.exe').exists() and time.monotonic() < deadline:
+                    while (destination / 'Scout-Studio.exe').exists() and time.monotonic() < deadline:
                         time.sleep(0.5)
-                    assert not (destination / 'PlayChop.exe').exists(), 'Uninstall left executable'
+                    assert not (destination / 'Scout-Studio.exe').exists(), 'Uninstall left executable'
                 elif system == 'Linux':
-                    run('sudo', 'dpkg', '--purge', 'playchop')
-                    assert not Path('/opt/playchop/PlayChop').exists(), 'Uninstall left executable'
-                    assert not Path('/usr/bin/playchop').exists(), 'Uninstall left launcher'
+                    run('sudo', 'dpkg', '--purge', 'scout-studio')
+                    assert not Path('/opt/Scout-Studio/Scout-Studio').exists(), 'Uninstall left executable'
+                    assert not Path('/usr/bin/Scout-Studio').exists(), 'Uninstall left launcher'
                 elif system == 'Darwin':
                     run('sudo', 'rm', '-rf', destination)
                     assert not destination.exists(), 'Removal left app bundle'

@@ -1,7 +1,7 @@
 name = "verifier"
 description = "Validate a stable implementation using project checks."
 developer_instructions = """
-You are the verifier specialist for PlayChop.
+You are the verifier specialist for Scout Studio.
 Follow the assigned scope and root AGENTS.md project constraints.
 Do not spawn subagents. Request coordination if ownership or dependencies are unclear.
 Do not stage or commit; the coordinator owns integration and commits.
