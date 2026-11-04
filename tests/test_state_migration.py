@@ -121,6 +121,19 @@ class MigrationTests(unittest.TestCase):
         self.assertEqual(updated.get('root'), r'C:\Games\one\Scout')
         self.assertEqual(updated.find('producer/property').text, r'0.5:C:\Games\one\Scout\proxy.mp4')
 
+    def test_manually_renamed_state_rebases_both_historical_path_prefixes(self):
+        game, state = self.game(legacy='scout')
+        hidden = game / '.scout'
+        (state / 'paths.json').write_text(json.dumps({'cache_dir': str(hidden / 'cache')}))
+        (state / 'review.mlt').write_text(f'<mlt root="{hidden}"><producer>'
+            '<property name="resource">../camera.mp4</property></producer></mlt>')
+        migration.apply_migration(migration.plan_migration([game]), self.root / 'backup')
+        new = game / 'Scout'
+        self.assertEqual(json.loads((new / 'paths.json').read_text())['cache_dir'], str(new / 'cache'))
+        root = ET.parse(new / 'review.mlt').getroot()
+        self.assertEqual(root.get('root'), str(new))
+        self.assertEqual((Path(root.get('root')) / root.find('producer/property').text).resolve(), game / 'camera.mp4')
+
     def test_collisions_and_links_do_not_mutate(self):
         game, state = self.game()
         (game / 'Scout').mkdir()

@@ -80,6 +80,13 @@ def _map_path(value, mappings):
     return value
 
 
+def _mappings(states):
+    # A folder manually renamed from .scout to scout can still contain saved
+    # references using its earlier name. Both historical prefixes become Scout.
+    return [(str(Path(state['source']).with_name(name)), state['target'])
+            for state in states for name in ('.scout', 'scout')]
+
+
 def _string(value, mappings, relative=False):
     mapped = _map_path(value, mappings)
     if mapped != value:
@@ -175,7 +182,7 @@ def _metadata(path, data, mappings):
         root_pattern = r'(<mlt\b[^>]*)(>)'
         def root_tag(match):
             tag = re.sub(r'\sroot\s*=\s*([\"\']).*?\1', '', match[1], flags=re.S)
-            return tag + ' root="' + escape(str(new_base), {'"': '&quot;'}) + '">' 
+            return tag + ' root="' + escape(str(new_base), {'"': '&quot;'}) + '">'
         text = re.sub(root_pattern, root_tag, text, count=1, flags=re.S)
         def resource(match):
             value = unescape(match[2], {'&quot;': '"', '&apos;': "'"})
@@ -231,7 +238,7 @@ def plan_migration(folders):
         states.append(dict(source=str(source), target=str(target), inventory=inventory))
     if not states:
         raise MigrationError('Supply at least one game/source folder')
-    mappings = [(s['source'], s['target']) for s in states]
+    mappings = _mappings(states)
     for state in states:
         edits = []
         source = Path(state['source'])
@@ -279,7 +286,7 @@ def apply_migration(plan, backup_dir):
     backup = backup.resolve()
     if any(backup.is_relative_to(Path(s['source'])) or backup.is_relative_to(Path(s['target'])) for s in plan['states']):
         raise MigrationError('Backup must be outside migrated state')
-    mappings = [(s['source'], s['target']) for s in plan['states']]
+    mappings = _mappings(plan['states'])
     prepared = []
     for i, state in enumerate(plan['states']):
         for edit in state['edits']:
