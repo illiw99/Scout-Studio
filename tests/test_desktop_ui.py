@@ -211,9 +211,14 @@ class DesktopIntegrationTests(unittest.TestCase):
                 source = game / 'camera.mp4'
                 run([ffmpeg_exe(), '-v', 'error', '-f', 'lavfi', '-i',
                      'color=c=red:s=64x48:r=25:d=1', '-c:v', 'libx264', str(source)])
+                # Polling can rebuild the library while loading on slower CI
+                # runners. Force that replacement instead of relying on timing.
+                studio.refresh_library()
                 studio.reload_match()
                 self.wait_for(lambda: not studio.loading and studio.frame_ready)
                 self.assertEqual(len(studio.data['clips']), 1)
+                item = studio.match_list.currentItem()
+                self.assertIsNotNone(item)
                 self.assertIn('1 videos', item.text())
                 self.assertNotIn('No videos', item.text())
                 self.assertEqual(errors, [])
