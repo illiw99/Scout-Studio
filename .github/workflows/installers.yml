@@ -80,6 +80,9 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m unittest discover -s tests -v
+      - name: Check Windows background helpers keep logs without console windows
+        if: runner.os == 'Windows'
+        run: python -m unittest discover -s tests -p 'test_processes.py' -v
       - name: Build native installer
         run: python scripts/build-installers.py
       - uses: actions/upload-artifact@v4

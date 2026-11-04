@@ -8,6 +8,8 @@ these changes have not been published as a release.
 
 ### Native review
 
+- Windows background FFmpeg tasks run without opening extra console windows,
+  while retaining progress and error logs in Scout.
 - Scout Studio provides match browsing, MP4 import, field setup, and full-match playback.
 - The video can fill the workspace, move to a resizable window, or enter fullscreen.
 - Shotcut-style controls support frame stepping, reverse/forward shuttle, and 0.1×–10× speeds.

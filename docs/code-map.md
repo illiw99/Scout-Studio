@@ -11,6 +11,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Explicit `.scout`/`scout` to `Scout` migration, backups and rollback | `scout/state_migration.py`, `scripts/migrate-state.py`, `tests/test_state_migration.py` |
 | Source discovery (including linked folders and Scout exclusion), clip order and match timeline | `scout/timeline.py` |
 | FFmpeg discovery, probing and frame decoding | `scout/media.py` |
+| Background helper launch options and Windows console suppression | `scout/processes.py`, `tests/test_processes.py` |
 | YOLO detection, device choice and persistent caches | `scout/detect.py` |
 | Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py` |
 | Player tracking and motion features | `scout/track.py`, `scout/features.py` |

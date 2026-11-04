@@ -11,6 +11,7 @@ import time
 import traceback
 
 from scout import __version__
+from scout.processes import background_options
 
 
 def cli_command():
@@ -110,7 +111,8 @@ def _exercise(root, checks):
     source = root / 'source.mp4'
     subprocess.run([ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
                     'color=c=blue:s=160x96:r=25:d=2', '-c:v', 'libx264',
-                    '-pix_fmt', 'yuv420p', str(source)], check=True, timeout=30)
+                    '-pix_fmt', 'yuv420p', str(source)], check=True, timeout=30,
+                   **background_options())
     clip = Clip(media.probe(source), 0, 0)
     frames = list(media.iter_frames(source, 2, 160, 96, hwaccel=False))
     assert len(frames) == 4 and frames[0].shape == (96, 160, 3)
@@ -129,7 +131,8 @@ def _exercise(root, checks):
     Config().save(config)
     child = subprocess.run([*command, '--config', str(config), '--media-dir', str(root / 'media'),
                     '--match', 'Smoke', 'rename-clips', '--pattern', 'checked_<N>'],
-                   cwd=root, check=True, timeout=90, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                   cwd=root, check=True, timeout=90, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                   **background_options())
     assert (output.parent / 'checked_1.mp4').is_file()
     assert b'Done: 1 clip(s).' in child.stdout, 'Processing command output was lost'
     checks['cli'] = True

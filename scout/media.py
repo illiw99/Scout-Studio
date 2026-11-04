@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Iterator
 
 import numpy as np
+from .processes import background_options
 
 _DUR = re.compile(r"Duration:\s*(\d+):(\d\d):(\d\d\.\d+)")
 _VID = re.compile(r"Stream #\d+:(\d+).*?: Video:.*?(\d{2,5})x(\d{2,5})")
@@ -45,6 +46,7 @@ def has_filter(name: str = "drawtext") -> bool:
     out = subprocess.run(
         [ffmpeg_exe(), "-hide_banner", "-filters"],
         capture_output=True, text=True,
+        **background_options(),
     ).stdout
     return bool(re.search(rf"^\s*\S+\s+{re.escape(name)}\s", out, re.M))
 
@@ -74,6 +76,7 @@ def probe(path: str | Path) -> MediaInfo:
     txt = subprocess.run(
         [ffmpeg_exe(), "-hide_banner", "-i", str(path)],
         capture_output=True, text=True,
+        **background_options(),
     ).stderr
 
     m = _DUR.search(txt)
@@ -115,6 +118,7 @@ def ffmpeg_has_cuda() -> bool:
         result = subprocess.run(
             [ffmpeg_exe(), "-hide_banner", "-hwaccels"],
             capture_output=True, text=True, timeout=10,
+            **background_options(),
         )
         return result.returncode == 0 and "cuda" in result.stdout.split()
     except (OSError, subprocess.TimeoutExpired):
@@ -186,7 +190,8 @@ def _iter_frames(
 
     nbytes = width * height * chans
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, bufsize=nbytes * 8)
+                            stderr=subprocess.PIPE, bufsize=nbytes * 8,
+                            **background_options())
     drained = False
     try:
         while True:
@@ -227,6 +232,6 @@ def grab_frame(path: str | Path, t: float, width: int = 0, height: int = 0) -> n
 
 
 def run(cmd: list[str]) -> None:
-    res = subprocess.run(cmd, capture_output=True, text=True)
+    res = subprocess.run(cmd, capture_output=True, text=True, **background_options())
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg failed:\n{' '.join(cmd)}\n{res.stderr[-2000:]}")
