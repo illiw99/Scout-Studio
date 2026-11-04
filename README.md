@@ -7,6 +7,24 @@ boundaries on the timeline, and keep your work in a portable `review.mlt` file.
 The application is written in Python and PySide6. Daily review happens in a
 normal desktop window; a command-line interface is available for automation.
 
+## AI-generated, human-guided
+
+**Scout Studio's own code, tests, automation, and documentation are fully
+AI-generated, guided by its human maintainer.** The maintainer provides the idea,
+requirements, priorities, and feedback from using the app; AI assistants generate
+and revise the implementation. This statement describes the project's own work.
+Third-party libraries and tools have their own authors and licenses.
+
+The idea started with a practical need: spend less time scrubbing through long
+flag-football recordings to find and cut plays. Scout combines person detection
+and a trained play/non-play classifier to propose useful segments. The native
+review interface lets a person check the match, catch missed plays, refine
+boundaries, and export the clips they want.
+
+This is also an experiment in building a useful desktop tool through human-led
+AI development. Predictions are suggestions to review, and the project continues
+to evolve through testing and feedback.
+
 ## What you can do
 
 - Import camera files and browse matches in a local library.
