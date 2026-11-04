@@ -121,12 +121,13 @@ One-time setup for a source checkout:
 .venv/bin/python scripts/install_studio.py
 ```
 
-You can also launch with `./start-studio.sh` or `scout-studio`. Studio remembers
-its workspace and game-folder index across restarts. If a remembered workspace
-no longer exists, it falls back to this checkout's library or the default Videos
-library. An optional
-`scout-studio --workspace /path/to/library` selects a different workspace at
-launch; existing copied matches and optional `scout.json` settings still work.
+You can also launch with `./start-studio.sh` or `scout-studio`. The checkout's
+script and Linux menu shortcut explicitly open this checkout's workspace.
+For other launches, Studio uses a `.scout-library.json` in the current directory
+before a remembered workspace. Without either, it uses a local `media/` library
+or the default Videos library. An explicit
+`scout-studio --workspace /path/to/library` always selects that workspace.
+Existing copied matches and optional `scout.json` settings still work.
 New libraries use the included play model. The first detection run may download
 YOLO weights. Folder imports need space only for generated game data; the optional
 copied-video workflow also needs space for copies of the footage.

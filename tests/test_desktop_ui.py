@@ -68,6 +68,23 @@ class DesktopIntegrationTests(unittest.TestCase):
                 explicit = root/'new-workspace'
                 self.assertEqual(workspace_path(explicit, root), explicit)
 
+    def test_local_game_index_takes_priority_over_remembered_default(self):
+        from scout.desktop.app import workspace_path
+        from scout.storage import write_library, read_library
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            remembered = root / 'Videos/Scout'
+            remembered.mkdir(parents=True)
+            checkout = root / 'checkout'
+            write_library(checkout, {'Game': str(root / 'recording')})
+            self.assertFalse((checkout / 'media').exists())
+            with patch('scout.desktop.app.Path.cwd', return_value=checkout):
+                self.assertEqual(workspace_path(remembered=remembered), checkout)
+                self.assertEqual(workspace_path(requested=remembered, remembered=checkout), remembered)
+            with patch('scout.desktop.app.Path.cwd', return_value=root):
+                self.assertEqual(workspace_path(remembered=checkout), checkout)
+            self.assertEqual(read_library(checkout)['games'], {'Game': str(root / 'recording')})
+
     def test_queue_header_docks_and_hides_without_stopping_processing(self):
         from PySide6.QtCore import QSettings
         from scout.desktop.app import Studio

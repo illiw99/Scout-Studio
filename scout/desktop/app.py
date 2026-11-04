@@ -1958,12 +1958,15 @@ class Studio(QMainWindow):
 
 
 def workspace_path(requested=None, remembered=None):
-    """Honor explicit workspaces, but recover from a disappeared saved folder."""
+    """Honor an explicit workspace or local index before remembered defaults."""
     if requested:
         return Path(requested)
+    current = Path.cwd()
+    if (current / '.scout-library.json').is_file():
+        return current
     if remembered and Path(remembered).is_dir():
         return Path(remembered)
-    return Path.cwd() if (Path.cwd() / 'media').is_dir() else Path.home() / 'Videos' / 'Scout'
+    return current if (current / 'media').is_dir() else Path.home() / 'Videos' / 'Scout'
 
 
 def main(argv=None):

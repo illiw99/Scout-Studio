@@ -8,6 +8,8 @@ these changes have not been published as a release.
 
 ### Native review
 
+- Linux checkout launchers open their own workspace, and startup recognises a
+  local game index before a remembered default library.
 - Empty game folders can be imported and display a clear no-videos status;
   refresh the match after adding footage.
 - Windows background FFmpeg tasks run without opening extra console windows,
