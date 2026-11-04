@@ -54,6 +54,7 @@ application code from trained models, footage, and your library data.
 | [Installation](docs/installation.md) | Source setup, optional desktop dependency, FFmpeg, and CUDA |
 | [Command-line workflow](docs/cli.md) | Detection, MLT reviews, clips, statistics, renaming, and training |
 | [Development](docs/development.md) | Project layout, tests, package builds, and contribution workflow |
+| [Future path](docs/future-path.md) | Proposed architecture, smaller inference runtime, model packs, and tested release promotion |
 | [Code map](docs/code-map.md) | Find the source responsible for each feature |
 | [Change history](CHANGELOG.md) | Features and maintenance changes |
 

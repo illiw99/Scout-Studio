@@ -6,6 +6,9 @@ Scout Studio uses the `scout` import package and `scout-flag` distribution. The 
 and native application share the same detection, review, and export pipeline.
 Keep the application in Python and native Qt.
 
+The [future path](future-path.md) records the proposed architecture and delivery
+roadmap. The commands below describe today's implementation.
+
 ## Set up an environment
 
 ```bash

@@ -37,6 +37,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Frozen GUI/CLI dispatch and installed app/media smoke test | `scout/desktop/bundle.py`, `tests/test_bundle.py` |
 | User installation, Studio and CLI guides | `docs/installation.md`, `docs/studio.md`, `docs/cli.md` |
 | Development, validation and contribution conventions | `docs/development.md`, `CONTRIBUTING.md` |
+| Proposed architecture and delivery roadmap | `docs/future-path.md` |
 | Studio launcher and desktop installation | `start-studio.sh`, `scripts/install_studio.py` |
 | Pipeline/export/decode regression tests | `tests/test_workflow.py`, `tests/test_export.py`, `tests/test_decode.py` |
 | Detector precision compatibility and cache invalidation | `tests/test_precision.py` |
