@@ -8,7 +8,8 @@ when moving responsibilities; read only paths relevant to the task.
 | CLI commands and pipeline orchestration | `scout/cli.py`, `scout/__main__.py` |
 | Configuration, per-game/source state paths and tunable defaults | `scout/config.py` |
 | Shared CLI/GUI game-folder index, validation and atomic persistence | `scout/storage.py` |
-| Source discovery (including linked folders and .scout exclusion), clip order and match timeline | `scout/timeline.py` |
+| Explicit `.scout`/`scout` to `Scout` migration, backups and rollback | `scout/state_migration.py`, `scripts/migrate-state.py`, `tests/test_state_migration.py` |
+| Source discovery (including linked folders and Scout exclusion), clip order and match timeline | `scout/timeline.py` |
 | FFmpeg discovery, probing and frame decoding | `scout/media.py` |
 | YOLO detection, device choice and persistent caches | `scout/detect.py` |
 | Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py` |
@@ -26,7 +27,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Native match playback and marker timeline | `scout/desktop/review.py` |
 | Resizable video window, fullscreen transitions and subtle in-play video frame | `scout/desktop/player_window.py` |
 | Timestamp play labels and custom-name preservation | `scout/desktop/labels.py` |
-| Persistent game-folder index, in-place/copy imports, per-game .scout paths, fields and conflict-safe review saves | `scout/desktop/library.py` |
+| Persistent game-folder index, in-place/copy imports, per-game Scout paths, fields and conflict-safe review saves | `scout/desktop/library.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
 | Native theme and app icon | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/scout.svg` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
@@ -48,7 +49,7 @@ CLI / native Qt -> ordered media timeline -> cached detection -> features -> pla
 segmentation -> Shotcut review and MP4 export. The native UI edits fields and
 review markers, and queues existing CLI commands as subprocesses.
 
-Runtime state includes imported game folders and their `.scout/` state,
+Runtime state includes imported game folders and their `Scout/` state,
 `media/`, `games/`, configuration and trained `models/`. Legacy `fields/`,
 `.scout-cache/` and `out/` are migration inputs. Treat those as user data even when ignored
 by Git. Tests use temporary fixtures; do not validate by modifying a real library.

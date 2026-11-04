@@ -116,7 +116,7 @@ def _exercise(root, checks):
     assert len(frames) == 4 and frames[0].shape == (96, 160, 3)
     checks['ffmpeg'] = True
     game = root / 'media' / 'Smoke'
-    output = game / '.scout' / 'clips' / 'clip.mp4'
+    output = game / 'Scout' / 'clips' / 'clip.mp4'
     play = Play(1, .2, .8, .2, .8, .6, 0, 0, 0)
     cut_one(Config(), [clip], play, output)
     assert abs(media.probe(output).duration - .6) < .1

@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from .config import Config
-from .storage import read_library, validate_name
+from .storage import read_library, validate_name, STATE_DIR_NAMES
 from . import (timeline, detect, features, segment, cut, report, field, pick,
                shotcut, groundtruth, evaluate, tune, collect,
                merge, model)
@@ -23,7 +23,7 @@ def _load(args) -> Config:
     saved_match = cfg.match
     if saved_match is not None:
         validate_name(saved_match)
-    saved_state = cfg.game_dir / '.scout'
+    saved_states = {cfg.game_dir / name for name in STATE_DIR_NAMES}
     workspace_roots = {Config(media_dir=cfg.media_dir).root}
     if args.config:
         workspace_roots.add(Path(args.config).resolve().parent)
@@ -64,9 +64,11 @@ def _load(args) -> Config:
     # Conventional workspace paths from older saved configs adopt game-local
     # storage. Explicit CLI output and genuinely custom paths stay authoritative.
     conventional = {
-        "out_dir": {Path("out"), saved_state},
-        "fields_dir": {Path("fields"), saved_state / 'fields'},
-        "cache_dir": {Path(".scout-cache"), saved_state / 'cache'},
+        "out_dir": {Path("out"), *saved_states, *(Path(name) for name in STATE_DIR_NAMES)},
+        "fields_dir": {Path("fields"), *(state / 'fields' for state in saved_states),
+                       *(Path(name) / 'fields' for name in STATE_DIR_NAMES)},
+        "cache_dir": {Path(".scout-cache"), *(state / 'cache' for state in saved_states),
+                      *(Path(name) / 'cache' for name in STATE_DIR_NAMES)},
     }
     for name in (saved_match, cfg.match):
         if name:

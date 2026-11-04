@@ -74,7 +74,7 @@ class LibraryTests(unittest.TestCase):
         game.mkdir(parents=True)
         source = game / 'camera.mp4'
         source.write_bytes(b'original footage')
-        state = game / '.scout'
+        state = game / 'Scout'
         (state / 'clips').mkdir(parents=True)
         (state / 'clips/export.mp4').write_bytes(b'generated clip')
         root = self.root / 'library'
@@ -109,7 +109,7 @@ class LibraryTests(unittest.TestCase):
         (game / 'source.mp4').write_bytes(b'original')
         root = self.root / 'library'
         library.import_folder(root, game)
-        review = game / '.scout/review.mlt'
+        review = game / 'Scout/review.mlt'
         review.write_bytes(b'user edited review')
         library.remove_match(root, 'Game')
         self.assertEqual(library.matches(root), [])
@@ -130,8 +130,8 @@ class LibraryTests(unittest.TestCase):
             library.import_folder(root, second)
         self.assertEqual(library.linked_games(root), {'Game': str(first)})
         empty = self.root / 'Empty'
-        (empty / '.scout/clips').mkdir(parents=True)
-        (empty / '.scout/clips/export.mp4').write_bytes(b'generated')
+        (empty / 'Scout/clips').mkdir(parents=True)
+        (empty / 'Scout/clips/export.mp4').write_bytes(b'generated')
         with self.assertRaises(ValueError):
             library.import_folder(root, empty)
         legacy = self.root / 'external/Legacy'
@@ -145,7 +145,7 @@ class LibraryTests(unittest.TestCase):
         unsafe = self.root / 'Unsafe'
         unsafe.mkdir()
         (unsafe / 'source.mp4').write_bytes(b'original')
-        (unsafe / '.scout').symlink_to(external, target_is_directory=True)
+        (unsafe / 'Scout').symlink_to(external, target_is_directory=True)
         with self.assertRaises(ValueError):
             library.import_folder(root, unsafe)
         self.assertEqual(list(external.iterdir()), [])
@@ -218,23 +218,23 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(library.import_folder(self.root, game), 'Game')
         cfg = library.configuration(self.root, 'Game')
         self.assertEqual(cfg.source_dir, str(game))
-        self.assertEqual((game / '.scout/review.mlt').read_bytes(), original)
-        self.assertEqual((game / '.scout/cache' / cache.name).read_bytes(), cache.read_bytes())
+        self.assertEqual((game / 'Scout/review.mlt').read_bytes(), original)
+        self.assertEqual((game / 'Scout/cache' / cache.name).read_bytes(), cache.read_bytes())
         self.assertTrue(pick.field_path(cfg, clip).is_file())
-        self.assertEqual((game / '.scout/clips/old.mp4').read_bytes(), exported.read_bytes())
+        self.assertEqual((game / 'Scout/clips/old.mp4').read_bytes(), exported.read_bytes())
         with patch('scout.timeline.probe', return_value=clip.info), patch('scout.media.probe', return_value=clip.info):
             loaded = library.load_match(self.root, 'Game')
         self.assertEqual(len(loaded['plays']), 1)
         self.assertTrue(all(loaded['regions']))
         self.assertEqual([c.path for c in loaded['clips']], [clip.path])
-        (game / '.scout/review.mlt').write_bytes(b'newer game review')
-        (game / '.scout/cache' / cache.name).write_bytes(b'newer cache')
+        (game / 'Scout/review.mlt').write_bytes(b'newer game review')
+        (game / 'Scout/cache' / cache.name).write_bytes(b'newer cache')
         self.assertEqual(review.read_bytes(), original)
         self.assertEqual(cache.read_bytes(), b'saved detections')
         library.remove_match(self.root, 'Game')
         self.assertEqual(library.matches(self.root), [])
         library.import_folder(self.root, game)
-        self.assertEqual((game / '.scout/review.mlt').read_bytes(), b'newer game review')
+        self.assertEqual((game / 'Scout/review.mlt').read_bytes(), b'newer game review')
         self.assertEqual(review.read_bytes(), original)
 
     def test_previous_match_relative_review_keeps_original_source_base(self):
@@ -244,7 +244,7 @@ class LibraryTests(unittest.TestCase):
         original = review.read_bytes()
         library.import_folder(self.root, game)
         with patch('scout.media.probe', return_value=clip.info):
-            self.assertEqual([c.path for c in groundtruth.project_clips(game / '.scout/review.mlt')], [clip.path])
+            self.assertEqual([c.path for c in groundtruth.project_clips(game / 'Scout/review.mlt')], [clip.path])
         self.assertEqual(review.read_bytes(), original)
 
     def test_previous_match_migration_failure_leaves_originals_and_can_retry(self):
@@ -256,14 +256,14 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(library.linked_games(self.root), {})
         self.assertEqual(review.read_bytes(), original)
         library.import_folder(self.root, game)
-        self.assertEqual((game / '.scout/review.mlt').read_bytes(), original)
+        self.assertEqual((game / 'Scout/review.mlt').read_bytes(), original)
 
     def test_previous_match_migration_supports_filesystems_without_hardlinks(self):
         game, _, review, _, exported = self.legacy_fixture()
         with patch('scout.desktop.library.os.link', side_effect=OSError('no hardlinks')):
             library.import_folder(self.root, game)
-        self.assertEqual((game / '.scout/review.mlt').read_bytes(), review.read_bytes())
-        self.assertEqual((game / '.scout/clips/old.mp4').read_bytes(), exported.read_bytes())
+        self.assertEqual((game / 'Scout/review.mlt').read_bytes(), review.read_bytes())
+        self.assertEqual((game / 'Scout/clips/old.mp4').read_bytes(), exported.read_bytes())
 
     def test_previous_match_unregister_failure_preserves_visibility(self):
         game, _, _, _, _ = self.legacy_fixture()
@@ -285,7 +285,7 @@ class LibraryTests(unittest.TestCase):
         self.assertEqual(library.matches(self.root), [])
         library.import_folder(self.root, game)
         self.assertTrue(library.matches(self.root)[0]['linked'])
-        self.assertEqual((game / '.scout/review.mlt').read_bytes(), original)
+        self.assertEqual((game / 'Scout/review.mlt').read_bytes(), original)
 
     def test_import_copies_without_touching_originals(self):
         source = self.root/'camera.MP4'
@@ -343,7 +343,7 @@ class LibraryTests(unittest.TestCase):
 
     def test_running_batch_is_detected_but_stale_batch_is_ignored(self):
         import os
-        batch = self.root/'.scout/batches/w3-batch-test'
+        batch = self.root/'Scout/batches/w3-batch-test'
         batch.mkdir(parents=True)
         (batch/'pid').write_text(str(os.getpid()))
         (batch/'status.json').write_text(json.dumps({'A': {'state': 'running'}, 'B': {'state': 'completed'}}))

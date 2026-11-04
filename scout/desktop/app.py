@@ -1239,7 +1239,7 @@ class Studio(QMainWindow):
         name = self.jobs.current[0] if self.jobs.current else self.match
         try:
             cfg = library.configuration(self.root, name) if name else None
-            folder = cfg.path(cfg.out_dir) / 'desktop' if cfg else self.root / '.scout' / 'desktop'
+            folder = cfg.path(cfg.out_dir) / 'desktop' if cfg else self.root / 'Scout' / 'desktop'
             folder.mkdir(parents=True, exist_ok=True)
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
         except (OSError, ValueError) as exc:

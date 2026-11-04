@@ -15,6 +15,7 @@ from pathlib import Path
 
 from .config import Config
 from .media import MediaInfo, probe
+from .storage import is_state_path
 
 
 def filename_key(path: Path):
@@ -71,7 +72,7 @@ def discover(cfg: Config, wait_for_stable: bool = True) -> list[Path]:
         raise SystemExit(f"no media directory: {root}")
     exts = {e.lower() for e in cfg.extensions}
     files = sorted((p for p in root.rglob("*")
-                   if ".scout" not in p.relative_to(root).parts
+                   if not is_state_path(p.relative_to(root))
                    and p.is_file() and p.suffix.lower() in exts), key=filename_key)
     if not files:
         raise SystemExit(f"no video files in {root}")

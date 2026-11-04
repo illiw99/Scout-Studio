@@ -199,7 +199,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             cfg = studio.data['cfg']
             clips = studio.data['clips']
             library.save_field(cfg, clips[0], [[0, 0], [1, 0], [1, 1]], .5)
-            review = game/'.scout/review.mlt'
+            review = game/'Scout/review.mlt'
             shotcut.write_review(cfg, clips, groundtruth.to_plays([groundtruth.Marked(1, .4, 1.4)]), review)
             studio.reload_match()
             self.wait_for(lambda: studio.data is not None and bool(studio.data['plays']) and studio.frame_ready)
@@ -207,15 +207,15 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.wait_for(lambda: studio.jobs.current is None and bool(studio.jobs.history))
             self.wait_for(lambda: not studio.loading and not studio.tasks)
             self.assertEqual(studio.jobs.history[-1][2], 'Finished')
-            self.assertTrue((game/'.scout/clips/Game_1.mp4').is_file())
-            self.assertTrue((game/'.scout/desktop/Away game-cut.log').is_file())
-            self.assertTrue((game/'.scout/desktop/Away game-config.json').is_file())
+            self.assertTrue((game/'Scout/clips/Game_1.mp4').is_file())
+            self.assertTrue((game/'Scout/desktop/Away game-cut.log').is_file())
+            self.assertTrue((game/'Scout/desktop/Away game-config.json').is_file())
             self.assertEqual(timeline.discover(cfg, wait_for_stable=False), [source])
             self.assertFalse((root/'out').exists())
             self.assertEqual(source.read_bytes(), original)
             with patch('scout.desktop.app.QDesktopServices.openUrl') as opened:
                 studio.open_output()
-            opened.assert_called_once_with(QUrl.fromLocalFile(str(game/'.scout')))
+            opened.assert_called_once_with(QUrl.fromLocalFile(str(game/'Scout')))
             # Reopening the application reads the folder index and saved review.
             self.assertTrue(studio.close())
             with patch('scout.desktop.app.QSettings', return_value=preferences):
@@ -284,7 +284,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             # Supply a review across a camera-file boundary, then edit it natively.
             clips = [Clip(probe(root/'media/Demo'/p.name), i*2., 0) for i, p in enumerate(sources)]
             cfg = library.configuration(root, 'Demo')
-            review = root/'media/Demo/.scout/review.mlt'
+            review = root/'media/Demo/Scout/review.mlt'
             shotcut.write_review(cfg, clips, groundtruth.to_plays([groundtruth.Marked(1, .5, 3.5)]), review)
             studio.reload_match()
             self.wait_for(lambda: studio.data is not None and bool(studio.data['plays']) and studio.frame_ready)
@@ -565,7 +565,7 @@ class DesktopIntegrationTests(unittest.TestCase):
                 path = longer/f'camera{i}.mp4'
                 shutil.copyfile(sources[0], path)
                 longer_clips.append(Clip(probe(path), i*2., 0))
-            shotcut.write_review(library.configuration(root, 'Longer'), longer_clips, [], root/'media/Longer/.scout/review.mlt')
+            shotcut.write_review(library.configuration(root, 'Longer'), longer_clips, [], root/'media/Longer/Scout/review.mlt')
             studio.select_match('Longer')
             self.assertEqual(studio.fullscreen_slider.maximum(), 0)
             self.wait_for(lambda: bool(studio.data) and studio.frame_ready)
@@ -618,7 +618,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertEqual(studio.tabs.currentIndex(), current_tab)
             self.wait_for(lambda: bool(studio.jobs.history) and studio.jobs.current is None, seconds=25)
             self.assertEqual(studio.jobs.history[-1][2], 'Finished')
-            exports = list((root/'media/Demo/.scout/clips').glob('*.mp4'))
+            exports = list((root/'media/Demo/Scout/clips').glob('*.mp4'))
             self.assertEqual(len(exports), 1)
             self.assertEqual(exports[0].name, '-Saints_007_reviewed.mp4')
             self.assertAlmostEqual(probe(exports[0]).duration, 2., places=1)

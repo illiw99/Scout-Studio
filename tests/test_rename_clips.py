@@ -46,7 +46,7 @@ class RenameClipsTests(unittest.TestCase):
     def test_match_scope_preview_and_individual_selection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            folder = root / 'media' / 'Match' / '.scout' / 'clips'
+            folder = root / 'media' / 'Match' / 'Scout' / 'clips'
             folder.mkdir(parents=True)
             for name in ('play_2.mp4', 'play_10.mp4'):
                 (folder / name).write_bytes(name.encode())

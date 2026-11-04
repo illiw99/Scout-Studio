@@ -10,10 +10,13 @@ below. Day-to-day use needs no terminal or Python knowledge.
   Its folder name becomes the match name. Videos stay in place; nested camera
   folders are included. Each game can live on a different drive or in a different
   folder. The library remembers imported folders across app restarts.
-- Game data lives inside that game's hidden `.scout/` folder: `review.mlt` and
+- Game data lives inside that game's visible `Scout/` folder: `review.mlt` and
   other review files, `fields/` polygons, `cache/` detections, `clips/` exports,
   `desktop/` processing configurations and logs, and `preferences.ini` export
-  naming preferences. Generated videos under `.scout/` never become input footage.
+  naming preferences. Generated videos under `Scout/` never become input footage.
+  Older `.scout/` and lowercase `scout/` folders must be renamed with the migration
+  tool before opening the game. Only `Scout/` is used for game data; generated
+  videos left under any of these names are excluded from footage discovery.
   Use **Open output folder** in the match's right-click menu to find these files.
 - Right-click a match for refresh, game/output folder, and **Delete match…**
   actions. Deletion removes its library entry and preserves all files. Import
@@ -23,14 +26,14 @@ below. Day-to-day use needs no terminal or Python knowledge.
   If two folders have the same name, rename one before importing it.
 - Existing copied matches can also use the new scheme: choose their existing
   `media/<match>` folder with **Import game**. Studio brings saved output, reviews,
-  field sidecars and matching detection caches into `.scout/` while retaining the
-  originals. Existing `.scout/` work takes priority. Footage stays in place;
+  field sidecars and matching detection caches into `Scout/` while retaining the
+  originals. Existing `Scout/` work takes priority. Footage stays in place;
   old clip exports share disk storage where hard links are supported. Importing
   a different folder with the same name still reports a collision.
 - The right-click menu also offers **New empty match…** for the older copied
   workflow. For these matches, **Import video files (copy)…** or dropping individual
   videos copies originals into the library and rejects filename collisions.
-  Their footage stays in `media/`; generated data uses the same per-game `.scout/`
+  Their footage stays in `media/`; generated data uses the same per-game `Scout/`
   layout as linked games, shared with the CLI. To restore
   a deleted copied match, remove `media/<match>/.scout-removed` and restart the app.
 - The sun/moon icon at the top right switches theme. The sidebar keeps only

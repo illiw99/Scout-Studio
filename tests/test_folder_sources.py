@@ -18,12 +18,12 @@ class FolderSourceTests(unittest.TestCase):
         self.first = self.video("recording/camera_2.MP4")
         self.second = self.video("recording/nested/camera_10.mov")
         self.video("sibling/camera_1.mp4")
-        self.video("recording/.scout/out/export.mp4")
-        self.video("recording/nested/.scout/cache/preview.mp4")
+        self.video("recording/Scout/out/export.mp4")
+        self.video("recording/nested/Scout/cache/preview.mp4")
         self.cfg = Config(source_dir=str(self.source),
                           media_dir=str(self.root / "absent-media"),
                           match="Display name", stability_seconds=0,
-                          out_dir=str(self.source / ".scout/out"))
+                          out_dir=str(self.source / "Scout/out"))
 
     def video(self, relative):
         path = self.root / relative
@@ -36,6 +36,9 @@ class FolderSourceTests(unittest.TestCase):
         return MediaInfo(path, 10, 320, 180, 25, None)
 
     def test_direct_folder_discovery_excludes_siblings_and_application_state(self):
+        for alias in ('scout', '.scout'):
+            self.video(f'recording/{alias}/clips/export.mp4')
+            self.video(f'recording/nested/{alias}/clips/another.mp4')
         self.assertEqual(timeline.discover(self.cfg, wait_for_stable=False),
                          [self.first, self.second])
 
@@ -76,7 +79,7 @@ class FolderSourceTests(unittest.TestCase):
                          [self.root / "sibling/camera_1.mp4"])
         args = argparse.Namespace(config=None, match="sibling", out_dir=None,
                                   limit=None)
-        self.assertEqual(cli._load(args).out_dir, ".scout")
+        self.assertEqual(cli._load(args).out_dir, "Scout")
         args.out_dir = str(self.root / "custom-output")
         self.assertEqual(cli._load(args).out_dir, args.out_dir)
 

@@ -13,6 +13,19 @@ from scout.timeline import Clip
 
 
 class SourceStorageTests(unittest.TestCase):
+    def test_collection_named_scout_is_not_mistaken_for_game_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            game = root / 'Scout' / 'Game'
+            game.mkdir(parents=True)
+            source = game / 'camera.mp4'
+            source.write_bytes(b'source')
+            cfg = Config(media_dir=str(root / 'unused'))
+            self.assertEqual(cfg.source_path('Scout/fields', source), game / 'Scout/fields')
+            (game / '.scout').mkdir()
+            with self.assertRaisesRegex(ValueError, 'migration tool'):
+                cfg.source_path('Scout/fields', source)
+
     def test_unscoped_training_reads_each_games_fields_and_cache(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -30,7 +43,7 @@ class SourceStorageTests(unittest.TestCase):
                 np.savez(cached, offsets=np.array([0, 0]), boxes=np.empty((0, 4)),
                          conf=np.array([]), mask_shape=np.array([90, 160]))
                 self.assertEqual(detect.cache_path(cfg, clip), cached)
-                self.assertEqual(pick.field_path(cfg, clip).parent, folder / '.scout/fields')
+                self.assertEqual(pick.field_path(cfg, clip).parent, folder / 'Scout/fields')
                 self.assertEqual(cli._region_for(cfg, [clip], clip)['polygon'], polygon)
                 self.assertIsNotNone(detect.load_cached(cfg, clip))
             self.assertFalse((root / 'out').exists())

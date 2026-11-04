@@ -15,6 +15,50 @@ from scout.media import MediaInfo
 
 
 class GameStorageTests(unittest.TestCase):
+    def test_legacy_saved_paths_resolve_only_to_canonical_state(self):
+        game = self.root / 'Game'
+        state = game / 'Scout'
+        state.mkdir(parents=True)
+        (state / 'review.mlt').write_text('saved review')
+        cfg = Config(source_dir=str(game))
+        for alias in storage.STATE_DIR_NAMES:
+            self.assertEqual(cfg.path(f'{alias}/review.mlt'), state / 'review.mlt')
+            self.assertEqual(cfg.path(game / alias / 'review.mlt'), state / 'review.mlt')
+        self.assertEqual(storage.state_directory(game), state)
+        self.assertEqual(cfg.source_path('Scout/fields', game / 'camera.mp4'), state / 'fields')
+
+    def test_unmigrated_directories_are_never_read_as_fallbacks(self):
+        for index, name in enumerate(storage.LEGACY_STATE_DIR_NAMES):
+            game = self.root / str(index) / 'Game'
+            state = game / name
+            state.mkdir(parents=True)
+            (state / 'review.mlt').write_text('old review')
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'migration tool'):
+                Config(source_dir=str(game)).path('Scout/review.mlt')
+            self.assertEqual((state / 'review.mlt').read_text(), 'old review')
+            self.assertNotIn('Scout', [p.name for p in game.iterdir()])
+
+    def test_conflicting_state_folders_are_rejected_without_selecting_a_review(self):
+        game = self.root / 'conflict'
+        game.mkdir()
+        (game / 'Scout').mkdir()
+        if (game / 'scout').exists():
+            self.skipTest('Case-insensitive filesystem cannot hold both physical directories')
+        (game / 'scout').mkdir()
+        with self.assertRaisesRegex(ValueError, 'Multiple Scout'):
+            Config(source_dir=str(game)).path('Scout/review.mlt')
+
+    def test_cli_reselects_legacy_saved_state_for_both_previous_names(self):
+        for name in storage.LEGACY_STATE_DIR_NAMES:
+            old, new = self.root / 'Old', self.root / 'New'
+            config = self.root / 'old.json'
+            Config(source_dir=str(old), match='Old', out_dir=str(old / name),
+                   fields_dir=str(old / name / 'fields'), cache_dir=str(old / name / 'cache')).save(config)
+            storage.write_library(self.root, {'New': str(new)})
+            cfg = self.load(config=str(config), match='New')
+            self.assertEqual(cfg.path(cfg.out_dir), new / 'Scout')
+            self.assertEqual(cfg.path(cfg.cache_dir), new / 'Scout/cache')
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -32,13 +76,13 @@ class GameStorageTests(unittest.TestCase):
         cfg = Config(match='Game')
         game = self.root / 'media/Game'
         self.assertEqual(cfg.game_dir, game)
-        self.assertEqual(cfg.path(cfg.out_dir), game / '.scout')
-        self.assertEqual(cfg.path(cfg.cache_dir), game / '.scout/cache')
-        self.assertEqual(cfg.path(cfg.fields_dir), game / '.scout/fields')
+        self.assertEqual(cfg.path(cfg.out_dir), game / 'Scout')
+        self.assertEqual(cfg.path(cfg.cache_dir), game / 'Scout/cache')
+        self.assertEqual(cfg.path(cfg.fields_dir), game / 'Scout/fields')
         self.assertEqual(cfg.path('models/play.pkl'), self.root / 'models/play.pkl')
         self.assertEqual(self.load(match='Game', out_dir='custom').path('custom'), self.root / 'custom')
         self.assertFalse((self.root / 'out').exists())
-        self.assertFalse((game / '.scout').exists())
+        self.assertFalse((game / 'Scout').exists())
 
     def test_registry_external_folder_and_stale_saved_source(self):
         external = self.root / 'external/recording'
@@ -49,7 +93,7 @@ class GameStorageTests(unittest.TestCase):
         cfg.save(config)
         selected = self.load(config=str(config), match='Game')
         self.assertEqual(selected.source_dir, str(external))
-        self.assertEqual(selected.path(selected.out_dir), external / '.scout')
+        self.assertEqual(selected.path(selected.out_dir), external / 'Scout')
         fallback = self.load(config=str(config), match='Other')
         self.assertIsNone(fallback.source_dir)
         self.assertEqual(fallback.game_dir, self.root / 'media/Other')
@@ -64,7 +108,7 @@ class GameStorageTests(unittest.TestCase):
         config = self.root / 'scout.json'
         Config().save(config)
         cfg = self.load(config=str(config), source_dir=str(folder))
-        self.assertEqual(cfg.path(cfg.out_dir), folder / '.scout')
+        self.assertEqual(cfg.path(cfg.out_dir), folder / 'Scout')
         self.assertEqual(cfg.path(cfg.model_path), model)
         with patch('scout.cli.cmd_scan', return_value=0) as scan:
             with contextlib.redirect_stdout(io.StringIO()):
@@ -92,9 +136,9 @@ class GameStorageTests(unittest.TestCase):
                 Config(match='Game', out_dir=old_out, fields_dir='fields',
                        cache_dir='.scout-cache').save(config)
                 cfg = self.load(config=str(config))
-                self.assertEqual(cfg.path(cfg.out_dir), game / '.scout')
-                self.assertEqual(cfg.path(cfg.fields_dir), game / '.scout/fields')
-                self.assertEqual(cfg.path(cfg.cache_dir), game / '.scout/cache')
+                self.assertEqual(cfg.path(cfg.out_dir), game / 'Scout')
+                self.assertEqual(cfg.path(cfg.fields_dir), game / 'Scout/fields')
+                self.assertEqual(cfg.path(cfg.cache_dir), game / 'Scout/cache')
                 override = self.load(config=str(config), out_dir=old_out)
                 self.assertEqual(override.out_dir, old_out)
         Config(match='Game', out_dir='custom/results').save(config)
@@ -111,16 +155,16 @@ class GameStorageTests(unittest.TestCase):
         old, new = self.root / 'media/Old', self.root / 'external/New'
         config = self.root / 'scout.json'
         Config(match='Old', source_dir=str(old), media_dir=str(old),
-               out_dir=str(old / '.scout'), fields_dir=str(old / '.scout/fields'),
-               cache_dir=str(old / '.scout/cache')).save(config)
+               out_dir=str(old / 'Scout'), fields_dir=str(old / 'Scout/fields'),
+               cache_dir=str(old / 'Scout/cache')).save(config)
         storage.write_library(self.root, {'New': str(new)})
         selected = self.load(config=str(config), match='New')
-        self.assertEqual(selected.path(selected.out_dir), new / '.scout')
-        self.assertEqual(selected.path(selected.fields_dir), new / '.scout/fields')
-        self.assertEqual(selected.path(selected.cache_dir), new / '.scout/cache')
+        self.assertEqual(selected.path(selected.out_dir), new / 'Scout')
+        self.assertEqual(selected.path(selected.fields_dir), new / 'Scout/fields')
+        self.assertEqual(selected.path(selected.cache_dir), new / 'Scout/cache')
 
     def test_collect_rejects_shared_multisource_review(self):
-        state = self.root / '.scout'
+        state = self.root / 'Scout'
         state.mkdir()
         review = state / 'review.mlt'
         review.write_text('<mlt><producer><property name="resource">camera.mp4</property></producer>'
@@ -143,7 +187,7 @@ class GameStorageTests(unittest.TestCase):
 
     def test_collect_reads_game_storage_and_excludes_export_sources(self):
         folder = self.root / 'media/Game'
-        state = folder / '.scout'
+        state = folder / 'Scout'
         clips = state / 'clips'
         clips.mkdir(parents=True)
         video = folder / 'camera.mp4'

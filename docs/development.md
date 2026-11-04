@@ -139,9 +139,28 @@ The [agent workflow](multi-agent-workflow.md) describes optional delegation.
 ## Runtime data
 
 A library may live outside the source checkout. Its `.scout-library.json` index
-remembers imported game folders. Each game owns a `.scout/` folder for reviews,
+remembers imported game folders. Each game owns a `Scout/` folder for reviews,
 fields, detection caches, exports and processing logs, shared by CLI and GUI.
 Copied footage can still live under `media/<match>`. Workspace `out/`, `fields/`
 and `.scout-cache/` are legacy migration inputs; new default jobs do not create
 them. Optional `scout.json` settings and trained `models/` remain separate from
 redistributable application packages. Explicit custom destinations are honored.
+
+### Rename old game data folders
+
+Only the visible `Scout/` folder is used for game data. Close Studio and stop
+processing before migrating an older `.scout/` or lowercase `scout/` folder:
+
+```bash
+python scripts/migrate-state.py '/path/to/Game' --dry-run
+python scripts/migrate-state.py '/path/to/Game' --apply --backup-dir '/path/to/new-backup'
+```
+
+Pass additional game folders to migrate them together. The tool validates the
+whole batch, refuses duplicate data folders or linked paths, saves original
+metadata in the new backup directory, updates saved references, and renames the
+directories. Video and cache files are moved without encoding or copying. A
+failed migration rolls the batch back; `result.json` records its outcome.
+The tool never merges existing `Scout`, `.scout` or `scout` folders. Resolve any
+collision before retrying. Choose game folders, not the repository root containing
+the Python `scout` package.

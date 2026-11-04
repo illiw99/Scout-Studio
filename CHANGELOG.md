@@ -28,6 +28,8 @@ these changes have not been published as a release.
 
 ### Repository and packaging
 
+- Game data now lives in the visible `Scout/` folder. An explicit migration tool
+  renames older `.scout/` and lowercase `scout/` folders with metadata backups.
 - Native Windows, Ubuntu and macOS installers bundle Python, Qt and FFmpeg.
 - GitHub Actions tests fresh installations, playback/export and removal before
   publishing installers and checksums for a matching version tag.

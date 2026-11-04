@@ -17,6 +17,7 @@ from scout import groundtruth, pick, timeline
 # Public desktop aliases retained for callers while CLI and GUI share one index.
 from scout.storage import read_library as _library_index, write_library as _save_linked_games
 from scout.storage import validate_name as _validate_name
+from scout.storage import STATE_DIR_NAMES, is_state_path, state_directory
 
 
 def linked_games(root: Path) -> dict[str, str]:
@@ -34,14 +35,12 @@ def _source_videos(folder: Path, extensions=None) -> list[Path]:
         return []
     return sorted((p for p in folder.rglob('*') if p.is_file()
                    and p.suffix.lower() in (extensions or Config().extensions)
-                   and '.scout' not in p.relative_to(folder).parts), key=timeline.filename_key)
+                   and not is_state_path(p.relative_to(folder))), key=timeline.filename_key)
 
 
 def _adopt_legacy_data(root: Path, name: str, folder: Path) -> None:
     """Seed per-game storage without changing any legacy files or newer state."""
-    state = folder / '.scout'
-    if state.is_symlink():
-        raise ValueError('The .scout folder must be stored inside the game folder, not linked elsewhere.')
+    state = state_directory(folder)
     if state.exists() and any(state.iterdir()):
         return  # Existing per-game work is authoritative; never replace it.
     new_state = not state.exists()
@@ -63,7 +62,7 @@ def _adopt_legacy_data(root: Path, name: str, folder: Path) -> None:
     for video in _source_videos(folder, cfg.extensions):
         identity = hashlib.sha256(str(video.resolve()).encode()).hexdigest()[:16]
         for filename in (f'{video.stem}-{identity}.json', f'{video.stem}.json'):
-            legacy_fields = root / 'fields' if cfg.fields_dir == '.scout/fields' else cfg.path(cfg.fields_dir)
+            legacy_fields = root / 'fields' if cfg.fields_dir in {f'{name}/fields' for name in STATE_DIR_NAMES} else cfg.path(cfg.fields_dir)
             field = legacy_fields / filename
             if field.is_file():
                 sources[Path('fields') / filename] = field
@@ -71,7 +70,7 @@ def _adopt_legacy_data(root: Path, name: str, folder: Path) -> None:
         sidecar = cfg.root / f'{video.stem}.json'
         if sidecar.is_file():
             sources.setdefault(Path('fields') / sidecar.name, sidecar)
-        legacy_cache = root / '.scout-cache' if cfg.cache_dir == '.scout/cache' else cfg.path(cfg.cache_dir)
+        legacy_cache = root / '.scout-cache' if cfg.cache_dir in {f'{name}/cache' for name in STATE_DIR_NAMES} else cfg.path(cfg.cache_dir)
         for cache in legacy_cache.glob(f'{video.stem}.*.npz'):
             if cache.is_file():
                 sources[Path('cache') / cache.name] = cache
@@ -168,9 +167,7 @@ def import_folder(root: Path, folder: Path) -> str:
             raise ValueError('Wait for existing processing to finish before importing a previous match.')
         _adopt_legacy_data(root, name, folder)
     # Verify that game data can be saved here before registering the folder.
-    state = folder / '.scout'
-    if state.is_symlink():
-        raise ValueError('The .scout folder must be stored inside the game folder, not linked elsewhere.')
+    state = state_directory(folder)
     state.mkdir(exist_ok=True)
     with tempfile.TemporaryFile(dir=state):
         pass
@@ -202,13 +199,12 @@ def configuration(root: Path, name: str) -> Config:
     linked = name in linked_games(root)
     if linked and not folder.is_dir():
         raise ValueError('This game folder is unavailable. Connect its drive and try again.')
-    if (folder / '.scout').is_symlink():
-        raise ValueError('The .scout folder must be stored inside the game folder, not linked elsewhere.')
+    state = state_directory(folder)
     cfg.source_dir = str(folder)
     cfg.media_dir = str(folder)
-    cfg.out_dir = str(folder / '.scout')
-    cfg.cache_dir = str(folder / '.scout' / 'cache')
-    cfg.fields_dir = str(folder / '.scout' / 'fields')
+    cfg.out_dir = str(state)
+    cfg.cache_dir = str(state / 'cache')
+    cfg.fields_dir = str(state / 'fields')
     cfg.match = name
     # New libraries use the model shipped with the app unless they have their own.
     if not cfg.path(cfg.model_path).exists():
@@ -255,12 +251,12 @@ def matches(root: Path) -> list[dict]:
         except ValueError:
             continue
         files = _source_videos(folder)
-        review = folder / '.scout' / 'review.mlt'
+        review = state_directory(folder) / 'review.mlt'
         rows.append(dict(name=folder.name, files=len(files), review=review.exists()))
     for name, value in games.items():
         folder = Path(value)
         rows.append(dict(name=name, files=len(_source_videos(folder)),
-                         review=(folder / '.scout' / 'review.mlt').exists(),
+                         review=(state_directory(folder) / 'review.mlt').exists(),
                          linked=True, available=folder.is_dir(), folder=folder))
     return sorted(rows, key=lambda row: row['name'])
 
@@ -405,9 +401,9 @@ def active_batches(root: Path) -> list[dict]:
     media = root / 'media'
     if media.is_dir():
         folders.update(folder for folder in media.iterdir() if folder.is_dir())
-    statuses = set((root / '.scout' / 'batches').glob('*/status.json'))
+    statuses = set((root / 'Scout' / 'batches').glob('*/status.json'))
     for folder in folders:
-        statuses.update((folder / '.scout' / 'desktop' / 'batches').glob('*/status.json'))
+        statuses.update((folder / 'Scout' / 'desktop' / 'batches').glob('*/status.json'))
     for status in sorted(statuses):
         try:
             pid = int((status.parent / 'pid').read_text())

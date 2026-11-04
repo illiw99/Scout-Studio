@@ -59,7 +59,7 @@ def validate_members(names: list[str], *, wheel: bool) -> None:
         path = PurePosixPath(name)
         if path.is_absolute() or '..' in path.parts:
             raise AssertionError(f'Unsafe artifact path: {name}')
-        if any(part in {'__pycache__', '.env', '.venv', '.vscode', '.scout-cache',
+        if any(part in {'__pycache__', '.env', '.venv', '.vscode', '.scout-cache', '.scout', 'Scout',
                         'models', 'media', 'games', 'fields', 'out', 'build', 'dist'}
                for part in path.parts):
             raise AssertionError(f'User/generated data in artifact: {name}')
@@ -95,6 +95,7 @@ def check(root: Path = ROOT) -> None:
         # Deliberately seed excluded data to exercise the release manifest.
         for name in ('.env', 'scout.json', 'models/play.pkl', 'media/game.mp4',
                      'fields/game.json', '.scout-cache/detections.npz',
+                     'Scout/review.mlt', '.scout/review.mlt',
                      'out/review.mlt', '.vscode/settings.json', 'yolo11m.pt',
                      'scout/__pycache__/stale.pyc'):
             target = source / name

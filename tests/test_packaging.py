@@ -56,6 +56,7 @@ class ArtifactPolicyTests(unittest.TestCase):
     def test_rejects_user_data_and_unsafe_paths(self):
         for name in ('models/play.pkl', 'media/game.mp4', 'fields/game.json',
                      '.env', '../secret', '/secret', 'scout/__pycache__/app.pyc',
+                     'Scout/preferences.ini', '.scout/preferences.ini',
                      'scout/config.json', 'scout_flag.egg-info/weights.pt'):
             with self.subTest(name=name):
                 with self.assertRaises(AssertionError):

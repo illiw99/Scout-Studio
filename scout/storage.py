@@ -6,6 +6,32 @@ import os
 import tempfile
 from pathlib import Path
 
+STATE_DIR_NAME = 'Scout'
+LEGACY_STATE_DIR_NAME = '.scout'
+LEGACY_STATE_DIR_NAMES = (LEGACY_STATE_DIR_NAME, 'scout')
+STATE_DIR_NAMES = (STATE_DIR_NAME, *LEGACY_STATE_DIR_NAMES)
+
+
+def state_directory(folder: Path) -> Path:
+    """Use Scout only; require explicit migration before opening old storage."""
+    folder = Path(folder)
+    # Enumerate physical entries: on Windows Scout and scout can refer to the
+    # same directory, while on Linux they may be distinct conflicting folders.
+    entries = [path for path in folder.iterdir() if path.name in STATE_DIR_NAMES] if folder.is_dir() else []
+    for path in entries:
+        if path.is_symlink() or (path.exists() and not path.is_dir()):
+            raise ValueError(f'The {path.name} folder must be a directory inside the game folder, not a link or file.')
+    if len(entries) > 1:
+        raise ValueError(f'Multiple Scout data folders exist in {folder}. Resolve the duplicate data folders before opening this game.')
+    if entries and entries[0].name != STATE_DIR_NAME:
+        raise ValueError(f'Rename the {entries[0].name} data folder in {folder} to Scout using the migration tool before opening this game.')
+    return folder / STATE_DIR_NAME
+
+
+def is_state_path(path: Path) -> bool:
+    """Generated videos in either state layout must never become footage."""
+    return any(part in STATE_DIR_NAMES for part in path.parts)
+
 
 def read_library(root: Path) -> dict:
     """Read the persistent folder index; never silently replace a damaged index."""

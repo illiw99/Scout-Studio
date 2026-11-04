@@ -4,6 +4,7 @@ out/
 games/
 .scout-cache/
 .scout/
+Scout/
 .scout-library.json
 fields/
 /scout.json

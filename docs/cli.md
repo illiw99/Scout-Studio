@@ -24,9 +24,9 @@ scout --source-dir '/path/to/Game folder' run
 scout --source-dir '/path/to/Game folder' cut
 ```
 
-Both CLI and Studio save game data in that folder's `.scout/` directory.
+Both CLI and Studio save game data in that folder's `Scout/` directory.
 `--out-dir` remains available for an explicitly chosen custom destination.
-Conventional paths in older saved configurations are upgraded to `.scout`;
+Conventional paths in older saved configurations are upgraded to `Scout`;
 they do not recreate the former workspace `out/` directory.
 
 ### 1. Set up the fields
@@ -49,7 +49,7 @@ scout --match Match-01 pick --import-setup ~/Downloads/setup.json
 Fields are saved separately for each source video, including videos with the same
 filename in different matches. `pick --at 30` chooses another reference timestamp.
 For a remote/headless machine, use `pick --no-browser`, copy the generated
-`media/Match-01/.scout/field-setup.html` to your computer, and transfer the downloaded JSON
+`media/Match-01/Scout/field-setup.html` to your computer, and transfer the downloaded JSON
 back for import. The page contains its reference images and works offline.
 
 ### 2. Generate and review
@@ -59,7 +59,7 @@ scout --match Match-01 run
 ```
 
 Detection is cached. The only review deliverable is
-`media/Match-01/.scout/review.mlt`: no automatic MP4 export or second MLT. Review it inside
+`media/Match-01/Scout/review.mlt`: no automatic MP4 export or second MLT. Review it inside
 Scout Studio's **Review & export** tab, or open it in Shotcut and add, delete,
 rename, or adjust **range markers**, then save. Review the entire match: unmarked footage becomes negative
 training data. Point markers are treated as notes and ignored.
@@ -78,11 +78,11 @@ Shotcut.
 
 ```bash
 scout --match Match-01 cut
-scout --match Match-01 stats --mlt media/Match-01/.scout/review.mlt
+scout --match Match-01 stats --mlt media/Match-01/Scout/review.mlt
 ```
 
 `cut` reads the match's `review.mlt` by default. Use `cut --mlt PATH` for a renamed
-review. Each range becomes an MP4 in `media/Match-01/.scout/clips/`, including ranges across
+review. Each range becomes an MP4 in `media/Match-01/Scout/clips/`, including ranges across
 camera-file boundaries. Re-encoding is the default; `--cut-mode copy` is faster
 but cuts at keyframes. `--only 1,3` exports a subset.
 
@@ -105,7 +105,7 @@ scout --match W2_SAI-CON rename-clips --pattern 'xyz_<N>_abc' --start 7 --dry-ru
 scout --match W2_SAI-CON rename-clips --pattern 'xyz_<N>_abc' --start 7
 ```
 
-This renames MP4s in `media/W2_SAI-CON/.scout/clips` in natural filename order to
+This renames MP4s in `media/W2_SAI-CON/Scout/clips` in natural filename order to
 `xyz_07_abc.mp4`, `xyz_08_abc.mp4`, etc. for a two-digit clip count. Numbers
 automatically use leading zeros based on the clip count (and the highest number
 when using `--start`). Use `--pad 3` to override the width with `007`. To rename
@@ -124,8 +124,8 @@ the standard export filenames.
 
 ```bash
 scout train \
-  --mlt media/Match-01/.scout/review.mlt \
-  --mlt media/Match-02/.scout/review.mlt \
+  --mlt media/Match-01/Scout/review.mlt \
+  --mlt media/Match-02/Scout/review.mlt \
   --out models/improved.pkl
 ```
 
@@ -158,7 +158,7 @@ the training environment or retrain when upgrading dependencies.
 
 ```text
 models/                    play classifiers and training provenance
-media/Match-01/.scout/
+media/Match-01/Scout/
   fields/                  per-video field polygons
   cache/                   reusable person detections
   field-setup.html          offline setup page
@@ -168,13 +168,13 @@ media/Match-01/.scout/
 ```
 
 `--media-dir /path/to/project/media --match Match-01` selects the match under
-that library and stores state in `/path/to/project/media/Match-01/.scout`.
+that library and stores state in `/path/to/project/media/Match-01/Scout`.
 `--files TEXT` and `--limit N` can narrow a match; use the same selection when
 importing its setup. Training and evaluation locate each reviewed source's own
 field polygons and cache, including when reviews come from several games.
 Import previous matches through Studio to adopt legacy output and field/cache
 files before removing their old copies. The legacy `collect` command reads
-per-file reviewed projects from `.scout`; use `cut` for a multi-source game review.
+per-file reviewed projects from `Scout`; use `cut` for a multi-source game review.
 Additional diagnostic commands are listed by `scout --help`; `gt` aliases `stats`.
 
 Run the automated checks with:

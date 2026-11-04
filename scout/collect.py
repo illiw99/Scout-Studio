@@ -20,6 +20,7 @@ from .config import Config
 from .cut import name_for
 from . import groundtruth
 from .media import probe
+from .storage import STATE_DIR_NAMES, is_state_path, state_directory
 
 
 @dataclass
@@ -64,7 +65,7 @@ def plan(cfg: Config, game: str, stems: list[str], dest_root: Path,
     extensions = {e.lower() for e in cfg.extensions}
     sources: dict[str, list[Path]] = {}
     for p in sorted(media_dir.rglob("*")):
-        if (".scout" not in p.relative_to(media_dir).parts
+        if (not is_state_path(p.relative_to(media_dir))
                 and p.is_file() and p.suffix.lower() in extensions):
             sources.setdefault(p.stem, []).append(p)
 
@@ -74,14 +75,14 @@ def plan(cfg: Config, game: str, stems: list[str], dest_root: Path,
             raise SystemExit(f"{stem}: multiple media files found: "
                              + ", ".join(str(p) for p in matches))
         state = out_dir
-        if cfg.out_dir == ".scout" and matches:
+        if cfg.out_dir in STATE_DIR_NAMES and matches:
             # Unscoped collection can span several recording folders. Locate
             # their owning state without including generated videos as sources.
             for folder in matches[0].parents:
                 if not folder.is_relative_to(media_dir):
                     continue
-                if (folder / ".scout").is_dir():
-                    state = folder / ".scout"
+                if (folder / 'Scout').is_dir():
+                    state = state_directory(folder)
                     break
         gt = _gt_path(state, stem, warnings)
         clips_dir = gt.parent / "clips" if gt else state / "clips"
