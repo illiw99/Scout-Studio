@@ -33,7 +33,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Native theme and app icon | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/scout.svg` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
 | Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |
-| Standalone installer builds, install checks and tag releases | `packaging/`, `scripts/build-installers.py`, `scripts/test-installer.py`, `.github/workflows/installers.yml` |
+| Standalone installer builds, disk-image retries, install checks and tag releases | `packaging/`, `scripts/build-installers.py`, `scripts/test-installer.py`, `tests/test_installer_build.py`, `.github/workflows/installers.yml` |
 | Frozen GUI/CLI dispatch and installed app/media smoke test | `scout/desktop/bundle.py`, `tests/test_bundle.py` |
 | User installation, Studio and CLI guides | `docs/installation.md`, `docs/studio.md`, `docs/cli.md` |
 | Development, validation and contribution conventions | `docs/development.md`, `CONTRIBUTING.md` |

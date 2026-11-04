@@ -92,6 +92,11 @@ working directory, verifies dependency imports, synthetic video generation and
 decoding, clip export, CLI child dispatch, the native window and video playback,
 then uninstalls it. Linux uses Xvfb. JSON reports and installer logs are retained
 as diagnostic artifacts. Builds also run the source regression suite on Linux.
+macOS builds first exercise disk-image creation with a tiny fixture. Packaging
+retries `hdiutil create` up to five times for `Resource busy` errors, keeping a
+log per attempt. Other failures stop immediately. A successful image must pass
+`hdiutil verify` before replacing the final installer. Disk-image logs are
+uploaded even when a macOS build fails.
 
 For a local build on the target operating system, use a separate build environment:
 

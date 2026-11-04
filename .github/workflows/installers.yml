@@ -83,8 +83,18 @@ jobs:
       - name: Check Windows background helpers keep logs without console windows
         if: runner.os == 'Windows'
         run: python -m unittest discover -s tests -p 'test_processes.py' -v
+      - name: Check macOS disk image creation and retry handling
+        if: runner.os == 'macOS'
+        run: python -m unittest discover -s tests -p 'test_installer_build.py' -v
       - name: Build native installer
         run: python scripts/build-installers.py
+      - name: Save disk image diagnostics
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmg-build-${{ matrix.platform }}
+          path: build/installer/dmg-logs/*.log
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: installer-${{ matrix.platform }}

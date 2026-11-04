@@ -19,6 +19,8 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,6 +37,40 @@ def project_version() -> str:
             if isinstance(version, str) and re.fullmatch(r'\d+\.\d+\.\d+', version):
                 return version
     raise ValueError('Installer versions must use major.minor.patch in scout.__version__')
+
+
+def create_dmg(stage: Path, installer: Path, log_dir: Path) -> None:
+    """Retry macOS's transient image-creation lock without rebuilding the app.
+
+    Send output to real log files: piping hdiutil can leave diskimages-helper
+    waiting on inherited pipe handles. Publish only an image that verifies.
+    """
+    log_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.dmg-build-', dir=installer.parent) as temporary:
+        for attempt in range(1, 6):
+            candidate = Path(temporary) / f'PlayChop-{attempt}.dmg'
+            command = ['hdiutil', 'create', '-volname', 'PlayChop', '-srcfolder', str(stage),
+                       '-fs', 'HFS+', '-format', 'UDZO', str(candidate)]
+            log = log_dir / f'create-{attempt}.log'
+            with log.open('w', encoding='utf-8') as stream:
+                result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT,
+                                        timeout=600)
+            output = log.read_text(encoding='utf-8', errors='replace')
+            print(output, end='', flush=True)
+            if result.returncode == 0:
+                verify = ['hdiutil', 'verify', str(candidate)]
+                with (log_dir / 'verify.log').open('w', encoding='utf-8') as stream:
+                    subprocess.run(verify, stdout=stream, stderr=subprocess.STDOUT,
+                                   check=True, timeout=600)
+                candidate.replace(installer)
+                return
+            error = subprocess.CalledProcessError(result.returncode, command, output=output)
+            if 'resource busy' not in output.lower() or attempt == 5:
+                raise error
+            candidate.unlink(missing_ok=True)
+            delay = 2 ** attempt
+            print(f'hdiutil is busy; retry {attempt + 1}/5 in {delay}s.', flush=True)
+            time.sleep(delay)
 
 
 def build() -> None:
@@ -106,10 +142,7 @@ def build() -> None:
         run('ditto', work / 'dist/PlayChop.app', stage / 'PlayChop.app')
         (stage / 'Applications').symlink_to('/Applications')
         installer = output / f'PlayChop-{version}-macos-{arch}.dmg'
-        if installer.exists():
-            installer.unlink()
-        run('hdiutil', 'create', '-volname', 'PlayChop', '-srcfolder', stage,
-            '-ov', '-format', 'UDZO', installer)
+        create_dmg(stage, installer, work / 'dmg-logs')
     digest = sha256(installer)
     (output / f'{installer.name}.sha256').write_text(f'{digest}  {installer.name}\n', encoding='utf-8')
     (output / 'build-info.json').write_text(json.dumps({'version': version, 'platform': system,

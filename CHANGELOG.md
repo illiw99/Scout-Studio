@@ -34,6 +34,8 @@ these changes have not been published as a release.
 
 ### Repository and packaging
 
+- macOS installer creation retries transient disk-image lock failures, verifies
+  the image before publishing it, and preserves build diagnostics.
 - Game data now lives in the visible `Scout/` folder. An explicit migration tool
   renames older `.scout/` and lowercase `scout/` folders with metadata backups.
 - Native Windows, Ubuntu and macOS installers bundle Python, Qt and FFmpeg.
