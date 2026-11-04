@@ -31,6 +31,18 @@ from .icons import IconButton
 from .labels import label_for, time_label
 from .player_window import PlayerWindow, PlayFrame
 
+
+def match_list_text(row):
+    """Give empty and unavailable folders clear, distinct library subtitles."""
+    if not row.get('available', True):
+        detail = 'Folder unavailable'
+    elif not row['files']:
+        detail = 'No videos in this folder'
+    else:
+        badge = 'Review ready' if row['review'] else 'Field setup'
+        detail = f"{row['files']} videos  ·  {badge}"
+    return f"{row['name'].replace('_', ' ')}\n{detail}"
+
 PLAYBACK_RATES = [.1, .2, .25, .5, .75, 1., 1.25, 1.5, 2., 3., 4., 5., 7.5, 8., 10.]
 
 
@@ -586,10 +598,7 @@ class Studio(QMainWindow):
         self.match_list.clear()
         chosen = None
         for row in self.rows:
-            badge = 'Review ready' if row['review'] else 'Field setup'
-            if not row.get('available', True):
-                badge = 'Folder unavailable'
-            item = QListWidgetItem(f"{row['name'].replace('_', ' ')}\n{row['files']} videos  ·  {badge}")
+            item = QListWidgetItem(match_list_text(row))
             item.setData(Qt.ItemDataRole.UserRole, row['name'])
             if row.get('linked'):
                 item.setToolTip(str(row['folder']))
@@ -665,7 +674,18 @@ class Studio(QMainWindow):
             self.videos.blockSignals(False)
             self.populate_plays()
             self.review_stamp = data['review'].stat().st_mtime_ns if data['review'].exists() else None
-            self.subtitle.setText('Your match is ready to review.' if data['review'].exists() else 'Set up each camera file, then let Scout find the action.')
+            if not data['clips']:
+                self.subtitle.setText('No videos in this folder. Add footage, then refresh the match.')
+            else:
+                self.subtitle.setText('Your match is ready to review.' if data['review'].exists() else 'Set up each camera file, then let Scout find the action.')
+            # Refresh also reflects videos added directly to a linked folder.
+            row = next((row for row in self.rows if row['name'] == name), None)
+            if row is not None:
+                row.update(files=len(data['clips']), review=data['review'].exists())
+                for index in range(self.match_list.count()):
+                    item = self.match_list.item(index)
+                    if item.data(Qt.ItemDataRole.UserRole) == name:
+                        item.setText(match_list_text(row))
             self.update_metrics()
             self.video_changed(0)
             self.update_actions()
@@ -835,6 +855,8 @@ class Studio(QMainWindow):
         self.next_button.setEnabled(bool(data and self.videos.currentIndex() < len(data['clips'])-1))
         if busy:
             self.banner.setText('Processing is scheduled for this match. Field changes unlock when it finishes.')
+        elif data and not data['clips']:
+            self.banner.setText('No videos in this folder. Add footage, then refresh the match.')
         elif review:
             self.banner.setText('Review ready  ·  Preview and refine your plays, then export clips to share with your team.')
         elif ready:
@@ -1097,11 +1119,11 @@ class Studio(QMainWindow):
         self.statusBar().showMessage(f'{name} removed from the library. Files kept on disk.', 10000)
 
     def enqueue_run(self):
-        if self.data and all(self.data['regions']) and not self.data['review'].exists() and self.resolve_dirty():
+        if self.data and self.data['clips'] and all(self.data['regions']) and not self.data['review'].exists() and self.resolve_dirty():
             self.enqueue('run')
 
     def export_clips(self):
-        if not self.data or self.match_busy() or self.importing or not self.resolve_marker_dirty():
+        if not self.data or not self.data['review'].exists() or self.match_busy() or self.importing or not self.resolve_marker_dirty():
             return
         from scout.groundtruth import to_plays
         from .export_dialog import ExportDialog

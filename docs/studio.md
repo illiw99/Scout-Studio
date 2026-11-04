@@ -10,6 +10,8 @@ below. Day-to-day use needs no terminal or Python knowledge.
   Its folder name becomes the match name. Videos stay in place; nested camera
   folders are included. Each game can live on a different drive or in a different
   folder. The library remembers imported folders across app restarts.
+  Empty folders can be imported too; **No videos in this folder** appears under
+  the match name. Add footage to the folder, then right-click **Refresh match**.
 - Game data lives inside that game's visible `Scout/` folder: `review.mlt` and
   other review files, `fields/` polygons, `cache/` detections, `clips/` exports,
   `desktop/` processing configurations and logs, and `preferences.ini` export

@@ -8,6 +8,8 @@ these changes have not been published as a release.
 
 ### Native review
 
+- Empty game folders can be imported and display a clear no-videos status;
+  refresh the match after adding footage.
 - Windows background FFmpeg tasks run without opening extra console windows,
   while retaining progress and error logs in Scout.
 - Scout Studio provides match browsing, MP4 import, field setup, and full-match playback.

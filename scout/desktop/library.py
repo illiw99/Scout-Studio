@@ -160,8 +160,6 @@ def import_folder(root: Path, folder: Path) -> str:
     same_legacy = legacy.exists() and legacy.resolve() == folder
     if legacy.exists() and not same_legacy:
         raise ValueError('A match with this name already exists in the library. Rename the game folder before importing it.')
-    if not _source_videos(folder):
-        raise ValueError('This folder has no supported videos. Choose the folder containing the game footage.')
     if same_legacy:
         if active_batches(root):
             raise ValueError('Wait for existing processing to finish before importing a previous match.')

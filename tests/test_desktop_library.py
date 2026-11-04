@@ -119,7 +119,27 @@ class LibraryTests(unittest.TestCase):
         self.assertTrue(library.matches(root)[0]['review'])
         self.assertEqual(review.read_bytes(), b'user edited review')
 
-    def test_folder_import_rejects_collisions_empty_folders_and_external_state(self):
+    def test_empty_folder_import_persists_without_counting_generated_videos(self):
+        root = self.root / 'library'
+        game = self.root / 'Upcoming game'
+        game.mkdir()
+        self.assertEqual(library.import_folder(root, game), game.name)
+        self.assertEqual(library.linked_games(root), {game.name: str(game)})
+        exported = game / 'Scout/clips/export.mp4'
+        exported.parent.mkdir()
+        exported.write_bytes(b'generated video')
+        self.assertEqual(library.matches(root)[0]['files'], 0)
+        data = library.load_match(root, game.name)
+        self.assertEqual(data['clips'], [])
+        self.assertEqual(data['regions'], [])
+        source = game / 'camera.mp4'
+        source.write_bytes(b'camera fixture')
+        with patch('scout.timeline.probe', return_value=MediaInfo(source, 10, 320, 180, 25, None)):
+            loaded = library.load_match(root, game.name)
+        self.assertEqual(library.matches(root)[0]['files'], 1)
+        self.assertEqual([clip.path for clip in loaded['clips']], [source])
+
+    def test_folder_import_rejects_collisions_and_external_state(self):
         root = self.root / 'library'
         first, second = self.root / 'a/Game', self.root / 'b/Game'
         for game in (first, second):
@@ -129,11 +149,6 @@ class LibraryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             library.import_folder(root, second)
         self.assertEqual(library.linked_games(root), {'Game': str(first)})
-        empty = self.root / 'Empty'
-        (empty / 'Scout/clips').mkdir(parents=True)
-        (empty / 'Scout/clips/export.mp4').write_bytes(b'generated')
-        with self.assertRaises(ValueError):
-            library.import_folder(root, empty)
         legacy = self.root / 'external/Legacy'
         legacy.mkdir(parents=True)
         (legacy / 'source.mp4').write_bytes(b'original')

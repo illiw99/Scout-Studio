@@ -163,6 +163,48 @@ class DesktopIntegrationTests(unittest.TestCase):
                 studio.delete_match()
             self.assertIsNone(studio.match)
 
+    def test_empty_game_import_shows_status_and_refresh_picks_up_footage(self):
+        from PySide6.QtCore import QSettings, QUrl
+        from scout.desktop.app import Studio
+        from scout.media import ffmpeg_exe, run
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            root, game = base / 'library', base / 'Upcoming game'
+            game.mkdir()
+            preferences = QSettings(str(base / 'preferences.ini'), QSettings.Format.IniFormat)
+            with patch('scout.desktop.app.QSettings', return_value=preferences):
+                studio = Studio(root)
+            errors = []
+            studio.show_error = errors.append
+            self.addCleanup(studio.close)
+            studio.show()
+            try:
+                with patch('scout.desktop.app.QFileDialog.getExistingDirectory', return_value=str(game)):
+                    studio.import_game_button.click()
+                    self.wait_for(lambda: studio.data is not None and not studio.loading and not studio.importing)
+                item = studio.match_list.currentItem()
+                self.assertEqual(item.text(), 'Upcoming game\nNo videos in this folder')
+                self.assertIn('No videos in this folder', studio.subtitle.text())
+                self.assertFalse(studio.run_button.isEnabled())
+                self.assertFalse(studio.export_button.isEnabled())
+                studio.enqueue_run()
+                studio.export_clips()
+                self.assertIsNone(studio.jobs.current)
+                self.assertFalse(studio.jobs.pending)
+                source = game / 'camera.mp4'
+                run([ffmpeg_exe(), '-v', 'error', '-f', 'lavfi', '-i',
+                     'color=c=red:s=64x48:r=25:d=1', '-c:v', 'libx264', str(source)])
+                studio.reload_match()
+                self.wait_for(lambda: not studio.loading and studio.frame_ready)
+                self.assertEqual(len(studio.data['clips']), 1)
+                self.assertIn('1 videos', item.text())
+                self.assertNotIn('No videos', item.text())
+                self.assertEqual(errors, [])
+            finally:
+                studio.player.stop()
+                studio.player.setSource(QUrl())
+                studio.close()
+
     def test_linked_game_folder_restart_export_and_context_menu(self):
         from PySide6.QtCore import QSettings, QUrl
         from PySide6.QtWidgets import QMenu, QMessageBox, QPushButton
