@@ -37,7 +37,12 @@ def timeline_plot(cfg: Config, f: Features, plays: list[Play], dst: Path,
     Split into rows of a few minutes each, otherwise an hour of footage squeezes
     every play into a couple of pixels.
     """
-    import matplotlib
+    try:
+        import matplotlib
+    except ModuleNotFoundError as exc:
+        if exc.name == 'matplotlib':
+            return []  # Diagnostic plots are optional in the review/export runtime.
+        raise
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 

@@ -46,7 +46,7 @@ From a source checkout, using Python 3.10 or newer:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[desktop]'
+python -m pip install -e '.[desktop,reference]'
 python -m scout.desktop
 ```
 
@@ -79,7 +79,9 @@ application code from trained models, footage, and your library data.
 ## Command-line use
 
 The Python distribution is `scout-flag`; the import package and CLI remain `scout`.
-Install with `python -m pip install -e .` if you only need the CLI.
+Install with `python -m pip install -e '.[reference]'` for the original detection
+CLI, or the base package for media/review/export only. Add `[training]` when
+training or evaluating classifiers and `[inference]` for exported CPU backends.
 
 ```bash
 scout --help

@@ -14,10 +14,14 @@ roadmap. The commands below describe today's implementation.
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[desktop,dev]'
+python -m pip install -e '.[desktop,dev,training,inference]'
 ```
 
-The `desktop` extra supplies PySide6. The `dev` extra supplies build tooling and
+The `desktop` extra supplies PySide6. `reference` supplies the original
+Ultralytics/PyTorch detector and legacy pickle classifier dependencies;
+`training` adds training/evaluation and diagnostic plots. `inference` supplies
+optional exported-model runtimes. The base package supports media, saved reviews
+and exports without training frameworks. The `dev` extra supplies build tooling and
 Python 3.10's optional TOML parser. Tests use the standard-library `unittest`.
 
 On minimal Ubuntu systems, install Qt's graphics runtime before running desktop
@@ -176,6 +180,25 @@ embedded icon resources against the bundled ICO. The app and shortcuts share
 the `org.scoutstudio.studio` taskbar identity.
 
 ## Make changes
+
+The native queue now writes version1 job descriptors and unique per-job config
+snapshots, then launches `scout.worker` (or the frozen `--worker-job` dispatcher).
+The worker adapts the existing CLI commands, emitting versioned log/progress/
+completion events and a job-bound result. The queue requires matching success
+evidence as well as a normal zero process exit. Cancellation still kills the
+process tree; missing/truncated results never count as success. No training
+framework is imported to parse a job or start the worker protocol. The installed
+smoke test exercises this exact path through a synthetic export.
+
+Binary numeric histogram-boosted classifiers can be saved by `scout train --out
+model.json`. This validated tree format runs through NumPy without scikit-learn
+or pickle. Export checks reference probabilities on deterministic probes;
+regressions also compare NaN routing and resulting play intervals at `1e-12`
+probability tolerance. Feature ordering, excluded features, sample rate and
+temporal offsets remain checked on load. Categorical/multiclass exports are
+rejected. Existing `.pkl` models remain supported through the `reference` extra;
+load only trusted pickle files. Production-model equivalence must still be
+checked before selecting an exported model as an approved baseline pack.
 
 EditorConfig supplies UTF-8, LF line endings, final newlines, and four-space
 Python indentation. Markdown keeps intentional hard-break whitespace.

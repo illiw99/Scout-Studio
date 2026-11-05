@@ -58,7 +58,7 @@ Python 3.10+ is required for a source installation. Run from this repository:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e '.[reference]'
 scout --help
 ```
 
@@ -122,7 +122,7 @@ See [FFmpeg's hardware acceleration documentation](https://ffmpeg.org/ffmpeg.htm
 Install the optional desktop dependency in the same environment:
 
 ```bash
-python -m pip install -e '.[desktop]'
+python -m pip install -e '.[desktop,reference]'
 python -m scout.desktop
 ```
 

@@ -30,7 +30,7 @@ def validate_report(report: dict, version: str) -> None:
     assert report.get('version') == version, report
     assert report.get('frozen') is True, report
     checks = report.get('checks', {})
-    for key in ('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli'):
+    for key in ('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli', 'worker'):
         assert checks.get(key) is True, f'Missing/failed smoke check {key}: {report}'
 
 

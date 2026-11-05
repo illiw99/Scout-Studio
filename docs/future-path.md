@@ -25,6 +25,19 @@ constraints. Target-aware regeneration was independently repeated. CI installs
 them into fresh isolated environments and rejects drift; native builds and
 upgrade execution still need hosted validation.
 
+Phase3 now has version1 worker inputs/events/results, unique job snapshots and
+verified queue completion. Cancellation/process-tree cleanup remains in place.
+Training/reference dependencies are optional extras; a fresh-process check
+blocks their imports while starting the native UI and exporting a synthetic
+clip. Frozen installed-worker smoke coverage is configured but not executed
+locally. The default standalone profile still includes reference dependencies
+for compatibility; reduced-runtime packaging follows model-pack validation.
+
+Phase4's classifier prototype exports validated numeric binary HGB trees to
+JSON and evaluates them with NumPy. Synthetic threshold/NaN probes and final
+interval comparisons match scikit-learn within `1e-12`; independently reviewed.
+Production-model and held-out-game equivalence remain required before adoption.
+
 ## Product goal
 
 Someone should be able to download Scout Studio, install it, select a game
@@ -41,10 +54,10 @@ evidence that a specific requirement cannot reasonably be met with this stack.
 | Area | Current implementation | Intended direction |
 | --- | --- | --- |
 | Interface | Python/PySide6 native desktop | Retain native Qt; separate presentation from processing |
-| Processing | CLI commands run through a background process queue | Keep isolation; define a versioned worker interface |
+| Processing | Version1 local job/event/result interface adapting existing CLI commands | Validate installed worker and preserve compatibility |
 | Detection | Ultralytics/PyTorch person detection, features and tracking | Evaluate an inference-only runtime with equivalent results |
 | Play classifier | scikit-learn histogram gradient boosting, saved with pickle | Evaluate an exported inference model; retain Python training tools |
-| Dependencies | Training, evaluation and processing libraries share the main dependency set | Separate developer/training dependencies from the shipped runtime |
+| Dependencies | Base media/review runtime, optional reference/training/inference extras | Reduce standalone contents after model-pack validation |
 | Models | Installers exclude detector weights and trained classifiers | Deliberately publish approved, versioned model packs with an offline baseline |
 | Library | Workspace-local `.scout-library.json`; game data in `Scout/` | Store the installed app's index in standard user data; preserve portable game folders |
 | Releases | Main/PR candidate builds; tags verify and promote tested installers | Sign final candidates before tests; complete hosted promotion and upgrade validation |

@@ -19,6 +19,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Player tracking and motion features | `scout/track.py`, `scout/features.py` |
 | Heuristic play segmentation | `scout/segment.py` |
 | Trained classifier, evaluation and parameter tuning | `scout/model.py`, `scout/evaluate.py`, `scout/tune.py` |
+| NumPy-only exported classifier inference and numerical/boundary checks | `scout/classifier_runtime.py`, `tests/test_classifier_runtime.py` |
 | MP4 cuts, cross-source clips, audio and encoding | `scout/cut.py` |
 | Export filename patterns and native naming preview | `scout/clip_names.py`, `scout/desktop/export_dialog.py` |
 | Shotcut review/playlist writing and marker parsing | `scout/shotcut.py`, `scout/groundtruth.py` |
@@ -33,6 +34,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Persistent game-folder index, in-place/copy imports, per-game Scout paths, fields and conflict-safe review saves | `scout/desktop/library.py` |
 | Registry-only index backup/import, writer locking and standard user-data defaults | `scout/storage.py`, `scout/desktop/app.py`, `tests/test_library_index_import.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
+| Versioned local worker jobs, progress events and verified results | `scout/worker.py`, `tests/test_worker.py`, `tests/test_runtime_boundary.py` |
 | Native theme, application identity and app icons | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/identity.py`, `scout/desktop/scout.svg`, `scout/desktop/scout.ico`, `scripts/build-icons.py` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
 | Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |

@@ -81,6 +81,11 @@ class BundleTests(unittest.TestCase):
                 self.assertEqual(bundle.main([flag, '--help']), 7)
                 cli.assert_called_once_with(['--help'])
 
+    def test_worker_dispatch_does_not_start_gui(self):
+        with patch('scout.worker.main', return_value=7) as worker:
+            self.assertEqual(bundle.main(['--worker-job', '/temporary/job.json']), 7)
+            worker.assert_called_once_with(['/temporary/job.json'])
+
     def test_failed_installed_check_records_diagnostic_and_nonzero_status(self):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / 'report.json'

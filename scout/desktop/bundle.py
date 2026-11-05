@@ -30,6 +30,9 @@ def main(argv=None):
     for name in ('stdout', 'stderr'):
         if getattr(sys, name) is None:
             setattr(sys, name, open(os.devnull, 'w', encoding='utf-8'))
+    if argv and argv[0] == '--worker-job':
+        from scout.worker import main as worker
+        return worker(argv[1:])
     if argv and argv[0] in ('--cli', '--scout-cli'):
         from scout.cli import main as cli
         return cli(argv[1:])
@@ -139,6 +142,30 @@ def _exercise(root, checks):
     assert (output.parent / 'checked_1.mp4').is_file()
     assert b'Done: 1 clip(s).' in child.stdout, 'Processing command output was lost'
     checks['cli'] = True
+
+    # Exercise the production queue protocol through the installed dispatcher.
+    from scout import shotcut, worker
+    import shutil
+    worker_source = game / 'original.mp4'
+    shutil.copyfile(source, worker_source)
+    worker_cfg = Config(source_dir=str(game), match='Smoke', stability_seconds=0)
+    shotcut.write_review(worker_cfg, [Clip(media.probe(worker_source), 0, 0)], [play],
+                        worker_cfg.path(worker_cfg.out_dir) / 'review.mlt')
+    worker_config = root / 'worker-config.json'
+    worker_cfg.save(worker_config)
+    job = worker.new_job('cut', worker_config, {'name_pattern': 'worker_<N>'})
+    descriptor = root / 'worker-job.json'
+    worker.write_job(descriptor, job)
+    worker_command = ([cli_command()[0], '--worker-job', str(descriptor)]
+                      if getattr(sys, 'frozen', False)
+                      else [sys.executable, '-m', 'scout.worker', str(descriptor)])
+    child = subprocess.run(worker_command, cwd=root, check=True, timeout=90,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, **background_options())
+    result = worker.validate_result(json.loads(worker.result_path(descriptor, job).read_text()), job)
+    assert result['ok'] and (game / 'Scout/clips/worker_1.mp4').is_file()
+    events = [json.loads(line) for line in child.stdout.decode('utf-8').splitlines()]
+    assert events[0]['event'] == 'started' and events[-1]['event'] == 'finished'
+    checks['worker'] = True
 
     from PySide6.QtCore import QLibraryInfo, QSettings
     from PySide6.QtWidgets import QApplication

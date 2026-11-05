@@ -99,7 +99,10 @@ def build(cfg: Config, per_file: list[tuple[str, Features, list]]) -> Dataset:
 
 
 def make_classifier(cfg: Config):
-    from sklearn.ensemble import HistGradientBoostingClassifier
+    try:
+        from sklearn.ensemble import HistGradientBoostingClassifier
+    except ModuleNotFoundError as exc:
+        raise RuntimeError('Training requires the training extra: pip install "scout-flag[training]"') from exc
     # Deliberately small.  Ten files from two venues is not much variety, and a
     # big model would memorise this tournament rather than learn the game.
     return HistGradientBoostingClassifier(
@@ -195,6 +198,10 @@ def to_plays(cfg: Config, spans: list[tuple[float, float]], t_end: float | None)
 
 def save(path: Path, clf, names: list[str], cfg: Config) -> None:
     """Store the model together with the shape of input it expects."""
+    if path.suffix.lower() == '.json':
+        from .classifier_runtime import export
+        export(path, clf, names, cfg, OFFSETS)
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     import tempfile
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as fh:
@@ -227,8 +234,20 @@ def load(path: Path, cfg: Config | None = None):
     mean what the model thinks they mean.
     """
     path = resolve(path)
-    with Path(path).open("rb") as fh:
-        d = pickle.load(fh)
+    if path.suffix.lower() == '.json':
+        from .classifier_runtime import load as load_exported
+        classifier, d = load_exported(path)
+        if d.get('offsets') != list(OFFSETS):
+            raise ValueError('Exported classifier temporal offsets do not match this engine')
+        d['clf'] = classifier
+    else:
+        with Path(path).open("rb") as fh:
+            try:
+                d = pickle.load(fh)
+            except ModuleNotFoundError as exc:
+                if exc.name and exc.name.startswith('sklearn'):
+                    raise RuntimeError('Legacy pickle classifiers require scout-flag[reference]; use an exported inference model for a smaller runtime') from exc
+                raise
     if cfg is not None:
         want = tuple(cfg.model_exclude or ())
         got = tuple(d.get("exclude", ()))

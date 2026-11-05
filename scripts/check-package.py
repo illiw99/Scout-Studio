@@ -149,7 +149,7 @@ def check(root: Path = ROOT) -> None:
             assert metadata['Version'] == version
             assert metadata['Requires-Python'] == '>=3.10'
             assert metadata['License-Expression'] == 'MIT'
-            assert set(metadata.get_all('Provides-Extra')) == {'desktop', 'dev', 'inference'}
+            assert set(metadata.get_all('Provides-Extra')) == {'desktop', 'dev', 'inference', 'reference', 'training'}
             assert any('PySide6' in dep and 'extra == "desktop"' in dep
                        for dep in metadata.get_all('Requires-Dist'))
             assert any(name.endswith('.dist-info/licenses/LICENSE') for name in names)

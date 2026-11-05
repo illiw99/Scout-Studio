@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import codecs
+import json
 import os
 import sys
 import signal
@@ -11,6 +12,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
 from .library import active_batches, configuration
+from scout.worker import new_job, write_job, result_path, validate_result
 
 
 class JobQueue(QObject):
@@ -39,6 +41,9 @@ class JobQueue(QObject):
         self.pid = None
         self.cancel_exit = None
         self.tree_killer = None
+        self.worker_job = None
+        self.worker_result = None
+        self.event_buffer = ''
         self.cleanup_timer = QTimer(self)
         self.cleanup_timer.setInterval(100)
         self.cleanup_timer.timeout.connect(self.check_cancelled)
@@ -69,19 +74,17 @@ class JobQueue(QObject):
         match, command = self.current
         # Review protection is also checked by the CLI, including queued jobs.
         cfg = configuration(self.root, match)
-        args = ['--config', str(self.root / 'scout.json'), command]
-        if command == 'cut':
-            for key, flag in [('name_pattern', '--name-pattern'), ('start_number', '--start-number'),
-                              ('number_width', '--number-width'), ('review_hash', '--review-hash')]:
-                value = self.options.get(self.current, {}).get(key)
-                if value is not None:
-                    args.append(f'{flag}={value}')
+        job = new_job(command, self.root / 'scout.json', self.options.get(self.current))
         # Use bundled model paths in a fresh library through an explicit config.
         config_dir = cfg.path(cfg.out_dir) / 'desktop'
         config_dir.mkdir(parents=True, exist_ok=True)
-        config = config_dir / f'{match}-config.json'
+        config = config_dir / f'{job["job_id"]}.config.json'
         cfg.save(config)
-        args[1] = str(config)
+        job['config'] = str(config.resolve())
+        descriptor = config_dir / f'{job["job_id"]}.job.json'
+        write_job(descriptor, job)
+        self.worker_job, self.worker_result = job, result_path(descriptor, job)
+        self.event_buffer = ''
         self.log = (config_dir / f'{match}-{command}.log').open('w')
         self.decoder.reset()
         self.cancelling = False
@@ -94,13 +97,13 @@ class JobQueue(QObject):
         self.process.setWorkingDirectory(str(self.root))
         if getattr(sys, 'frozen', False):
             from .bundle import cli_command
-            executable, *prefix = cli_command()
-            self.process.start(executable, [*prefix, *args])
+            executable = cli_command()[0]
+            self.process.start(executable, ['--worker-job', str(descriptor)])
         else:
             # The absolute package parent lets other workspace folders work too.
             env.insert('PYTHONPATH', str(Path(__file__).resolve().parents[2]) + os.pathsep + os.environ.get('PYTHONPATH', ''))
             self.process.setProcessEnvironment(env)
-            self.process.start(sys.executable, ['-m', 'scout', *args])
+            self.process.start(sys.executable, ['-m', 'scout.worker', str(descriptor)])
         self.output.emit(f'\nStarting {command}: {match}\n')
         self.changed.emit()
 
@@ -109,7 +112,20 @@ class JobQueue(QObject):
         if self.log:
             self.log.write(text)
             self.log.flush()
-        self.output.emit(text)
+        self.event_buffer += text
+        while '\n' in self.event_buffer:
+            line, self.event_buffer = self.event_buffer.split('\n', 1)
+            try:
+                event = json.loads(line)
+                if (type(event.get('schema')) is not int or event.get('schema') != 1 or not self.worker_job
+                        or event.get('job_id') != self.worker_job['job_id']):
+                    raise ValueError('Unknown worker event')
+                if event.get('event') == 'log':
+                    self.output.emit(event['text'])
+                elif event.get('event') == 'error':
+                    self.output.emit(event['message'] + '\n')
+            except (ValueError, TypeError, KeyError, AttributeError):
+                self.output.emit(line + '\n')
 
     def error(self, error):
         if error == QProcess.ProcessError.FailedToStart:
@@ -128,6 +144,13 @@ class JobQueue(QObject):
         self.read()
         match, command = self.current
         ok = code == 0 and exit_status == QProcess.ExitStatus.NormalExit and not self.cancelling
+        if ok and self.worker_job:
+            try:
+                result = validate_result(json.loads(self.worker_result.read_text()), self.worker_job)
+                ok = result['ok']
+            except (OSError, ValueError, TypeError) as exc:
+                self.output.emit(f'Processing result could not be verified: {exc}\n')
+                ok = False
         state = 'Cancelled' if self.cancelling else 'Finished' if ok else 'Failed'
         self.history.append((match, command, state))
         if self.log:
@@ -136,6 +159,10 @@ class JobQueue(QObject):
         self.current = None
         self.options.pop((match, command), None)
         self.pid = None
+        self.worker_job = self.worker_result = None
+        if self.event_buffer:
+            self.output.emit(self.event_buffer)
+            self.event_buffer = ''
         self.finished.emit(match, command, ok)
         self.changed.emit()
         QTimer.singleShot(0, self.start_next)
