@@ -4,7 +4,7 @@ Model packs are separate ZIP files, installed under application user data rather
 than beside a game. Importing or activating one does not scan footage, rerun
 predictions, or change saved game configuration. The desktop Models menu imports,
 activates and rolls back packs; choose **Installed model pack** for new detection
-jobs. Existing jobs keep their selected version. The default reference detector
+jobs. Running jobs keep their selected version. The default reference detector
 and experimental faster CPU profile remain available.
 
 No production baseline pack is included yet. A baseline needs reviewed model

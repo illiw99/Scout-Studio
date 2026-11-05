@@ -253,10 +253,12 @@ class ModelStore:
                     stage.rename(target)
             return selection
 
-    def activate(self, selection):
+    def activate(self, selection, *, expected_pointer=None):
         self.root.mkdir(parents=True, exist_ok=True)
         pointer = self.root / 'active.json'
         before = pointer.read_bytes() if pointer.exists() else None
+        if expected_pointer is not None and before != expected_pointer:
+            raise ValueError('Active model pack changed; try again')
         folder = self.folder(selection)
         document = verify(folder, probe=True)
         from .storage import data_lock
@@ -276,13 +278,17 @@ class ModelStore:
         return selection
 
     def rollback(self):
-        previous = _json(self.root / 'active.json').get('previous')
+        pointer = self.root / 'active.json'
+        before = pointer.read_bytes()
+        previous = _json(pointer).get('previous')
+        if pointer.read_bytes() != before:
+            raise ValueError('Active model pack changed; try again')
         if not isinstance(previous, dict):
             raise ValueError('No previous model pack is available')
         selection = identity(previous.get('id'), previous.get('version'))
         if sha(self.folder(selection) / 'manifest.json') != previous.get('manifest_sha256'):
             raise ValueError('Previous model pack changed; rollback refused')
-        return self.activate(selection)
+        return self.activate(selection, expected_pointer=before)
 
 
 def build(approval, inputs, output):

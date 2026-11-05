@@ -137,6 +137,14 @@ class ModelPackTests(unittest.TestCase):
                 cfg = store.apply(Config(source_dir=str(root / 'external-game')), 'active')
                 self.assertTrue(cfg.path(cfg.model_path).is_file())
                 self.assertEqual(store.rollback(), 'synthetic@1.0.0')
+                activate = store.activate
+                def concurrent_activation(selection, **kwargs):
+                    activate('synthetic@1.2.0')
+                    return activate(selection, **kwargs)
+                with patch.object(store, 'activate', side_effect=concurrent_activation):
+                    with self.assertRaisesRegex(ValueError, 'changed'):
+                        store.rollback()
+                self.assertEqual(store.active(), 'synthetic@1.2.0')
             finally:
                 os.chdir(previous_cwd)
 
