@@ -83,7 +83,32 @@ jobs:
         if: runner.os == 'macOS'
         run: python -m unittest discover -s tests -p 'test_installer_build.py' -v
       - name: Build native installer
+        env:
+          # Certificate/keychain provisioning is external to this unsigned default.
+          SCOUT_REQUIRE_SIGNING: ${{ github.event_name != 'pull_request' && vars.SCOUT_REQUIRE_SIGNING || '' }}
+          SCOUT_WINDOWS_CERT_SHA1: ${{ github.event_name != 'pull_request' && vars.SCOUT_WINDOWS_CERT_SHA1 || '' }}
+          SCOUT_MAC_SIGN_IDENTITY: ${{ github.event_name != 'pull_request' && vars.SCOUT_MAC_SIGN_IDENTITY || '' }}
+          SCOUT_MAC_NOTARY_PROFILE: ${{ github.event_name != 'pull_request' && vars.SCOUT_MAC_NOTARY_PROFILE || '' }}
         run: python scripts/build-installers.py
+      - name: Fetch explicitly pinned upgrade baseline
+        if: vars.SCOUT_UPGRADE_BASELINE_VERSION != ''
+        shell: bash
+        env:
+          TARGET: ${{ matrix.platform }}
+          BASELINE_VERSION: ${{ vars.SCOUT_UPGRADE_BASELINE_VERSION }}
+          LINUX_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_LINUX_X86_64 }}
+          WINDOWS_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_WINDOWS_X86_64 }}
+          MAC_ARM_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_MACOS_ARM64 }}
+          MAC_INTEL_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_MACOS_X86_64 }}
+        run: |
+          case "$TARGET" in
+            linux-x86_64) baseline_hash="$LINUX_HASH" ;;
+            windows-x86_64) baseline_hash="$WINDOWS_HASH" ;;
+            macos-arm64) baseline_hash="$MAC_ARM_HASH" ;;
+            macos-x86_64) baseline_hash="$MAC_INTEL_HASH" ;;
+          esac
+          python scripts/prepare-upgrade.py --directory dist/installers --version "$BASELINE_VERSION" \
+            --platform "$TARGET" --sha256 "$baseline_hash"
       - name: Create candidate manifest
         shell: bash
         env:
@@ -176,5 +201,7 @@ jobs:
           overwrite: true
           path: |
             downloaded/smoke-report.json
+            downloaded/previous-smoke-report.json
+            downloaded/upgrade-report.json
             downloaded/*.log
           if-no-files-found: ignore

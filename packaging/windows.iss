@@ -1,5 +1,9 @@
 ; Values are supplied by scripts/build-installers.py. No elevated install needed.
 [Setup]
+#ifdef SignWindows
+SignTool=scoutsign
+SignedUninstaller=yes
+#endif
 AppId={{F82B9577-D75C-4EBB-97A6-CB51CF2E498C}
 AppName=Scout Studio
 AppVersion={#AppVersion}

@@ -82,6 +82,21 @@ def installer_name(version, target):
     return f'Scout-Studio-{version}-{target}{PLATFORMS[target][2]}'
 
 
+def baseline_files(info, target):
+    baseline = info.get('upgrade_baseline')
+    if baseline is None:
+        return ()
+    require(isinstance(baseline, dict), 'Invalid upgrade baseline')
+    name = installer_name(baseline.get('version'), target)
+    require(name == baseline.get('installer') and name != info.get('installer')
+            and isinstance(baseline.get('sha256'), str) and re.fullmatch('[0-9a-f]{64}', baseline['sha256'])
+            and type(baseline.get('size')) is int and baseline['size'] > 0,
+            'Invalid upgrade baseline identity')
+    require(tuple(map(int, baseline['version'].split('.'))) < tuple(map(int, info['version'].split('.'))),
+            'Upgrade baseline must be older than candidate')
+    return (name, name + '.sha256', 'upgrade-baseline.json')
+
+
 def create(directory, target, identity):
     info = read_json(directory / 'build-info.json')
     name = installer_name(info.get('version'), target)
@@ -92,7 +107,7 @@ def create(directory, target, identity):
     helper = directory / 'release-candidate.py'
     require(not helper.exists() and not helper.is_symlink(), 'Candidate helper already exists')
     shutil.copyfile(Path(__file__), helper)
-    names = (name, 'build-info.json', 'test-installer.py', helper.name)
+    names = (name, 'build-info.json', 'test-installer.py', helper.name) + baseline_files(info, target)
     files = {item: dict(sha256=sha256(file_at(directory, item)),
                         size=file_at(directory, item).stat().st_size) for item in names}
     result = dict(schema=1, context=identity, platform=target, version=info['version'],
@@ -100,7 +115,7 @@ def create(directory, target, identity):
                   build_os=platform.platform(), python=platform.python_version(),
                   dependencies=sorted({(dist.metadata['Name'], dist.version)
                                        for dist in metadata.distributions() if dist.metadata['Name']}),
-                  model_packs=[], signing='not-configured')
+                  model_packs=[], signing=info.get('signing', 'not-configured'))
     write_new(directory / 'candidate.json', result)
     return result
 
@@ -112,7 +127,10 @@ def verify(directory, target, identity):
     require(manifest.get('platform') == target, 'Candidate platform mismatch')
     name = installer_name(manifest.get('version'), target)
     require(manifest.get('installer') == name, 'Unexpected installer name')
-    expected = {name, 'build-info.json', 'test-installer.py', 'release-candidate.py'}
+    build_record = manifest.get('files', {}).get('build-info.json', {})
+    require(build_record.get('sha256') == sha256(file_at(directory, 'build-info.json')), 'Candidate file changed: build-info.json')
+    info = read_json(directory / 'build-info.json')
+    expected = {name, 'build-info.json', 'test-installer.py', 'release-candidate.py', *baseline_files(info, target)}
     files = manifest.get('files')
     require(isinstance(files, dict) and set(files) == expected, 'Invalid candidate file set')
     for filename, record in files.items():
@@ -126,6 +144,14 @@ def verify(directory, target, identity):
             and info.get('platform') == system
             and str(info.get('architecture', '')).lower().replace('amd64', 'x86_64') == arch,
             'Candidate build metadata mismatch')
+    baseline = info.get('upgrade_baseline')
+    if baseline:
+        previous = read_json(directory / 'upgrade-baseline.json')
+        require(previous == {key: (baseline[key] if key in ('installer', 'version') else info[key])
+                             for key in ('version', 'installer', 'platform', 'architecture')}, 'Upgrade baseline metadata mismatch')
+        require(sha256(file_at(directory, baseline['installer'])) == baseline['sha256']
+                and file_at(directory, baseline['installer']).stat().st_size == baseline['size'], 'Upgrade baseline bytes mismatch')
+    require(manifest.get('signing') == info.get('signing', 'not-configured'), 'Candidate signing metadata mismatch')
     return manifest
 
 
@@ -139,6 +165,23 @@ def smoke(directory, version):
     return report
 
 
+def upgrade_evidence(directory, manifest, *, required=False):
+    info = read_json(directory / 'build-info.json')
+    baseline = info.get('upgrade_baseline')
+    if not baseline:
+        require(not required, 'Promotion requires a verified previous-release upgrade; configure a baseline or explicitly permit the first release')
+        return {}
+    report = read_json(directory / 'upgrade-report.json')
+    require(report.get('schema') == 1 and report.get('upgrade_passed') is True
+            and report.get('uninstall_preserved_data') is True
+            and report.get('previous_version') == baseline['version'] and report.get('version') == manifest['version']
+            and report.get('previous_installer_sha256') == baseline['sha256']
+            and report.get('installer_sha256') == manifest['files'][manifest['installer']]['sha256']
+            and isinstance(report.get('protected_files'), dict) and bool(report['protected_files']),
+            'Upgrade evidence is missing, failed or mismatched')
+    return dict(upgrade_sha256=sha256(directory / 'upgrade-report.json'))
+
+
 def record_test(directory, target, identity):
     manifest = verify(directory, target, identity)
     smoke(directory, manifest['version'])
@@ -147,11 +190,12 @@ def record_test(directory, target, identity):
                   installer_sha256=manifest['files'][manifest['installer']]['sha256'],
                   smoke_sha256=sha256(directory / 'smoke-report.json'),
                   install_and_uninstall_passed=True)
+    result.update(upgrade_evidence(directory, manifest))
     write_new(directory / 'test-result.json', result)
     return result
 
 
-def assemble(downloaded, selection, tag, output):
+def assemble(downloaded, selection, tag, output, *, require_upgrade=False):
     identity = context(**{key: selection.get(key) for key in
                          ('repository', 'commit', 'run_id', 'run_attempt')})
     require(selection.get('workflow') == WORKFLOW, 'Selected workflow mismatch')
@@ -166,7 +210,8 @@ def assemble(downloaded, selection, tag, output):
         manifest = verify(directory, target, identity)
         require(tag == f"v{manifest['version']}", 'Release tag/version mismatch')
         evidence = read_json(directory / 'test-result.json')
-        require(evidence == dict(schema=1, context=identity, platform=target,
+        expected_upgrade = upgrade_evidence(directory, manifest, required=require_upgrade)
+        require(evidence == dict(**expected_upgrade, schema=1, context=identity, platform=target,
                     candidate_sha256=sha256(directory / 'candidate.json'),
                     installer_sha256=manifest['files'][manifest['installer']]['sha256'],
                     smoke_sha256=sha256(file_at(directory, 'smoke-report.json')),
@@ -259,6 +304,7 @@ def main():
     sub.add_argument('--commit', required=True)
     sub.add_argument('--output', type=Path, required=True)
     sub = commands.add_parser('assemble')
+    sub.add_argument('--require-upgrade', action='store_true')
     sub.add_argument('--directory', type=Path, required=True)
     sub.add_argument('--selection', type=Path, required=True)
     sub.add_argument('--tag', required=True)
@@ -270,7 +316,7 @@ def main():
             function = {'create': create, 'verify': verify, 'record-test': record_test}[args.command]
             function(args.directory, args.platform, identity)
         elif args.command == 'assemble':
-            assemble(args.directory, read_json(args.selection), args.tag, args.output)
+            assemble(args.directory, read_json(args.selection), args.tag, args.output, require_upgrade=args.require_upgrade)
         else:
             token = os.environ.get('GH_TOKEN')
             require(token, 'GH_TOKEN is required to select a trusted candidate')

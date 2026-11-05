@@ -53,6 +53,24 @@ class BundleTests(unittest.TestCase):
             self.assertIn('window', destroyed)
             source.unlink()
 
+    @unittest.skipUnless(importlib.util.find_spec('PySide6'), 'desktop extra is not installed')
+    def test_explicit_smoke_settings_never_construct_native_preferences(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+        from scout.desktop.app import Studio
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = QSettings(str(root / 'isolated.ini'), QSettings.Format.IniFormat)
+            with patch('scout.desktop.app.QSettings', side_effect=AssertionError('native settings constructed')):
+                window = Studio(root / 'library', settings=settings)
+                self.assertIs(window.settings, settings)
+                bundle._dispose_smoke_window(window, app)
+            settings.sync()
+            self.assertEqual(Path(settings.fileName()), root / 'isolated.ini')
+            self.assertEqual(settings.value('library'), str(root / 'library'))
+
     def test_windows_frozen_queue_uses_console_companion(self):
         with patch.object(bundle.sys, 'frozen', True, create=True), \
              patch.object(bundle.sys, 'platform', 'win32'), \

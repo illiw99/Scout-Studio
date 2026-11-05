@@ -171,3 +171,27 @@ class PackagePathTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class SigningTests(unittest.TestCase):
+    def test_required_signing_fails_closed_and_partial_mac_configuration_rejected(self):
+        module = builder()
+        with patch.dict(os.environ, {'SCOUT_REQUIRE_SIGNING': '1'}, clear=True):
+            with self.assertRaisesRegex(ValueError, 'required'):
+                module.signing_configuration('Windows')
+            self.assertFalse(module.signing_configuration('Linux'))
+        with patch.dict(os.environ, {'SCOUT_MAC_SIGN_IDENTITY': 'Developer ID test'}, clear=True):
+            with self.assertRaisesRegex(ValueError, 'both'):
+                module.signing_configuration('Darwin')
+        with patch.dict(os.environ, {'SCOUT_WINDOWS_CERT_SHA1': 'A' * 40}, clear=True):
+            self.assertTrue(module.signing_configuration('Windows'))
+
+    def test_windows_signature_verified_after_signing_and_failure_propagates(self):
+        module = builder()
+        with patch.dict(os.environ, {'SCOUT_WINDOWS_CERT_SHA1': 'A' * 40}, clear=True), \
+             patch.object(module, 'run') as run:
+            module.sign_windows(Path('fixture.exe'))
+            self.assertEqual(run.call_args_list[0].args[:3], ('signtool', 'sign', '/fd'))
+            self.assertEqual(run.call_args_list[1].args, ('signtool', 'verify', '/pa', '/all', Path('fixture.exe')))
+            run.side_effect = subprocess.CalledProcessError(1, ['signtool'])
+            with self.assertRaises(subprocess.CalledProcessError):
+                module.sign_windows(Path('fixture.exe'))

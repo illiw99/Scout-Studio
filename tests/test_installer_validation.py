@@ -92,3 +92,102 @@ class InstallerValidationTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class UpgradeValidationTests(unittest.TestCase):
+    def fixture(self, root, version, system='Linux'):
+        path = root / version
+        path.mkdir()
+        name = f'Scout-Studio-{version}-linux-x86_64.deb'
+        installer = path / name
+        installer.write_bytes(('fixture ' + version).encode())
+        import hashlib
+        (path / (name + '.sha256')).write_text(hashlib.sha256(installer.read_bytes()).hexdigest())
+        (path / 'build-info.json').write_text(json.dumps(dict(version=version, platform=system,
+             architecture='x86_64', installer=name)))
+        return path
+
+    def test_old_new_install_order_and_integrity_checks(self):
+        module = checker()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old, new = self.fixture(root, '1.0.0'), self.fixture(root, '1.1.0')
+            protected = root / 'user-data'
+            protected.mkdir()
+            (protected / 'review.mlt').write_text('user edit')
+            calls = []
+            install = lambda path, replacing: calls.append(('install', path.parent.name, replacing))
+            smoke = lambda version, legacy: calls.append(('smoke', version, legacy))
+            result = module.upgrade(old, new, install, smoke, protected)
+            self.assertTrue(result['upgrade_passed'])
+            self.assertFalse(result['uninstall_preserved_data'])
+            self.assertEqual(calls, [('install', '1.0.0', False), ('smoke', '1.0.0', True),
+                                    ('install', '1.1.0', True), ('smoke', '1.1.0', False)])
+            def corrupt(path, replacing):
+                if replacing:
+                    (protected / 'review.mlt').write_text('lost edit')
+            with self.assertRaisesRegex(ValueError, 'protected'):
+                module.upgrade(old, new, corrupt, smoke, protected)
+
+    def test_bad_baseline_rejected_before_any_install(self):
+        module = checker()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old, new = self.fixture(root, '1.2.0'), self.fixture(root, '1.1.0')
+            install = Mock()
+            with self.assertRaisesRegex(ValueError, 'newer'):
+                module.upgrade(old, new, install, Mock(), root)
+            install.assert_not_called()
+            info = json.loads((old / 'build-info.json').read_text())
+            info['platform'] = 'Windows'
+            (old / 'build-info.json').write_text(json.dumps(info))
+            with self.assertRaisesRegex(ValueError, 'platform'):
+                module.upgrade(old, new, install, Mock(), root)
+            install.assert_not_called()
+
+class WindowsPreflightTests(unittest.TestCase):
+    def test_fixed_app_id_registration_or_shortcuts_prevent_installs(self):
+        import sys
+        import types
+        module = checker()
+        registry = types.SimpleNamespace(HKEY_CURRENT_USER=1, HKEY_LOCAL_MACHINE=2,
+            KEY_WOW64_32KEY=32, KEY_WOW64_64KEY=64, KEY_READ=1,
+            OpenKey=Mock(side_effect=FileNotFoundError()))
+        with tempfile.TemporaryDirectory() as directory, patch.dict(sys.modules, winreg=registry), \
+             patch.dict(module.os.environ, {'LOCALAPPDATA': directory}, clear=True):
+            module.windows_preflight()
+            self.assertEqual(registry.OpenKey.call_count, 4)
+            registry.OpenKey.side_effect = None
+            registry.OpenKey.return_value.__enter__ = Mock()
+            registry.OpenKey.return_value.__exit__ = Mock(return_value=False)
+            with self.assertRaisesRegex(RuntimeError, 'registration'):
+                module.windows_preflight()
+            registry.OpenKey.side_effect = FileNotFoundError()
+            existing = Path(directory) / 'Programs/Scout-Studio'
+            existing.mkdir(parents=True)
+            with self.assertRaisesRegex(RuntimeError, 'files or shortcuts'):
+                module.windows_preflight()
+
+class NativePreservationTests(unittest.TestCase):
+    def test_native_data_settings_and_pack_pointer_are_checked(self):
+        module = checker()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            protected = root / 'game'
+            protected.mkdir()
+            (protected / 'review.mlt').write_text('user correction')
+            locations = module.application_locations('Linux', home=root, environ={})
+            self.assertEqual(locations[0], root / '.local/share/Scout/Scout Studio')
+            self.assertEqual(Path(locations[1]), root / '.config/Scout/Studio.conf')
+            with patch.object(module, 'application_locations', return_value=locations):
+                data, settings = module.seed_application_data('Linux', protected)
+                before = module.preservation_snapshot(protected, data, settings, 'Linux')
+                self.assertIn('app-data/model-packs/active.json', before)
+                (data / 'model-packs/active.json').unlink()
+                self.assertNotEqual(module.preservation_snapshot(protected, data, settings, 'Linux'), before)
+                with self.assertRaisesRegex(RuntimeError, 'existing'):
+                    module.seed_application_data('Linux', protected)
+            windows = module.application_locations('Windows', home=root, environ={'LOCALAPPDATA': str(root / 'Local')})
+            self.assertEqual(windows[0], root / 'Local/Scout/Scout Studio')
+            self.assertEqual(windows[1], r'HKEY_CURRENT_USER\Software\Scout\Studio')
+            mac = module.application_locations('Darwin', home=root, environ={})
+            self.assertEqual(Path(mac[1]), root / 'Library/Preferences/com.scout.Studio.plist')

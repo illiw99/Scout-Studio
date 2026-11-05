@@ -23,3 +23,40 @@ platform security prompts and [future path](future-path.md) for release gates.
 GitHub's [release API](https://docs.github.com/en/rest/releases/releases#get-the-latest-release)
 provides the stable release metadata. No credentials or private repository tokens
 are transmitted by the app updater.
+
+Build-runner signing hooks use a certificate already provisioned in the Windows
+certificate store (`SCOUT_WINDOWS_CERT_SHA1`) or macOS keychain
+(`SCOUT_MAC_SIGN_IDENTITY` and `SCOUT_MAC_NOTARY_PROFILE`). Set
+`SCOUT_REQUIRE_SIGNING=1` to fail a Windows/macOS build if they are missing.
+Windows signs and verifies both application executables. Inno signs setup, its
+self-copies and the uninstaller during compilation; installed checks verify them.
+macOS asks PyInstaller to sign native contents, verifies the app, notarizes and
+staples the app before image creation, then signs/notarizes/staples/verifies the
+image. Hashes and candidate manifests are created afterward. These hooks have
+mocked command-order checks; real certificate provisioning, native Authenticode and notarization remain
+release validation work. No private key
+or password is stored in this repository. See [Microsoft SignTool](https://learn.microsoft.com/windows/win32/seccrypto/signtool)
+and [Apple notarization](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow).
+
+For hosted upgrade checks, configure `SCOUT_UPGRADE_BASELINE_VERSION` and all four
+repository variables `SCOUT_UPGRADE_SHA256_LINUX_X86_64`,
+`SCOUT_UPGRADE_SHA256_WINDOWS_X86_64`, `SCOUT_UPGRADE_SHA256_MACOS_ARM64`, and
+`SCOUT_UPGRADE_SHA256_MACOS_X86_64`. Use independently reviewed hashes of an older
+published stable release. The build fetches only that pinned installer, adds it
+to the candidate hash set, and the disposable install job tests old → new in the
+same location. It compares synthetic footage/review/field/cache/model sentinels plus the actual
+platform application-data library, model-pack pointer and native preferences
+after upgrade and uninstall. The installed candidate verifies those locations
+against Qt. Existing application data/settings cause a refusal; only a disposable
+CI account or explicit `--disposable-machine` is allowed. These checks do not
+establish shortcut launches or migration of every historical settings format. The baseline launches its CLI help; the candidate runs full native media, UI,
+worker and inference smoke checks. Historical smoke helpers could write native
+preferences, so they are not used for the baseline preservation test.
+
+Promotion requires successful upgrade evidence by default. The one-time explicit
+repository variable `SCOUT_ALLOW_FIRST_RELEASE=true` permits bootstrap promotion
+without a baseline; clear it once an upgrade baseline exists. This is a release
+policy exception, not evidence of an upgrade test. Local unit tests never install
+packages or modify `/Applications` or `/opt`; only run `test-installer.py` on a
+disposable machine. Its `--previous` option can select a separately verified
+artifact directory for manual CI checks.

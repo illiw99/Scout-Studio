@@ -41,8 +41,12 @@ jobs:
           github-token: ${{ github.token }}
       - name: Verify all platforms and assemble unchanged release files
         shell: bash
+        env:
+          ALLOW_FIRST_RELEASE: ${{ vars.SCOUT_ALLOW_FIRST_RELEASE }}
         run: |
-          python scripts/release-candidate.py assemble --directory downloaded \
+          upgrade_gate=--require-upgrade
+          if [ "$ALLOW_FIRST_RELEASE" = "true" ]; then upgrade_gate=; fi
+          python scripts/release-candidate.py assemble $upgrade_gate --directory downloaded \
             --selection selection.json --tag "$GITHUB_REF_NAME" --output release
       # No build, dependency installation, signing or artifact helper execution
       # occurs here. Every byte-changing step belongs before candidate tests.
@@ -54,4 +58,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
             --title "Scout Studio ${GITHUB_REF_NAME#v}" \
-            --notes 'Exact tested candidate installers; build and test identities are recorded in release-manifest.json. Windows and macOS builds remain unsigned. See the installation guide for platform security prompts. SHA256SUMS.txt verifies download integrity.'
+            --notes 'Exact tested candidate installers; build and test identities are recorded in release-manifest.json. Signing status is recorded per platform in the manifest. See the installation guide for platform security prompts. SHA256SUMS.txt verifies download integrity.'

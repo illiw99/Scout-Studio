@@ -14,6 +14,12 @@ hash rejection paths; hosted workflow execution remains unverified. Signing cred
 upgrade checks and the remaining phase0 measurements
 are still pending, so neither phase is marked complete.
 
+Phase1 now also has opt-in certificate-store/keychain signing hooks before
+hashing, a pinned previous-release download path, old→new installed smoke tests
+and protected-file upgrade/uninstall evidence. Promotion requires upgrade evidence
+unless a first-release exception is explicitly configured. Real signing, native
+upgrade/default-settings/shortcut checks and hosted execution remain open.
+
 Phase2 implementation now uses Qt local application-data defaults, preserves
 explicit/remembered portable workspaces and offline paths, and offers registry
 backup/import in the Library menu. Imports preserve unsaved UI edits and use

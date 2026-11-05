@@ -73,6 +73,32 @@ def create_dmg(stage: Path, installer: Path, log_dir: Path) -> None:
             time.sleep(delay)
 
 
+def signing_configuration(system):
+    """Use pre-provisioned certificate stores/keychains; never read secret files."""
+    windows = os.environ.get('SCOUT_WINDOWS_CERT_SHA1', '')
+    mac = os.environ.get('SCOUT_MAC_SIGN_IDENTITY', '')
+    notary = os.environ.get('SCOUT_MAC_NOTARY_PROFILE', '')
+    if windows and not re.fullmatch('[0-9A-Fa-f]{40}', windows):
+        raise ValueError('Windows signing certificate must be a SHA1 thumbprint')
+    if system == 'Darwin' and bool(mac) != bool(notary):
+        raise ValueError('macOS signing requires both identity and notary keychain profile')
+    configured = bool(windows) if system == 'Windows' else bool(mac and notary) if system == 'Darwin' else False
+    if os.environ.get('SCOUT_REQUIRE_SIGNING') == '1' and system != 'Linux' and not configured:
+        raise ValueError('Signing is required but credentials are not provisioned')
+    return configured
+
+
+def sign_windows(path):
+    run('signtool', 'sign', '/fd', 'SHA256', '/sha1', os.environ['SCOUT_WINDOWS_CERT_SHA1'],
+        '/tr', 'http://timestamp.digicert.com', '/td', 'SHA256', path)
+    run('signtool', 'verify', '/pa', '/all', path)
+
+
+def notarize(path):
+    run('xcrun', 'notarytool', 'submit', path, '--keychain-profile',
+        os.environ['SCOUT_MAC_NOTARY_PROFILE'], '--wait')
+
+
 def build() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version-only', action='store_true')
@@ -83,6 +109,7 @@ def build() -> None:
         return
     system = platform.system()
     arch = platform.machine().lower()
+    signed = signing_configuration(system)
     if system not in {'Windows', 'Linux', 'Darwin'}:
         raise SystemExit(f'Unsupported platform: {system}')
     if system in {'Windows', 'Linux'} and arch not in {'x86_64', 'amd64'}:
@@ -97,12 +124,22 @@ def build() -> None:
         ROOT / 'packaging/scout-studio.spec')
     bundle = work / 'dist/Scout-Studio'
     if system == 'Windows':
+        if signed:
+            sign_windows(bundle / 'Scout-Studio.exe')
+            sign_windows(bundle / 'Scout-Studio-CLI.exe')
         compiler = shutil.which('iscc') or str(Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)')) / 'Inno Setup 6/ISCC.exe')
         name = f'Scout-Studio-{version}-windows-x86_64'
-        run(compiler, f'/DAppVersion={version}', f'/DOutputDir={output}',
+        signing_args = []
+        if signed:
+            command = ('signtool sign /fd SHA256 /sha1 ' + os.environ['SCOUT_WINDOWS_CERT_SHA1']
+                       + ' /tr http://timestamp.digicert.com /td SHA256 $f')
+            signing_args = ['/DSignWindows=1', '/Sscoutsign=' + command]
+        run(compiler, *signing_args, f'/DAppVersion={version}', f'/DOutputDir={output}',
             f'/DOutputName={name}', f'/DRepoRoot={ROOT}', f'/DBundleDir={bundle}',
             ROOT / 'packaging/windows.iss')
         installer = output / f'{name}.exe'
+        if signed:
+            run('signtool', 'verify', '/pa', '/all', installer)
     elif system == 'Linux':
         stage = work / 'deb'
         if stage.exists():
@@ -138,15 +175,30 @@ def build() -> None:
         if stage.exists():
             shutil.rmtree(stage)
         stage.mkdir()
+        if signed:
+            app = work / 'dist/Scout Studio.app'
+            run('codesign', '--verify', '--deep', '--strict', app)
+            notarization_zip = work / 'notarization.zip'
+            run('ditto', '-c', '-k', '--keepParent', app, notarization_zip)
+            notarize(notarization_zip)
+            run('xcrun', 'stapler', 'staple', app)
+            run('xcrun', 'stapler', 'validate', app)
         # ditto preserves the symlinks and metadata of PyInstaller's .app bundle.
         run('ditto', work / 'dist/Scout Studio.app', stage / 'Scout Studio.app')
         (stage / 'Applications').symlink_to('/Applications')
         installer = output / f'Scout-Studio-{version}-macos-{arch}.dmg'
         create_dmg(stage, installer, work / 'dmg-logs')
+        if signed:
+            run('codesign', '--force', '--timestamp', '--sign', os.environ['SCOUT_MAC_SIGN_IDENTITY'], installer)
+            notarize(installer)
+            run('xcrun', 'stapler', 'staple', installer)
+            run('xcrun', 'stapler', 'validate', installer)
+            run('codesign', '--verify', '--strict', installer)
     digest = sha256(installer)
     (output / f'{installer.name}.sha256').write_text(f'{digest}  {installer.name}\n', encoding='utf-8')
     (output / 'build-info.json').write_text(json.dumps({'version': version, 'platform': system,
-        'architecture': arch, 'installer': installer.name}, indent=2) + '\n', encoding='utf-8')
+        'architecture': arch, 'installer': installer.name,
+        'signing': ('authenticode-verified' if system == 'Windows' else 'notarized-verified') if signed else 'not-configured'}, indent=2) + '\n', encoding='utf-8')
     shutil.copy2(ROOT / 'scripts/test-installer.py', output / 'test-installer.py')
     print(installer)
 

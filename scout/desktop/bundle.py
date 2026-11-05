@@ -208,15 +208,26 @@ def _exercise(root, checks):
         import ctypes
         for library in (Path(sys.prefix) / 'lib/scout-native').glob('usr/lib/*/libxcb-cursor.so.0'):
             ctypes.CDLL(str(library), mode=ctypes.RTLD_GLOBAL)
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(root / 'settings'))
     assert configure_windows_app_id(), 'Windows rejected the taskbar identity'
     app = QApplication.instance() or QApplication(['Scout Studio installer check'])
     app.setApplicationName('Scout Studio')
     app.setOrganizationName('Scout')
+    if os.environ.get('SCOUT_INSTALL_TEST_DATA_ROOT'):
+        from PySide6.QtCore import QStandardPaths
+        actual = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
+        assert Path(actual).resolve() == Path(os.environ['SCOUT_INSTALL_TEST_DATA_ROOT']).resolve()
+        native = QSettings(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, 'Scout', 'Studio')
+        expected = os.environ['SCOUT_INSTALL_TEST_SETTINGS']
+        if sys.platform == 'win32':
+            assert native.fileName().replace(chr(92), '/').lstrip('/').lower() == expected.replace(chr(92), '/').lstrip('/').lower()
+        else:
+            assert Path(native.fileName()).resolve() == Path(expected).resolve()
+        assert native.value('preservationSentinel') == 'must survive upgrade and uninstall'
+        assert Path(native.value('library')).resolve() == Path(actual).resolve() / 'library'
+        checks['preservation_paths'] = True
     app.setWindowIcon(QIcon(str(application_icon_path())))
     from scout.desktop.app import Studio
-    window = Studio(root / 'empty-library')
+    window = Studio(root / 'empty-library', settings=QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat))
     try:
         window.show()
         app.processEvents()

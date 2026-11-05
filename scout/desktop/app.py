@@ -116,10 +116,10 @@ class ImportDialog(QDialog):
 
 
 class Studio(QMainWindow):
-    def __init__(self, root):
+    def __init__(self, root, *, settings=None):
         super().__init__()
         self.root = Path(root).resolve()
-        self.settings = QSettings('Scout', 'Studio')
+        self.settings = settings if settings is not None else QSettings('Scout', 'Studio')
         self.theme_mode = self.settings.value('theme', 'dark')
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(2)

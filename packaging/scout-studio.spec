@@ -42,7 +42,7 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='Scout-Studio',
           console=os.name != 'nt' and not sys.platform == 'darwin',
           disable_windowed_traceback=False, argv_emulation=False,
           icon=str(root / 'scout/desktop/scout.ico') if os.name == 'nt' else None,
-          target_arch=None, codesign_identity=None, entitlements_file=None)
+          target_arch=None, codesign_identity=os.environ.get('SCOUT_MAC_SIGN_IDENTITY') or None, entitlements_file=None)
 executables = [exe]
 if os.name == 'nt':
     # A noconsole executable loses Python stdout even with QProcess pipes.

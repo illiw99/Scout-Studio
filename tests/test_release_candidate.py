@@ -258,3 +258,48 @@ class CandidateSelectionTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class UpgradePromotionTests(unittest.TestCase):
+    setUp = CandidateTests.setUp
+    directory = CandidateTests.directory
+    assemble = CandidateTests.assemble
+
+    def test_required_upgrade_blocks_bootstrap_unless_explicitly_allowed(self):
+        with self.assertRaisesRegex(ValueError, 'requires a verified'):
+            self.tool.assemble(self.downloaded, self.identity, 'v1.2.3', self.root / 'release', require_upgrade=True)
+        self.assertFalse((self.root / 'release').exists())
+
+    def test_upgrade_hashes_and_post_uninstall_evidence_are_required(self):
+        target = 'linux-x86_64'
+        directory = self.directory(target)
+        for name in ('candidate.json', 'release-candidate.py', 'test-result.json'):
+            (directory / name).unlink()
+        info_path = directory / 'build-info.json'
+        info = json.loads(info_path.read_text())
+        old = self.tool.installer_name('1.0.0', target)
+        (directory / old).write_bytes(b'previous release fixture')
+        digest = self.tool.sha256(directory / old)
+        info['upgrade_baseline'] = dict(version='1.0.0', installer=old, sha256=digest, size=(directory / old).stat().st_size)
+        info_path.write_text(json.dumps(info))
+        (directory / 'upgrade-baseline.json').write_text(json.dumps(dict(version='1.0.0', installer=old,
+                    platform='Linux', architecture='x86_64')))
+        (directory / (old + '.sha256')).write_text(digest + '  ' + old)
+        with patch.object(self.tool.metadata, 'distributions', return_value=[]):
+            manifest = self.tool.create(directory, target, self.identity)
+        with self.assertRaises(ValueError):
+            self.tool.record_test(directory, target, self.identity)
+        report = dict(schema=1, previous_version='1.0.0', version='1.2.3', previous_installer_sha256=digest,
+                      installer_sha256=manifest['files'][manifest['installer']]['sha256'],
+                      protected_files={'review.mlt': 'c' * 64}, upgrade_passed=True, uninstall_preserved_data=False)
+        report_path = directory / 'upgrade-report.json'
+        report_path.write_text(json.dumps(report))
+        with self.assertRaisesRegex(ValueError, 'Upgrade evidence'):
+            self.tool.record_test(directory, target, self.identity)
+        report['uninstall_preserved_data'] = True
+        report_path.write_text(json.dumps(report))
+        result = self.tool.record_test(directory, target, self.identity)
+        self.assertEqual(result['upgrade_sha256'], self.tool.sha256(report_path))
+        report['protected_files'] = {}
+        report_path.write_text(json.dumps(report))
+        with self.assertRaisesRegex(ValueError, 'Upgrade evidence'):
+            self.assemble()
