@@ -28,6 +28,40 @@ class DesktopIntegrationTests(unittest.TestCase):
             QTest.qWait(20)
         self.assertTrue(condition(), 'Timed out waiting for desktop operation')
 
+    def test_index_import_preserves_dirty_editor_without_scanning_games(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from PySide6.QtWidgets import QListWidget, QListWidgetItem
+        from scout.desktop.app import Studio
+        from scout.storage import write_library
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)/'library'
+            source = Path(directory)/'old'
+            write_library(root, {'Current': str(Path(directory)/'Current')})
+            write_library(source, {'New': str(Path(directory)/'offline/New')})
+            listing = QListWidget()
+            current = QListWidgetItem('Current editor')
+            listing.addItem(current)
+            listing.setCurrentItem(current)
+            state = SimpleNamespace(root=root, importing=False, loading=False, tasks=set(),
+                jobs=SimpleNamespace(current=None, pending=[]),
+                rows=[dict(name='Current', linked=True)], match_list=listing,
+                dirty=True, marker_dirty=True, data={'sentinel': 'unsaved editor'},
+                show_error=Mock(), resolve_dirty=Mock(), refresh_library=Mock(), statusBar=Mock())
+            with patch('scout.desktop.app.QFileDialog.getOpenFileName',
+                       return_value=(str(source/'.scout-library.json'), '')), \
+                 patch('scout.desktop.library._source_videos', side_effect=AssertionError('media scan')), \
+                 patch('scout.desktop.library.state_directory', side_effect=AssertionError('Scout inspection')):
+                Studio.import_library_index(state)
+            state.show_error.assert_not_called()
+            state.resolve_dirty.assert_not_called()
+            state.refresh_library.assert_not_called()
+            self.assertTrue(state.dirty and state.marker_dirty)
+            self.assertEqual(state.data, {'sentinel': 'unsaved editor'})
+            self.assertIs(listing.currentItem(), current)
+            self.assertEqual(listing.count(), 2)
+            self.assertFalse((Path(directory)/'offline').exists())
+
     def test_camera_order_tasks_keep_independent_match_locks(self):
         from types import SimpleNamespace, MethodType
         from unittest.mock import Mock
@@ -55,20 +89,21 @@ class DesktopIntegrationTests(unittest.TestCase):
             callbacks[1][0]({'changed': False})
             self.assertFalse(state.match_busy('B'))
 
-    def test_missing_saved_workspace_falls_back_to_existing_checkout(self):
+    def test_missing_saved_workspace_is_preserved_without_creating_it(self):
         from scout.desktop.app import workspace_path
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / 'media').mkdir()
             with patch('scout.desktop.app.Path.cwd', return_value=root):
-                self.assertEqual(workspace_path(remembered=root/'deleted-smoke-test'), root)
+                self.assertEqual(workspace_path(remembered=root/'offline-library'), root/'offline-library')
+                self.assertFalse((root/'offline-library').exists())
                 other = root/'other'
                 other.mkdir()
                 self.assertEqual(workspace_path(remembered=other), other)
                 explicit = root/'new-workspace'
                 self.assertEqual(workspace_path(explicit, root), explicit)
 
-    def test_local_game_index_takes_priority_over_remembered_default(self):
+    def test_user_data_default_is_independent_of_checkout_and_preserves_explicit_selection(self):
         from scout.desktop.app import workspace_path
         from scout.storage import write_library, read_library
         with tempfile.TemporaryDirectory() as folder:
@@ -79,7 +114,9 @@ class DesktopIntegrationTests(unittest.TestCase):
             write_library(checkout, {'Game': str(root / 'recording')})
             self.assertFalse((checkout / 'media').exists())
             with patch('scout.desktop.app.Path.cwd', return_value=checkout):
-                self.assertEqual(workspace_path(remembered=remembered), checkout)
+                self.assertEqual(workspace_path(remembered=remembered), remembered)
+                with patch('scout.desktop.app.QStandardPaths.writableLocation', return_value=str(root/'app-data')):
+                    self.assertEqual(workspace_path(), root/'app-data/library')
                 self.assertEqual(workspace_path(requested=remembered, remembered=checkout), remembered)
             with patch('scout.desktop.app.Path.cwd', return_value=root):
                 self.assertEqual(workspace_path(remembered=checkout), checkout)

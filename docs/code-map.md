@@ -31,6 +31,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Resizable video window, fullscreen transitions and subtle in-play video frame | `scout/desktop/player_window.py` |
 | Timestamp play labels and custom-name preservation | `scout/desktop/labels.py` |
 | Persistent game-folder index, in-place/copy imports, per-game Scout paths, fields and conflict-safe review saves | `scout/desktop/library.py` |
+| Registry-only index backup/import, writer locking and standard user-data defaults | `scout/storage.py`, `scout/desktop/app.py`, `tests/test_library_index_import.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
 | Native theme, application identity and app icons | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/identity.py`, `scout/desktop/scout.svg`, `scout/desktop/scout.ico`, `scripts/build-icons.py` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |

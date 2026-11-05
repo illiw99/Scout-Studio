@@ -14,6 +14,11 @@ hash rejection paths; hosted workflow execution remains unverified. Signing,
 platform dependency locks, upgrade checks and the remaining phase0 measurements
 are still pending, so neither phase is marked complete.
 
+Phase2 implementation now uses Qt local application-data defaults, preserves
+explicit/remembered portable workspaces and offline paths, and offers registry
+backup/import in the Library menu. Imports preserve unsaved UI edits and use
+backups, writer locks and digest checks. Native platform validation remains open.
+
 ## Product goal
 
 Someone should be able to download Scout Studio, install it, select a game

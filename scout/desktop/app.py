@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QLibraryInfo, QSettings, QThreadPool, QTimer, Qt, QUrl, QEvent
+from PySide6.QtCore import QLibraryInfo, QSettings, QStandardPaths, QThreadPool, QTimer, Qt, QUrl, QEvent
 from PySide6.QtGui import QDesktopServices, QIcon, QTextCursor, QShortcut, QKeySequence, QCursor
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -35,7 +35,9 @@ from .identity import application_icon_path, configure_windows_app_id
 
 def match_list_text(row):
     """Give empty and unavailable folders clear, distinct library subtitles."""
-    if not row.get('available', True):
+    if row.get('indexed_only'):
+        detail = 'Open to check footage'
+    elif not row.get('available', True):
         detail = 'Folder unavailable'
     elif not row['files']:
         detail = 'No videos in this folder'
@@ -173,6 +175,10 @@ class Studio(QMainWindow):
         self.statusBar().showMessage('Import a game folder to use its videos in place. Right-click a match for actions.')
 
     def build_ui(self):
+        library_menu = self.menuBar().addMenu('Library')
+        library_menu.addAction('Reveal library folder', self.reveal_library)
+        library_menu.addAction('Back up library index…', self.backup_library_index)
+        library_menu.addAction('Import library index…', self.import_library_index)
         shell = QWidget()
         self.setCentralWidget(shell)
         outer = QHBoxLayout(shell)
@@ -588,6 +594,67 @@ class Studio(QMainWindow):
     def show_error(self, message):
         QMessageBox.warning(self, 'Scout needs your attention', message)
 
+    def reveal_library(self):
+        if not self.root.is_dir():
+            self.show_error('This library folder is unavailable. Connect its drive and try again.')
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.root)))
+
+    def backup_library_index(self):
+        from scout.storage import read_library
+        try:
+            read_library(self.root)  # Refuse to present a damaged index as a usable backup.
+            source = self.root / '.scout-library.json'
+            if not source.is_file():
+                raise ValueError('Import a game before backing up the library index.')
+            name, _ = QFileDialog.getSaveFileName(self, 'Back up library index',
+                         str(Path.home() / 'scout-library-backup.json'), 'JSON files (*.json)')
+            if name:
+                with Path(name).open('xb') as stream:
+                    stream.write(source.read_bytes())
+                self.statusBar().showMessage('Library index backed up. Game folders were not copied.', 8000)
+        except (OSError, ValueError) as exc:
+            self.show_error(str(exc))
+
+    def import_library_index(self):
+        from scout.storage import import_library_index, read_library
+        if self.importing or self.loading or self.jobs.current or self.jobs.pending or self.tasks:
+            self.show_error('Wait for Scout to finish before importing a library index.')
+            return
+        root = self.root
+        filename, _ = QFileDialog.getOpenFileName(self, 'Import library index or backup',
+                         str(Path.home()), 'JSON library index (*.json);;All files (*)')
+        if not filename:
+            return
+        # The modal dialog pumps Qt events. Never apply an import to a newly
+        # selected library or while another operation has since started.
+        if self.root != root or self.importing or self.loading or self.jobs.current or self.jobs.pending or self.tasks:
+            return
+        try:
+            reserved = {row['name']: str(root / 'media' / row['name'])
+                        for row in self.rows if not row.get('linked')}
+            count = import_library_index(Path(filename), root, reserved_games=reserved)
+            known = {row['name'] for row in self.rows}
+            # Add registry-only placeholders. Do not enumerate footage/Scout
+            # folders or reload the current editor (including unsaved edits).
+            self.match_list.blockSignals(True)
+            try:
+                for name, folder in sorted(read_library(root)['games'].items()):
+                    if name in known:
+                        continue
+                    row = dict(name=name, files=0, review=False, linked=True,
+                               indexed_only=True, folder=Path(folder))
+                    self.rows.append(row)
+                    item = QListWidgetItem(match_list_text(row))
+                    item.setData(Qt.ItemDataRole.UserRole, name)
+                    item.setToolTip(folder)
+                    self.match_list.addItem(item)
+            finally:
+                self.match_list.blockSignals(False)
+            self.statusBar().showMessage(f'{count} library entries imported. Game files kept in place.', 10000)
+        except (OSError, ValueError) as exc:
+            self.show_error(str(exc))
+
     def refresh_library(self, select=None):
         try:
             self.rows = library.matches(self.root)
@@ -681,6 +748,7 @@ class Studio(QMainWindow):
             # Refresh also reflects videos added directly to a linked folder.
             row = next((row for row in self.rows if row['name'] == name), None)
             if row is not None:
+                row.pop('indexed_only', None)
                 row.update(files=len(data['clips']), review=data['review'].exists())
                 for index in range(self.match_list.count()):
                     item = self.match_list.item(index)
@@ -1958,15 +2026,15 @@ class Studio(QMainWindow):
 
 
 def workspace_path(requested=None, remembered=None):
-    """Honor an explicit workspace or local index before remembered defaults."""
+    """Installed defaults are independent of the process working directory."""
     if requested:
         return Path(requested)
-    current = Path.cwd()
-    if (current / '.scout-library.json').is_file():
-        return current
-    if remembered and Path(remembered).is_dir():
+    if remembered:
         return Path(remembered)
-    return current if (current / 'media').is_dir() else Path.home() / 'Videos' / 'Scout'
+    base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
+    if not base:
+        raise RuntimeError('No application user-data location is available. Select an explicit --workspace.')
+    return Path(base) / 'library'
 
 
 def main(argv=None):
@@ -1994,6 +2062,8 @@ def main(argv=None):
     app.setStyleSheet(STYLE)
     settings = QSettings('Scout', 'Studio')
     root = workspace_path(args.workspace, settings.value('library'))
+    if not args.workspace and not settings.value('library'):
+        root.mkdir(parents=True, exist_ok=True)
     window = Studio(root)
     window.show()
     return app.exec()

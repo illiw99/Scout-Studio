@@ -28,7 +28,11 @@ Releases also include `release-manifest.json`, identifying the source commit,
 build run/attempt, dependency versions and installed-app checks for each installer.
 Checksums and recorded build/test identities do not replace publisher signatures.
 
-Choose a library folder when opening Studio. Footage, fields, reviews, configuration
+New installations keep the game index in Qt's standard local application-data
+directory, independently of the launch directory. Remembered libraries and
+explicit `--workspace` selections remain supported. The Library menu reveals
+the index folder, backs it up, and explicitly imports an existing index or backup.
+Footage, fields, reviews, configuration
 and exports live outside the installed application; uninstalling keeps that library.
 Installers exclude personal footage, detector weights and trained play classifiers.
 The first detection run needs network access to fetch YOLO weights. Model-based

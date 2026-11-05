@@ -18,6 +18,7 @@ from scout import groundtruth, pick, timeline
 from scout.storage import read_library as _library_index, write_library as _save_linked_games
 from scout.storage import validate_name as _validate_name
 from scout.storage import STATE_DIR_NAMES, is_state_path, state_directory
+from scout.storage import index_digest
 
 
 def linked_games(root: Path) -> dict[str, str]:
@@ -151,6 +152,7 @@ def import_folder(root: Path, folder: Path) -> str:
     _validate_name(name)
     if not folder.is_dir():
         raise ValueError('The game folder is unavailable. Connect its drive and try again.')
+    expected_index = index_digest(root)
     games = linked_games(root)
     if name in games:
         if Path(games[name]) == folder:
@@ -173,7 +175,7 @@ def import_folder(root: Path, folder: Path) -> str:
     removed = set(_library_index(root)['removed_legacy'])
     if same_legacy:
         removed.discard(name)
-    _save_linked_games(root, games, removed)
+    _save_linked_games(root, games, removed, expected_digest=expected_index)
     return name
 
 
@@ -216,6 +218,7 @@ def configuration(root: Path, name: str) -> Config:
 
 def remove_match(root: Path, name: str) -> None:
     """Hide a match without moving or deleting footage or review resources."""
+    expected_index = index_digest(root)
     games = linked_games(root)
     if name in games:
         folder = Path(games[name])
@@ -224,7 +227,7 @@ def remove_match(root: Path, name: str) -> None:
         if legacy.resolve() == folder.resolve():
             removed.add(name)
         del games[name]
-        _save_linked_games(root, games, removed)
+        _save_linked_games(root, games, removed, expected_digest=expected_index)
         return
     folder = match_path(root, name)
     if not folder.is_dir():

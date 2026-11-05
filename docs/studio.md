@@ -6,6 +6,16 @@ Scout Studio provides a native desktop window for the complete match workflow.
 Open **Scout Studio** from the Linux Applications menu after the one-time setup
 below. Day-to-day use needs no terminal or Python knowledge.
 
+The default library index lives in standard application user data. Launching
+from another directory does not select another library. Remembered workspaces
+and explicit `--workspace` arguments are preserved. Use **Library → Reveal library
+folder** or **Back up library index…** to find or copy the registry. **Import
+library index…** merges an old index or JSON backup, rejects conflicting names,
+and backs up an existing destination index before changing it. This imports
+registry entries only: it does not copy footage or inspect game `Scout/` folders.
+Imported entries say **Open to check footage** until selected; your current
+editor and unsaved changes stay intact. Offline game paths remain registered.
+
 - Click **Import game** and choose the folder containing the game's videos.
   Its folder name becomes the match name. Videos stay in place; nested camera
   folders are included. Each game can live on a different drive or in a different

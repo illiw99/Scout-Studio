@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 STATE_DIR_NAME = 'Scout'
@@ -35,7 +38,10 @@ def is_state_path(path: Path) -> bool:
 
 def read_library(root: Path) -> dict:
     """Read the persistent folder index; never silently replace a damaged index."""
-    path = root / '.scout-library.json'
+    return _read_index(root / '.scout-library.json')
+
+
+def _read_index(path: Path) -> dict:
     if not path.exists():
         return dict(version=1, games={}, removed_legacy=[])
     try:
@@ -59,10 +65,56 @@ def read_library(root: Path) -> dict:
         raise ValueError(f'Cannot read the game library index: {path}. Restore it from a backup before importing games.') from exc
 
 
-def write_library(root: Path, games: dict[str, str], removed_legacy=None) -> None:
-    if removed_legacy is None:
-        removed_legacy = read_library(root)['removed_legacy']
+def index_digest(root: Path) -> str:
+    path = root / '.scout-library.json'
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else ''
+
+
+@contextmanager
+def _index_lock(root):
+    """Cooperating index writers serialize; OS releases the lock after a crash."""
+    with (root / '.scout-library.lock').open('a+b') as stream:
+        if os.name == 'nt':
+            import msvcrt
+            if stream.seek(0, os.SEEK_END) == 0:
+                stream.write(b'0')
+                stream.flush()
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            yield
+        finally:
+            if os.name == 'nt':
+                stream.seek(0)
+                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def write_library(root: Path, games: dict[str, str], removed_legacy=None, *,
+                  expected_digest: str | None = None, backup: bool = False) -> None:
     root.mkdir(parents=True, exist_ok=True)
+    with _index_lock(root):
+        target = root / '.scout-library.json'
+        if target.is_symlink():
+            raise ValueError('The library index must be a regular file, not a link.')
+        if expected_digest is not None and index_digest(root) != expected_digest:
+            raise ValueError('The library index changed. Refresh the library and try importing again.')
+        if removed_legacy is None:
+            removed_legacy = read_library(root)['removed_legacy']
+        if backup and target.exists():
+            destination = root / f'.scout-library.before-import-{time.time_ns()}.json'
+            with destination.open('xb') as stream:
+                stream.write(target.read_bytes())
+                stream.flush()
+                os.fsync(stream.fileno())
+        _write_library(root, games, removed_legacy)
+
+
+def _write_library(root, games, removed_legacy):
     fd, temporary = tempfile.mkstemp(prefix='.scout-library-', suffix='.tmp', dir=root)
     try:
         with os.fdopen(fd, 'w') as handle:
@@ -72,6 +124,35 @@ def write_library(root: Path, games: dict[str, str], removed_legacy=None) -> Non
         os.replace(temporary, root / '.scout-library.json')
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+def import_library_index(source: Path, root: Path, reserved_games=None) -> int:
+    """Explicitly merge registry entries only; never inspect or move game data."""
+    source = Path(source).expanduser().absolute()
+    if not source.is_file() or source.is_symlink():
+        raise ValueError('Select an existing library index or its JSON backup.')
+    if source.resolve() == (root / '.scout-library.json').resolve():
+        raise ValueError('This library index is already open.')
+    source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+    incoming = _read_index(source)
+    target_hash = index_digest(root)
+    current = read_library(root)
+    games = dict(current['games'])
+    conflicts = [name for name, folder in incoming['games'].items()
+                 if name in games and Path(games[name]) != Path(folder)]
+    conflicts += [name for name, folder in incoming['games'].items()
+                  if name in (reserved_games or {}) and Path(reserved_games[name]) != Path(folder)]
+    if conflicts:
+        raise ValueError('Conflicting game names; no entries were imported: ' + ', '.join(sorted(conflicts)))
+    games.update(incoming['games'])
+    if hashlib.sha256(source.read_bytes()).hexdigest() != source_hash:
+        raise ValueError('The source library changed. Select its index again.')
+    if games == current['games']:
+        return 0
+    # Preserve target portable-library tombstones. Importing a linked entry
+    # does not require bringing another workspace's hidden legacy folders.
+    write_library(root, games, current['removed_legacy'], expected_digest=target_hash, backup=True)
+    return len(games) - len(current['games'])
 
 
 def validate_name(name: str) -> None:
