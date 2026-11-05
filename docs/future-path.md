@@ -6,6 +6,14 @@ Status: proposed roadmap, recorded 4 November 2026. This describes future work,
 not features already shipped. Follow the [installation guide](installation.md)
 and [development guide](development.md) for the current application.
 
+Progress on 5 November 2026: the [isolated detector benchmark](detector-benchmark-2026-11-05.md)
+records a partial phase0 CPU/GPU baseline. Phase1 now has candidate manifests,
+post-uninstall test evidence and a separate tag-promotion workflow that verifies
+and copies tested installer bytes. Local fixture checks cover identity, test and
+hash rejection paths; hosted workflow execution remains unverified. Signing,
+platform dependency locks, upgrade checks and the remaining phase0 measurements
+are still pending, so neither phase is marked complete.
+
 ## Product goal
 
 Someone should be able to download Scout Studio, install it, select a game
@@ -28,7 +36,7 @@ evidence that a specific requirement cannot reasonably be met with this stack.
 | Dependencies | Training, evaluation and processing libraries share the main dependency set | Separate developer/training dependencies from the shipped runtime |
 | Models | Installers exclude detector weights and trained classifiers | Deliberately publish approved, versioned model packs with an offline baseline |
 | Library | Workspace-local `.scout-library.json`; game data in `Scout/` | Store the installed app's index in standard user data; preserve portable game folders |
-| Releases | Main and tag pushes each build and test installers | Publish the exact signed installer bytes that already passed tests |
+| Releases | Main/PR candidate builds; tags verify and promote tested installers | Sign final candidates before tests; complete hosted promotion and upgrade validation |
 | Updates | Manual installer downloads | A clear download page and an in-app update flow |
 
 Existing modules and responsibilities are listed in the [code map](code-map.md).

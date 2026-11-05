@@ -1,0 +1,57 @@
+name: Promote tested installers
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish exact tested candidate
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select successful main-branch build for the tagged commit
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python scripts/release-candidate.py select --repository "$GITHUB_REPOSITORY" \
+            --commit "$(git rev-parse HEAD)" --output selection.json
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tested-installer-*
+          path: downloaded
+          run-id: ${{ steps.candidate.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify all platforms and assemble unchanged release files
+        shell: bash
+        run: |
+          python scripts/release-candidate.py assemble --directory downloaded \
+            --selection selection.json --tag "$GITHUB_REF_NAME" --output release
+      # No build, dependency installation, signing or artifact helper execution
+      # occurs here. Every byte-changing step belongs before candidate tests.
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
+            --title "Scout Studio ${GITHUB_REF_NAME#v}" \
+            --notes 'Exact tested candidate installers; build and test identities are recorded in release-manifest.json. Windows and macOS builds remain unsigned. See the installation guide for platform security prompts. SHA256SUMS.txt verifies download integrity.'

@@ -84,7 +84,7 @@ check executes native NMS; failures print their JSON report and retain a
 `smoke-process.log` diagnostic artifact.
 
 The **Standalone installers** GitHub workflow runs on pull requests, pushes to
-`main`, version tags and manual dispatch. It builds Windows x64, Ubuntu x64,
+`main` and manual dispatch. It builds Windows x64, Ubuntu x64,
 macOS Apple Silicon and macOS Intel independently using Python 3.12 and
 PyInstaller. Python, Qt, detection dependencies and FFmpeg are included; user
 data, detector weights and trained classifiers are excluded.
@@ -115,12 +115,49 @@ reproducing a CI build. Windows needs Inno Setup, Linux `dpkg-deb`, and macOS
 system installation state: run it only on disposable CI machines. It takes the
 downloaded installer artifact directory and does not need the source package.
 
-To release, update `scout.__version__` and the changelog, commit, and push a
-matching tag such as `v1.0.0`. The workflow rejects mismatched tags. After all four
-builds and installation checks pass, it creates a GitHub Release with the four
-installers and `SHA256SUMS.txt`. Branch and manual runs provide Actions artifacts
-without publishing a release. Only the release job has repository write
-permission. Tag pushes publish automatically, so push release tags deliberately.
+Candidate builds write `candidate.json`, recording the commit, repository,
+workflow run/attempt, platform, version, resolved dependency versions, build OS,
+Python version, minimum OS where established, model-pack status and signing
+status. SHA-256 and size checks bind the installer, build metadata and test
+helpers. Installed-app checks verify that candidate before installation. A
+`test-result.json` binds the candidate and smoke report only after the test
+command completes installation, exercise and uninstall successfully. Tested
+candidate artifacts are retained for 90 days (subject to repository retention
+limits); raw build artifacts are retained for 30 days.
+
+To release, update `scout.__version__` and the changelog, merge/push that commit
+to `main`, and wait for its complete **Standalone installers** run to succeed.
+Then deliberately push the matching tag, for example `v1.0.0`, pointing to that
+**same commit**. The separate **Promote tested installers** workflow reads GitHub
+run/job/artifact metadata and selects the newest successful push-to-main build
+for that exact commit and repository. PR and manual-dispatch builds cannot be
+promoted. Manual runs remain useful for build diagnostics.
+
+Promotion requires successful build, manifest, actual installed-app test,
+evidence-recording and upload steps on all four platforms in the selected run's
+current attempt. Re-run **all jobs** when retrying a candidate: a partial rerun
+does not establish a complete current-attempt release. If the main build is still
+running, retry the failed promotion after it completes. Reruns replace that
+run's old candidate artifacts; run-attempt checks reject mixed evidence.
+Expired candidates must be rebuilt and retested before promotion; the tag
+workflow never rebuilds.
+
+The promotion job executes its verifier from the tagged source checkout and
+treats downloaded artifact helpers as data. It checks all candidate identities,
+installer/helper hashes, smoke checks, test-evidence bindings and tag/version
+agreement before assembling output. It copies the unchanged installers and
+rechecks their hashes, then publishes those four files, `SHA256SUMS.txt` and
+`release-manifest.json`. Existing output directories are rejected. There are no
+build, dependency-installation or signing steps in promotion. Only that job has
+repository write permission; creating a tag still publishes automatically when
+verification succeeds. Do not push release tags without authorization.
+
+Local promotion logic is checked with temporary fake installers and reports in
+`tests/test_release_candidate.py`; those checks do not install anything or call
+GitHub. Real hosted workflow, installation and release execution must still be
+verified on GitHub. Dependency versions are recorded, not locked; pinned
+platform dependency sets and upgrade tests remain roadmap work. The Windows
+minimum supported desktop OS is not yet established and is recorded as null.
 
 Windows code signing and Apple Developer signing/notarization are not configured.
 Add those credentials and signing steps before distributing to environments that

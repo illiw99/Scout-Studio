@@ -36,6 +36,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
 | Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |
 | Standalone installer builds, disk-image retries, install checks and tag releases | `packaging/`, `scripts/build-installers.py`, `scripts/test-installer.py`, `tests/test_installer_build.py`, `.github/workflows/installers.yml` |
+| Candidate manifests, installed-test evidence and promotion without rebuilding | `scripts/release-candidate.py`, `tests/test_release_candidate.py`, `.github/workflows/promote-installers.yml` |
 | Frozen GUI/CLI dispatch and installed app/media smoke test | `scout/desktop/bundle.py`, `tests/test_bundle.py` |
 | User installation, Studio and CLI guides | `docs/installation.md`, `docs/studio.md`, `docs/cli.md` |
 | Development, validation and contribution conventions | `docs/development.md`, `CONTRIBUTING.md` |

@@ -5,7 +5,8 @@
 ## Standalone installers
 
 Download an installer from [GitHub Releases](https://github.com/illiw99/Scout-Studio/releases).
-Installers appear after a version tag completes all build and installation checks.
+Installers appear after a version tag promotes the exact files from a successful
+main-branch build and installation-test run; tags do not rebuild installers.
 Python, the native Qt GUI, detection dependencies and FFmpeg are bundled.
 
 | Platform | Download | Install |
@@ -22,6 +23,10 @@ an installer you obtained from this repository's release and whose SHA-256 match
 installation and playback; it does not establish SmartScreen reputation or
 Gatekeeper approval. macOS builds target the listed GitHub runner's OS generation;
 older macOS versions are not verified.
+
+Releases also include `release-manifest.json`, identifying the source commit,
+build run/attempt, dependency versions and installed-app checks for each installer.
+Checksums and recorded build/test identities do not replace publisher signatures.
 
 Choose a library folder when opening Studio. Footage, fields, reviews, configuration
 and exports live outside the installed application; uninstalling keeps that library.

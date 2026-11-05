@@ -4,7 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -76,12 +75,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: choco install innosetup --no-progress -y
-      - name: Check release tag matches application version
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
-        run: |
-          version="$(python scripts/build-installers.py --version-only)"
-          test "$GITHUB_REF_NAME" = "v$version"
       - name: Run source regression tests
         if: runner.os == 'Linux'
         env:
@@ -95,19 +88,29 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_installer_build.py' -v
       - name: Build native installer
         run: python scripts/build-installers.py
+      - name: Create candidate manifest
+        shell: bash
+        env:
+          CANDIDATE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          python scripts/release-candidate.py create --directory dist/installers \
+            --platform "$CANDIDATE_PLATFORM" --repository "$GITHUB_REPOSITORY" \
+            --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Save disk image diagnostics
         if: always() && runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: dmg-build-${{ matrix.platform }}
+          overwrite: true
           path: build/installer/dmg-logs/*.log
           if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: installer-${{ matrix.platform }}
+          overwrite: true
           path: dist/installers/*
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
           compression-level: 0
 
   install-test:
@@ -137,49 +140,45 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xauth libasound2 libpulse0
+      - name: Verify downloaded candidate before installing
+        shell: bash
+        env:
+          CANDIDATE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          python downloaded/release-candidate.py verify --directory downloaded \
+            --platform "$CANDIDATE_PLATFORM" --repository "$GITHUB_REPOSITORY" \
+            --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Install, exercise and uninstall (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a python downloaded/test-installer.py downloaded
       - name: Install, exercise and uninstall (Windows/macOS)
         if: runner.os != 'Linux'
         run: python downloaded/test-installer.py downloaded
+      - name: Record successful installed-candidate checks
+        shell: bash
+        env:
+          CANDIDATE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          python downloaded/release-candidate.py record-test --directory downloaded \
+            --platform "$CANDIDATE_PLATFORM" --repository "$GITHUB_REPOSITORY" \
+            --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+      - name: Upload tested candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: tested-installer-${{ matrix.platform }}
+          overwrite: true
+          path: downloaded/*
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
 
       - name: Save install smoke diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: install-test-${{ matrix.platform }}
+          overwrite: true
           path: |
             downloaded/smoke-report.json
             downloaded/*.log
           if-no-files-found: ignore
-
-  release:
-    name: Publish tested installers
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build, install-test]
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: installer-*
-          path: downloaded
-      - name: Assemble release files and checksums
-        shell: bash
-        run: |
-          mkdir release
-          find downloaded -type f \( -name '*.exe' -o -name '*.deb' -o -name '*.dmg' \) -exec cp {} release/ \;
-          test "$(find release -type f | wc -l)" -eq 4
-          cd release
-          sha256sum *.exe *.deb *.dmg > SHA256SUMS.txt
-      - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
-            --title "Scout Studio ${GITHUB_REF_NAME#v}" \
-            --notes 'Standalone native installers. Windows and macOS builds are unsigned; see the installation guide for platform security prompts. SHA256SUMS.txt verifies download integrity.'

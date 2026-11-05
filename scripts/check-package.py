@@ -40,6 +40,7 @@ def source_files(root: Path) -> list[Path]:
                      and (path.suffix in suffixes or path.name == 'py.typed'))
     paths.extend(root / name for name in (
         '.codex/config.toml', '.github/workflows/tests.yml', '.github/workflows/installers.yml',
+        '.github/workflows/promote-installers.yml',
     ))
     paths.extend(sorted((root / '.codex/agents').glob('*.toml')))
     return [path for path in paths if path.is_file()]
@@ -68,7 +69,8 @@ def validate_members(names: list[str], *, wheel: bool) -> None:
         else:
             allowed = (path.parts[0] in SOURCE_SUFFIXES or path.parts[0] in ROOT_FILES
                        or name in {'PKG-INFO', 'setup.cfg', '.codex/config.toml',
-                                   '.github/workflows/tests.yml', '.github/workflows/installers.yml'}
+                                   '.github/workflows/tests.yml', '.github/workflows/installers.yml',
+                                   '.github/workflows/promote-installers.yml'}
                        or (path.parts[:2] == ('.codex', 'agents') and path.suffix == '.toml')
                        or path.parts[0].endswith('.egg-info'))
         if path.parts[0] in SOURCE_SUFFIXES:
@@ -120,6 +122,7 @@ def check(root: Path = ROOT) -> None:
             assert {'LICENSE', 'README.md', 'scripts/check-package.py',
                     'tests/test_packaging.py', 'packaging/launcher.py',
                     'packaging/scout-studio.spec', '.github/workflows/installers.yml', 'scout/py.typed',
+                    '.github/workflows/promote-installers.yml', 'scripts/release-candidate.py',
                     'scout/desktop/scout.svg', 'scout/desktop/scout.ico'} <= set(names)
             # Extract only validated regular files, with no links or traversal.
             for member, name in zip(members, names):
