@@ -140,6 +140,30 @@ class ModelPackTests(unittest.TestCase):
             finally:
                 os.chdir(previous_cwd)
 
+    @unittest.skipUnless(importlib.util.find_spec('openvino'), 'OpenVINO extra required')
+    def test_openvino_xml_bin_pack_is_probed_and_bin_damage_rejected(self):
+        import openvino as ov
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _, _, inputs, manifest = fixture(root)
+            graph = ov.Core().read_model(inputs / 'detector.onnx')
+            ov.save_model(graph, inputs / 'detector.xml', compress_to_fp16=False)
+            (inputs / 'detector.onnx').unlink()
+            manifest['backend'] = 'openvino'
+            manifest['files'] = {p.name: dict(size=p.stat().st_size, sha256=sha(p)) for p in inputs.iterdir()}
+            approval = root / 'approval-ov.json'
+            approval.write_text(json.dumps(manifest))
+            archive = root / 'openvino.zip'
+            digest = build(approval, inputs, archive)
+            store = ModelStore(root / 'store')
+            selected = store.install(archive, digest)
+            store.activate(selected)
+            self.assertEqual(store.apply(Config(), 'active').detector_backend, 'openvino')
+            binary = store.folder(selected) / 'detector.bin'
+            binary.write_bytes(b'corrupt')
+            with self.assertRaisesRegex(ValueError, 'integrity'):
+                store.apply(Config(), 'active')
+
     def test_model_pack_cli_does_not_load_game_configuration(self):
         from scout.cli import main
         with tempfile.TemporaryDirectory() as directory, patch('scout.cli._load', side_effect=AssertionError('game config read')):
