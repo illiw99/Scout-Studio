@@ -6,7 +6,7 @@
 
 Download an installer from [GitHub Releases](https://github.com/illiw99/Scout-Studio/releases).
 Installers appear after a version tag completes all build and installation checks.
-Python, the native Qt GUI, CPU detection dependencies and FFmpeg are bundled.
+Python, the native Qt GUI, detection dependencies and FFmpeg are bundled.
 
 | Platform | Download | Install |
 | --- | --- | --- |
@@ -31,8 +31,14 @@ play detection needs your library's configured `model_path`; without a trained
 classifier, set `"segmenter": "rules"` in the library's `scout.json`. Existing
 review libraries can be edited and exported without a classifier.
 
-Standalone builds use CPU PyTorch on Windows/Linux and the bundled FFmpeg on all
-platforms. For CUDA inference or a custom system FFmpeg, use the Python installation
+New Windows builds bundle CUDA 12.8-capable PyTorch: detection automatically uses
+a supported NVIDIA GPU with a compatible driver, otherwise CPU. Earlier Windows
+releases bundled CPU-only PyTorch and cannot use CUDA inference. AMD and Intel
+GPUs are not selected by the current PyTorch backend. Linux installers use CPU
+PyTorch; all installers bundle FFmpeg. CUDA inference and video decoding are
+separate capabilities. A CUDA-capable detector does not enable FFmpeg GPU decoding.
+See [detector performance](detection-performance.md) for faster model candidates.
+For a custom system FFmpeg or Linux CUDA inference, use the Python installation
 below. Remove the Linux package with `sudo apt remove scout-studio`, use Windows
 Installed apps, or move the macOS application to Trash.
 

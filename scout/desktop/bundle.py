@@ -90,6 +90,9 @@ def _exercise(root, checks):
     from sklearn.ensemble import RandomForestClassifier
     import matplotlib.pyplot as plt
     import numpy as np
+    if sys.platform == 'win32' and getattr(sys, 'frozen', False):
+        assert torch.version.cuda is not None, 'Windows bundle lost CUDA support'
+        checks['cuda_build'] = torch.version.cuda
     assert torch.ones(2).sum().item() == 2
     assert nms(torch.tensor([[0., 0., 2., 2.], [0., 0., 2., 2.]]),
                torch.tensor([.9, .8]), .5).tolist() == [0]

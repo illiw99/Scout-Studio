@@ -1,5 +1,7 @@
 """Precision configuration stays compatible across supported detector versions."""
 import json
+import contextlib
+import io
 from pathlib import Path
 import sys
 import tempfile
@@ -8,13 +10,44 @@ import unittest
 from unittest.mock import patch
 
 from scout.config import Config
-from scout.detect import _precision_kwargs
+from scout.detect import _precision_kwargs, _resolve_device
 from scout.detect import _cache_key
 from scout.media import MediaInfo
 from scout.timeline import Clip
 
 
 class PrecisionTests(unittest.TestCase):
+    def test_auto_device_uses_available_cuda_and_preserves_explicit_choice(self):
+        torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=lambda: True))
+        with patch.dict(sys.modules, {'torch': torch}):
+            self.assertEqual(_resolve_device(Config()), 0)
+            self.assertEqual(_resolve_device(Config(device='cpu')), 'cpu')
+            self.assertEqual(_resolve_device(Config(device='cuda:1')), 'cuda:1')
+
+    def test_auto_cpu_explains_build_or_device_unavailability(self):
+        for version, message in ((None, 'build has no CUDA support'),
+                                 ('12.8', 'no usable NVIDIA CUDA device/driver')):
+            torch = types.SimpleNamespace(
+                cuda=types.SimpleNamespace(is_available=lambda: False),
+                version=types.SimpleNamespace(cuda=version))
+            with self.subTest(cuda=version), patch.dict(sys.modules, {'torch': torch}):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(_resolve_device(Config(), progress=True), 'cpu')
+                self.assertIn(message, output.getvalue())
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    _resolve_device(Config())
+                self.assertEqual(output.getvalue(), '')
+
+    def test_cuda_probe_failure_preserves_cpu_fallback(self):
+        def unavailable():
+            raise RuntimeError('driver probe failed')
+        torch = types.SimpleNamespace(cuda=types.SimpleNamespace(is_available=unavailable))
+        with patch.dict(sys.modules, {'torch': torch}), contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(_resolve_device(Config(), progress=True), 'cpu')
+        self.assertIn('driver probe failed', output.getvalue())
+
     def backend(self, supported):
         cfg = types.ModuleType('ultralytics.cfg')
         cfg.DEFAULT_CFG_DICT = {'quantize': None} if supported else {'half': False}

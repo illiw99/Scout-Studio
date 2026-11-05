@@ -106,14 +106,20 @@ def field_mask(cfg: Config, clip: Clip, ref: np.ndarray | None = None,
     return field.build_for(cfg, frames, ref, polygon)
 
 
-def _resolve_device(cfg: Config) -> str | int:
+def _resolve_device(cfg: Config, progress: bool = False) -> str | int:
     if cfg.device != "auto":
         return cfg.device
     try:
         import torch
-        return 0 if torch.cuda.is_available() else "cpu"
-    except Exception:
-        return "cpu"
+        if torch.cuda.is_available():
+            return 0
+        reason = ("this PyTorch build has no CUDA support" if torch.version.cuda is None
+                  else "no usable NVIDIA CUDA device/driver was found")
+    except Exception as exc:
+        reason = f"CUDA availability check failed: {exc}"
+    if progress:
+        print(f"  detector: using CPU ({reason})", flush=True)
+    return "cpu"
 
 
 def _precision_kwargs(cfg: Config, device) -> dict:
@@ -138,8 +144,12 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
 
     from ultralytics import YOLO
     model = model or YOLO(cfg.model)
-    device = _resolve_device(cfg)
+    device = _resolve_device(cfg, progress=progress)
     kw = _precision_kwargs(cfg, device)
+    if progress:
+        label = f"cuda:{device}" if isinstance(device, int) else str(device)
+        print(f"  detector: {cfg.model}, device={label}, imgsz={cfg.imgsz}, "
+              f"batch={cfg.batch}", flush=True)
 
     w, h = clip.info.width, clip.info.height
     n_expected = int(clip.info.duration * cfg.sample_fps)
