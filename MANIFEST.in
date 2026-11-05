@@ -7,7 +7,7 @@ recursive-include scout *.py *.svg *.ico py.typed
 recursive-include docs *.md
 recursive-include tests *.py
 recursive-include scripts *.py *.sh
-recursive-include packaging *.py *.spec *.iss *.txt
+recursive-include packaging *.py *.spec *.iss *.txt *.md
 include .codex/config.toml
 recursive-include .codex/agents *.toml
 include .github/workflows/tests.yml

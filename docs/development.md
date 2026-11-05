@@ -155,8 +155,12 @@ verification succeeds. Do not push release tags without authorization.
 Local promotion logic is checked with temporary fake installers and reports in
 `tests/test_release_candidate.py`; those checks do not install anything or call
 GitHub. Real hosted workflow, installation and release execution must still be
-verified on GitHub. Dependency versions are recorded, not locked; pinned
-platform dependency sets and upgrade tests remain roadmap work. The Windows
+verified on GitHub. Candidate builds now install full transitive, hash-pinned
+platform sets from `packaging/locks/` into fresh Python3.12 virtual environments;
+application installation disables dependency resolution and build isolation.
+Headless OpenCV is restored from its hashed pin after removing the overlapping
+Qt distribution. See [lock regeneration](../packaging/locks/README.md).
+Upgrade tests remain roadmap work. The Windows
 minimum supported desktop OS is not yet established and is recorded as null.
 
 Windows code signing and Apple Developer signing/notarization are not configured.

@@ -19,6 +19,12 @@ explicit/remembered portable workspaces and offline paths, and offers registry
 backup/import in the Library menu. Imports preserve unsaved UI edits and use
 backups, writer locks and digest checks. Native platform validation remains open.
 
+Phase1 dependency snapshots now cover all four Python3.12 targets with exact
+transitive versions and wheel hashes, including CPU/CUDA and Intel macOS
+constraints. Target-aware regeneration was independently repeated. CI installs
+them into fresh isolated environments and rejects drift; native builds and
+upgrade execution still need hosted validation.
+
 ## Product goal
 
 Someone should be able to download Scout Studio, install it, select a game
