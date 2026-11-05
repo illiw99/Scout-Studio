@@ -125,6 +125,36 @@ Nano models are attractive for speed but require a stronger quality assessment.
 The temporary polygon's normalized vertices are `(0, .535), (.61, .52),
 (1, .80), (0, 1)`, using the same 1920×1080 frame dimensions for every model.
 
+## Resolution follow-up: 1280, 1024 and 960
+
+The same eight isolated frames were measured again with PyTorch FP32 CPU batch
+one and three warm timed passes. This is a separate measurement run, so its 1280
+timings differ slightly from the larger matrix above. No production settings or
+saved fields were changed. Matching uses the same temporary polygon and greedy
+one-to-one IoU ≥0.5 procedure, comparing each model against **its own** 1280 output.
+
+| Model | Input size | ms/frame | Field boxes matched / same model at 1280 | Reference coverage |
+| --- | ---: | ---: | ---: | ---: |
+| YOLO11m | 1280 | 330.3 | 121 / 121 | 100% by definition |
+| YOLO11m | 1024 | 242.5 | 104 / 121 | 86.0% |
+| YOLO11m | 960 | 203.8 | 90 / 121 | 74.4% |
+| YOLO11s | 1280 | 127.8 | 129 / 129 | 100% by definition |
+| YOLO11s | 1024 | 94.4 | 98 / 129 | 76.0% |
+| YOLO11s | 960 | 86.3 | 91 / 129 | 70.5% |
+
+The actual rectangular tensors are 736×1280, 576×1024 and 544×960. Reducing input
+size saves substantial CPU work but changes the distant-player detections.
+Side-by-side overlays of the fourth frame were visually inspected: at 960,
+**both models lose a clearly visible isolated player** to the left of the main
+group that they detect at 1280. Boxes within the crowded group also change.
+This is a concrete visual regression, beyond simple changes in box count.
+
+The percentages remain detector agreement, not labeled accuracy; some unmatched
+boxes may reflect changed localization or confidence rather than lost people.
+There are no held-out play intervals or manual correction-effort measurements.
+The result supports retaining 1280 as the quality baseline while evaluating
+other optimizations. It does not establish that 1280 is optimal for every camera.
+
 ## Reproduction
 
 Use [scripts/benchmark-detectors.py](../scripts/benchmark-detectors.py) with an
