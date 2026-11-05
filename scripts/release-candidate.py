@@ -115,7 +115,7 @@ def create(directory, target, identity):
                   build_os=platform.platform(), python=platform.python_version(),
                   dependencies=sorted({(dist.metadata['Name'], dist.version)
                                        for dist in metadata.distributions() if dist.metadata['Name']}),
-                  model_packs=[], signing=info.get('signing', 'not-configured'))
+                  model_packs=[], runtime_profile=info.get('runtime_profile', 'reference'), signing=info.get('signing', 'not-configured'))
     write_new(directory / 'candidate.json', result)
     return result
 
@@ -144,6 +144,9 @@ def verify(directory, target, identity):
             and info.get('platform') == system
             and str(info.get('architecture', '')).lower().replace('amd64', 'x86_64') == arch,
             'Candidate build metadata mismatch')
+    require(info.get('runtime_profile', 'reference') in ('reference', 'inference')
+            and manifest.get('runtime_profile', 'reference') == info.get('runtime_profile', 'reference'),
+            'Candidate runtime profile mismatch')
     baseline = info.get('upgrade_baseline')
     if baseline:
         previous = read_json(directory / 'upgrade-baseline.json')
@@ -162,6 +165,9 @@ def smoke(directory, version):
     checks = report.get('checks')
     require(isinstance(checks, dict) and all(checks.get(key) is True for key in SMOKE_CHECKS),
             'Installed-app smoke checks are incomplete')
+    info = read_json(directory / 'build-info.json')
+    if 'runtime_profile' in info:
+        require(checks.get('runtime_profile') == info['runtime_profile'], 'Installed runtime profile mismatch')
     return report
 
 

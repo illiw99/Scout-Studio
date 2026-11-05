@@ -359,7 +359,10 @@ def main() -> None:
             report = artifacts / ('previous-smoke-report.json' if legacy else 'smoke-report.json')
             exercise_installed_app(executable, report, version, work, env, legacy=legacy)
             if not legacy:
-                assert json.loads(report.read_text())['checks'].get('preservation_paths') is True
+                current_checks = json.loads(report.read_text())['checks']
+                assert current_checks.get('preservation_paths') is True
+                if 'runtime_profile' in info:
+                    assert current_checks.get('runtime_profile') == info['runtime_profile']
         try:
             baseline = args.previous or (artifacts / 'upgrade-baseline.json' if info.get('upgrade_baseline') else None)
             if baseline:

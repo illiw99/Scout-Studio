@@ -87,23 +87,30 @@ def _exercise(root, checks):
     os.environ['MPLCONFIGDIR'] = str(root / 'matplotlib')
     os.environ['MPLBACKEND'] = 'Agg'
     import cv2
-    import torch
-    from torchvision.ops import nms
-    from ultralytics import YOLO  # noqa: F401 - verify lazy detector packaging
-    from sklearn.ensemble import RandomForestClassifier
-    import matplotlib.pyplot as plt
     import numpy as np
-    if sys.platform == 'win32' and getattr(sys, 'frozen', False):
-        assert torch.version.cuda is not None, 'Windows bundle lost CUDA support'
-        checks['cuda_build'] = torch.version.cuda
-    assert torch.ones(2).sum().item() == 2
-    assert nms(torch.tensor([[0., 0., 2., 2.], [0., 0., 2., 2.]]),
-               torch.tensor([.9, .8]), .5).tolist() == [0]
+    from scout.runtime import profile
+    checks['runtime_profile'] = profile()
+    if profile() == 'reference':
+        import torch
+        from torchvision.ops import nms
+        from ultralytics import YOLO  # noqa: F401 - verify lazy detector packaging
+        from sklearn.ensemble import RandomForestClassifier
+        import matplotlib.pyplot as plt
+        if sys.platform == 'win32' and getattr(sys, 'frozen', False):
+            assert torch.version.cuda is not None, 'Windows bundle lost CUDA support'
+            checks['cuda_build'] = torch.version.cuda
+        assert torch.ones(2).sum().item() == 2
+        assert nms(torch.tensor([[0., 0., 2., 2.], [0., 0., 2., 2.]]),
+                   torch.tensor([.9, .8]), .5).tolist() == [0]
+        RandomForestClassifier(n_estimators=1, random_state=1).fit([[0], [1]], [0, 1]).predict([[0]])
+        figure = plt.figure()
+        figure.savefig(root / 'plot.png')
+        plt.close(figure)
+    else:
+        import importlib.util
+        for package in ('torch', 'torchvision', 'ultralytics', 'sklearn', 'matplotlib'):
+            assert importlib.util.find_spec(package) is None, f'Inference bundle includes {package}'
     assert cv2.resize(np.zeros((4, 4, 3), dtype=np.uint8), (2, 2)).shape == (2, 2, 3)
-    RandomForestClassifier(n_estimators=1, random_state=1).fit([[0], [1]], [0, 1]).predict([[0]])
-    figure = plt.figure()
-    figure.savefig(root / 'plot.png')
-    plt.close(figure)
     checks['dependencies'] = True
 
     import imageio_ffmpeg

@@ -264,6 +264,24 @@ class UpgradePromotionTests(unittest.TestCase):
     directory = CandidateTests.directory
     assemble = CandidateTests.assemble
 
+    def test_declared_inference_profile_requires_matching_installed_smoke(self):
+        directory = self.directory()
+        for name in ('candidate.json', 'release-candidate.py', 'test-result.json'):
+            (directory / name).unlink()
+        path = directory / 'build-info.json'
+        info = json.loads(path.read_text())
+        info['runtime_profile'] = 'inference'
+        path.write_text(json.dumps(info))
+        with patch.object(self.tool.metadata, 'distributions', return_value=[]):
+            self.tool.create(directory, 'linux-x86_64', self.identity)
+        with self.assertRaisesRegex(ValueError, 'runtime profile'):
+            self.tool.record_test(directory, 'linux-x86_64', self.identity)
+        report_path = directory / 'smoke-report.json'
+        report = json.loads(report_path.read_text())
+        report['checks']['runtime_profile'] = 'inference'
+        report_path.write_text(json.dumps(report))
+        self.tool.record_test(directory, 'linux-x86_64', self.identity)
+
     def test_required_upgrade_blocks_bootstrap_unless_explicitly_allowed(self):
         with self.assertRaisesRegex(ValueError, 'requires a verified'):
             self.tool.assemble(self.downloaded, self.identity, 'v1.2.3', self.root / 'release', require_upgrade=True)

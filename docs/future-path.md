@@ -37,12 +37,15 @@ Training/reference dependencies are optional extras; a fresh-process check
 blocks their imports while starting the native UI and exporting a synthetic
 clip. Frozen installed-worker smoke coverage is configured but not executed
 locally. The default standalone profile still includes reference dependencies
-for compatibility; reduced-runtime packaging follows model-pack validation.
+for compatibility. An explicit experimental inference-only build now excludes
+five heavy frameworks; its actual frozen Linux smoke and model-pack worker run
+passed. It is not the release default before quality/offline-baseline approval.
 
 Phase4's classifier prototype exports validated numeric binary HGB trees to
 JSON and evaluates them with NumPy. Synthetic threshold/NaN probes and final
 interval comparisons match scikit-learn within `1e-12`; independently reviewed.
-Production-model and held-out-game equivalence remain required before adoption.
+The actual local classifier also passed 24968 threshold/NaN probes within
+`1.12e-16`. Held-out-game equivalence remains required before adoption.
 
 Phase4 also implements explicit FP32 ONNX/OpenVINO person inference, managed
 checked exports and backend-specific caches. The native experimental CPU profile
@@ -63,6 +66,13 @@ installer folder after work/edits are resolved; it never replaces a running app.
 Fake-network tests and independent review pass. Hosted channel and native upgrade
 validation remain outstanding. See [model packs](model-packs.md) and
 [updates](updates.md).
+
+A clean pinned Linux build and extracted frozen smoke now pass for both
+reference and experimental inference-only profiles. The latter measured 48% less
+compressed and 54% less extracted regular-file size and completed a local real-pack
+worker run. This is not installed upgrade/uninstall or Windows/macOS evidence.
+See [runtime validation](runtime-validation-2026-11-05.md) for measurements and
+remaining acceptance gates.
 
 ## Product goal
 

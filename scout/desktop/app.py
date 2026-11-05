@@ -236,8 +236,16 @@ class Studio(QMainWindow):
         self.detection_profile.addItem('Current detection settings', '')
         self.detection_profile.addItem('Installed model pack', 'active-pack')
         self.detection_profile.addItem('Faster CPU · experimental', 'cpu-fast')
+        from scout.runtime import profile
+        if profile() == 'inference':
+            cpu_item = self.detection_profile.model().item(self.detection_profile.findData('cpu-fast'))
+            cpu_item.setEnabled(False)
+            cpu_item.setToolTip('Import an inference model pack to detect without reference frameworks.')
         self.detection_profile.setToolTip('Faster CPU uses a smaller detector at1280 pixels. It may miss distant players; first use can download and export weights.')
-        self.detection_profile.setCurrentIndex(max(0,self.detection_profile.findData(self.settings.value('detectionProfile',''))))
+        selected_profile = self.settings.value('detectionProfile', 'active-pack' if profile() == 'inference' else '')
+        if profile() == 'inference' and selected_profile == 'cpu-fast':
+            selected_profile = 'active-pack'
+        self.detection_profile.setCurrentIndex(max(0, self.detection_profile.findData(selected_profile)))
         self.detection_profile.currentIndexChanged.connect(
             lambda _:self.settings.setValue('detectionProfile',self.detection_profile.currentData()))
         header.addWidget(self.detection_profile)

@@ -71,6 +71,25 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(Path(settings.fileName()), root / 'isolated.ini')
             self.assertEqual(settings.value('library'), str(root / 'library'))
 
+    @unittest.skipUnless(importlib.util.find_spec('PySide6'), 'desktop extra is not installed')
+    def test_inference_profile_uses_packs_instead_of_unavailable_checkpoint_export(self):
+        os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+        from PySide6.QtCore import QSettings
+        from PySide6.QtWidgets import QApplication
+        from scout.desktop.app import Studio
+        app = QApplication.instance() or QApplication([])
+        with tempfile.TemporaryDirectory() as directory, patch('scout.runtime.profile', return_value='inference'):
+            root = Path(directory)
+            settings = QSettings(str(root / 'isolated.ini'), QSettings.Format.IniFormat)
+            settings.setValue('detectionProfile', 'cpu-fast')
+            window = Studio(root / 'library', settings=settings)
+            try:
+                self.assertEqual(window.detection_profile.currentData(), 'active-pack')
+                item = window.detection_profile.model().item(window.detection_profile.findData('cpu-fast'))
+                self.assertFalse(item.isEnabled())
+            finally:
+                bundle._dispose_smoke_window(window, app)
+
     def test_windows_frozen_queue_uses_console_companion(self):
         with patch.object(bundle.sys, 'frozen', True, create=True), \
              patch.object(bundle.sys, 'platform', 'win32'), \

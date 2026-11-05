@@ -102,6 +102,8 @@ def notarize(path):
 def build() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version-only', action='store_true')
+    parser.add_argument('--runtime-profile', choices=('reference', 'inference'), default='reference',
+                        help='inference excludes training/reference frameworks; requires an installed inference model pack')
     args = parser.parse_args()
     version = project_version()
     if args.version_only:
@@ -114,11 +116,13 @@ def build() -> None:
         raise SystemExit(f'Unsupported platform: {system}')
     if system in {'Windows', 'Linux'} and arch not in {'x86_64', 'amd64'}:
         raise SystemExit('Windows and Debian installers currently target x86-64')
-    work = ROOT / 'build/installer'
-    output = ROOT / 'dist/installers'
+    suffix = '-inference' if args.runtime_profile == 'inference' else ''
+    work = ROOT / ('build/installer' + suffix)
+    output = ROOT / ('dist/installers' + suffix)
     work.mkdir(parents=True, exist_ok=True)
     output.mkdir(parents=True, exist_ok=True)
     os.environ['SCOUT_STUDIO_BUILD_VERSION'] = version
+    os.environ['SCOUT_RUNTIME_PROFILE'] = args.runtime_profile
     run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
         '--distpath', work / 'dist', '--workpath', work / 'pyinstaller',
         ROOT / 'packaging/scout-studio.spec')
@@ -197,7 +201,7 @@ def build() -> None:
     digest = sha256(installer)
     (output / f'{installer.name}.sha256').write_text(f'{digest}  {installer.name}\n', encoding='utf-8')
     (output / 'build-info.json').write_text(json.dumps({'version': version, 'platform': system,
-        'architecture': arch, 'installer': installer.name,
+        'architecture': arch, 'installer': installer.name, 'runtime_profile': args.runtime_profile,
         'signing': ('authenticode-verified' if system == 'Windows' else 'notarized-verified') if signed else 'not-configured'}, indent=2) + '\n', encoding='utf-8')
     shutil.copy2(ROOT / 'scripts/test-installer.py', output / 'test-installer.py')
     print(installer)

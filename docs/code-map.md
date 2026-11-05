@@ -39,6 +39,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
 | Versioned local worker jobs, progress events and verified results | `scout/worker.py`, `tests/test_worker.py`, `tests/test_runtime_boundary.py` |
 | Native theme, application identity and app icons | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/identity.py`, `scout/desktop/scout.svg`, `scout/desktop/scout.ico`, `scripts/build-icons.py` |
+| Frozen runtime profile and reduced-bundle validation | `scout/runtime.py`, `tests/test_runtime_profile.py`, `docs/runtime-validation-2026-11-05.md` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
 | Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |
 | Standalone installer builds, disk-image retries, install checks and tag releases | `packaging/`, `scripts/build-installers.py`, `scripts/test-installer.py`, `tests/test_installer_build.py`, `.github/workflows/installers.yml` |

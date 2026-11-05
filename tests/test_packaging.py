@@ -77,7 +77,10 @@ class NativeVisionBundleTests(unittest.TestCase):
                           and any(isinstance(target, ast.Name) and target.id == 'binaries'
                                   for target in node.targets))
         binaries = eval(compile(ast.Expression(assignment.value), str(spec), 'eval'),
-                        {'collect_dynamic_libs': collect_dynamic_libs})
+                        {'collect_dynamic_libs': collect_dynamic_libs, 'reference': True})
+        reduced = eval(compile(ast.Expression(assignment.value), str(spec), 'eval'),
+                       {'collect_dynamic_libs': collect_dynamic_libs, 'reference': False})
+        self.assertEqual(reduced, [])
         operators = [(Path(source), destination) for source, destination in binaries
                      if Path(source).name.startswith('_C')]
         self.assertTrue(operators, 'TorchVision native NMS operators are absent from the bundle')
