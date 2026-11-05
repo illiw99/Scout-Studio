@@ -102,11 +102,11 @@ def validate(target: str, text: str) -> None:
         if name not in dependencies:
             raise ValueError(f"{target}: missing {name}")
     backend = TARGETS[target][1]
-    expected_options = {"--index-url https://pypi.org/simple"}
+    options = [line for line in text.splitlines() if line.startswith("--")]
+    expected_order = ["--index-url https://pypi.org/simple"]
     if backend:
-        expected_options.add(f"--extra-index-url https://download.pytorch.org/whl/{backend}")
-    options = {line for line in text.splitlines() if line.startswith("--")}
-    if options != expected_options:
+        expected_order.append(f"--extra-index-url https://download.pytorch.org/whl/{backend}")
+    if options != expected_order:
         raise ValueError(f"{target}: unexpected package index options: {options}")
     if ("openvino" in dependencies) != bool(backend):
         raise ValueError(f"{target}: OpenVINO must be Windows/Linux only")
@@ -139,9 +139,11 @@ def generate(target: str, uv: str, directory: Path) -> str:
     text = destination.read_text(encoding="utf-8")
     # uv's torch-backend index is scoped internally and not emitted by compile.
     # pip needs this source to retrieve the exact local-version Torch pins.
+    text = "\n".join(line for line in text.splitlines() if not line.startswith(("--index-url", "--extra-index-url")))
+    options = "--index-url https://pypi.org/simple\n"
     if backend:
-        text = f"--extra-index-url https://download.pytorch.org/whl/{backend}\n" + text
-    text = header(target) + text
+        options += f"--extra-index-url https://download.pytorch.org/whl/{backend}\n"
+    text = header(target) + options + text + "\n"
     validate(target, text)
     return text
 

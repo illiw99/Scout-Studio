@@ -54,6 +54,24 @@ class DependencyLocksTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             locks.validate(target, text + "\n--extra-index-url https://example.invalid/simple\n")
 
+    @unittest.skipUnless(importlib.util.find_spec('pip'), 'pip parser integration requires pip')
+    def test_pip_retains_primary_and_torch_indexes_when_parsing_locks(self):
+        from pip._internal.commands import create_command
+        # Parsing requirements is read-only and does not resolve/download wheels.
+        for target, backend in (('linux-x86_64-cpu', 'cpu'), ('windows-x86_64-cu128', 'cu128')):
+            with self.subTest(target=target), patch.dict(locks.os.environ, {}, clear=True):
+                command = create_command('install')
+                options, arguments = command.parse_args(['-r', str(locks.LOCKS / (target + '.txt'))])
+                with command._build_session(options) as session:
+                    finder = command._build_package_finder(options=options, session=session)
+                    command.get_requirements(arguments, options, finder, session)
+                    self.assertEqual(finder.search_scope.index_urls,
+                        ['https://pypi.org/simple', 'https://download.pytorch.org/whl/' + backend])
+            text = (locks.LOCKS / (target + '.txt')).read_text()
+            primary, extra = '--index-url https://pypi.org/simple', '--extra-index-url https://download.pytorch.org/whl/' + backend
+            with self.assertRaisesRegex(ValueError, 'index options'):
+                locks.validate(target, text.replace(primary + '\n' + extra, extra + '\n' + primary))
+
     def test_installer_refuses_global_or_wrong_platform_environment(self):
         with patch.object(locks.sys, 'prefix', locks.sys.base_prefix):
             with self.assertRaisesRegex(ValueError, 'new Python 3.12 virtual environment'):
