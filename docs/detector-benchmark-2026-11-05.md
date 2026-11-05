@@ -90,9 +90,9 @@ simple ratio applied to 0.3× should be treated as a Windows guarantee.
 **CPU recommendation:** evaluate YOLO11s at 1280 and batch one first. It achieves
 1.29× here with the existing PyTorch runtime, and 1.49× with OpenVINO. YOLO26s
 does not deliver a material detection-stage advantage on this short excerpt.
-OpenVINO remains an experimental benchmark path, not a bundled automatic Scout
-backend. Its integration needs safe reusable exports, backend-specific detection
-cache identity and native installer checks. Keep the current default until
+Scout now has an explicit experimental CPU profile, reusable checked exports
+and backend-specific caches. Native installer execution still needs validation;
+OpenVINO is not selected automatically by the default detection settings. Keep the current default until
 quality is measured across more scenes and corrected plays.
 
 ## Detection agreement

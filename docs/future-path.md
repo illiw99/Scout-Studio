@@ -2,8 +2,8 @@
 
 [README](../README.md) · [Development](development.md) · [Code map](code-map.md)
 
-Status: proposed roadmap, recorded 4 November 2026. This describes future work,
-not features already shipped. Follow the [installation guide](installation.md)
+Status: roadmap recorded 4 November 2026, with local implementation progress
+updated 5 November. Implemented features below are not yet a published release. Follow the [installation guide](installation.md)
 and [development guide](development.md) for the current application.
 
 Progress on 5 November 2026: the [isolated detector benchmark](detector-benchmark-2026-11-05.md)
@@ -81,13 +81,13 @@ evidence that a specific requirement cannot reasonably be met with this stack.
 | --- | --- | --- |
 | Interface | Python/PySide6 native desktop | Retain native Qt; separate presentation from processing |
 | Processing | Version1 local job/event/result interface adapting existing CLI commands | Validate installed worker and preserve compatibility |
-| Detection | Ultralytics/PyTorch person detection, features and tracking | Evaluate an inference-only runtime with equivalent results |
-| Play classifier | scikit-learn histogram gradient boosting, saved with pickle | Evaluate an exported inference model; retain Python training tools |
+| Detection | Reference PyTorch plus explicit ONNX/OpenVINO CPU inference | Evaluate an inference-only runtime with equivalent results |
+| Play classifier | Reference HGB pickle plus validated numeric JSON inference | Evaluate an exported inference model; retain Python training tools |
 | Dependencies | Base media/review runtime, optional reference/training/inference extras | Reduce standalone contents after model-pack validation |
-| Models | Installers exclude detector weights and trained classifiers | Deliberately publish approved, versioned model packs with an offline baseline |
-| Library | Workspace-local `.scout-library.json`; game data in `Scout/` | Store the installed app's index in standard user data; preserve portable game folders |
+| Models | Allowlisted versioned inference packs; no approved baseline yet | Deliberately publish approved, versioned model packs with an offline baseline |
+| Library | Standard user-data index with portable overrides; game data in `Scout/` | Store the installed app's index in standard user data; preserve portable game folders |
 | Releases | Main/PR candidate builds; tags verify and promote tested installers | Sign final candidates before tests; complete hosted promotion and upgrade validation |
-| Updates | Manual installer downloads | A clear download page and an in-app update flow |
+| Updates | Manual release check and verified installer staging | A clear download page and an in-app update flow |
 
 Existing modules and responsibilities are listed in the [code map](code-map.md).
 These boundaries can evolve without changing the `scout` import package or
