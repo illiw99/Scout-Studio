@@ -74,7 +74,16 @@ class JobQueue(QObject):
         match, command = self.current
         # Review protection is also checked by the CLI, including queued jobs.
         cfg = configuration(self.root, match)
-        job = new_job(command, self.root / 'scout.json', self.options.get(self.current))
+        options = dict(self.options.get(self.current) or {})
+        profile = options.pop('detection_profile', None)
+        if profile:
+            if command != 'run' or profile != 'cpu-fast':
+                raise ValueError('Unknown detection profile')
+            from scout.inference import version
+            cfg.model,cfg.imgsz,cfg.device,cfg.batch = 'yolo11s.pt',1280,'cpu',1
+            cfg.detector_backend = ('openvino' if version('openvino')!='unavailable' else
+                                    'onnx' if version('onnxruntime')!='unavailable' else 'torch')
+        job = new_job(command, self.root / 'scout.json', options)
         # Use bundled model paths in a fresh library through an explicit config.
         config_dir = cfg.path(cfg.out_dir) / 'desktop'
         config_dir.mkdir(parents=True, exist_ok=True)

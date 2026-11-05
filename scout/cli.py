@@ -18,6 +18,40 @@ from .media import grab_frame
 CONFIG_FILE = "scout.json"
 
 
+def cmd_export_classifier(args):
+    cfg = _load(args)
+    source, destination = cfg.path(args.input), cfg.path(args.out)
+    if source.suffix.lower() != '.pkl' or destination.suffix.lower() != '.json':
+        raise ValueError('Export a trusted .pkl classifier to a new .json file')
+    if destination.exists() or destination.is_symlink():
+        raise ValueError('Classifier export destination already exists; choose a new file')
+    classifier,names = model.load(source,cfg)
+    model.save(destination,classifier,names,cfg)
+    print(f'  exported numeric classifier -> {destination}')
+    return 0
+
+
+def cmd_export_detector(args):
+    import shutil
+    import tempfile
+    from .inference import prepare_graph
+    cfg = _load(args)
+    cfg.device = 'cpu'
+    destination = cfg.path(args.out)
+    if destination.exists() or destination.is_symlink():
+        raise ValueError('Detector export destination already exists; choose a new directory')
+    graph = prepare_graph(cfg)
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.detector-export-',dir=destination.parent) as directory:
+        stage=Path(directory)/'publish';stage.mkdir()
+        shutil.copyfile(graph,stage/('detector.onnx' if cfg.detector_backend=='onnx' else 'detector.xml'))
+        if cfg.detector_backend=='openvino':
+            shutil.copyfile(graph.with_suffix('.bin'),stage/'detector.bin')
+        stage.rename(destination)
+    print(f'  exported CPU detector -> {destination}')
+    return 0
+
+
 def _load(args) -> Config:
     cfg = Config.load(args.config)
     saved_match = cfg.match
@@ -41,7 +75,7 @@ def _load(args) -> Config:
                 models[key] = str(candidate.resolve())
                 break
     for key in ("media_dir", "source_dir", "out_dir", "sample_fps", "model", "cut_mode",
-                "imgsz", "segmenter"):
+                "imgsz", "segmenter", "detector_backend", "device"):
         v = getattr(args, key, None)
         if v is not None:
             setattr(cfg, key, v)
@@ -89,6 +123,10 @@ def _load(args) -> Config:
     for name in ("sample_fps", "imgsz", "batch", "clip_workers"):
         if getattr(cfg, name) <= 0:
             raise ValueError(f"{name} must be positive")
+    if type(cfg.inference_threads) is not int or cfg.inference_threads < 0:
+        raise ValueError('inference_threads must not be negative')
+    from .inference import signature
+    signature(cfg)
     if args.limit is not None and args.limit <= 0:
         raise ValueError("--limit must be positive")
     return cfg
@@ -524,8 +562,7 @@ def cmd_detect(args) -> int:
     print(f"  model {cfg.model} @ {cfg.imgsz}px, sampling {cfg.sample_fps} fps")
     for c in clips:
         if detect.load_cached(cfg, c) is None and detector is None:
-            from ultralytics import YOLO
-            detector = YOLO(cfg.model)
+            detector = detect.create_detector(cfg)
         detect.run(cfg, c, model=detector)
     return 0
 
@@ -734,7 +771,21 @@ def main(argv=None) -> int:
     s.add_argument("--at", help="comma separated seconds, e.g. 640,760,903")
     s.set_defaults(fn=cmd_preview)
 
+    s = sub.add_parser('export-classifier',help='export a trusted pickle classifier to numeric JSON')
+    s.add_argument('--input',required=True)
+    s.add_argument('--out',required=True)
+    s.set_defaults(fn=cmd_export_classifier)
+
+    s = sub.add_parser('export-detector',help='export detector weights into a new CPU inference directory')
+    s.add_argument('--model',required=True)
+    s.add_argument('--detector-backend',required=True,choices=['onnx','openvino'])
+    s.add_argument('--out',required=True)
+    s.add_argument('--device',default='cpu',choices=['cpu'])
+    s.set_defaults(fn=cmd_export_detector)
+
     s = sub.add_parser("detect", help="run person detection (cached)")
+    s.add_argument('--detector-backend', choices=['torch','onnx','openvino'])
+    s.add_argument('--device', help='auto, cpu or a reference CUDA device')
     s.add_argument("--model"); s.add_argument("--sample-fps", dest="sample_fps", type=float)
     s.add_argument("--imgsz", type=int, help="inference resolution (default 1280)")
     s.set_defaults(fn=cmd_detect)
@@ -758,6 +809,8 @@ def main(argv=None) -> int:
     s.set_defaults(fn=cmd_shotcut)
 
     s = sub.add_parser("run", help="detect plays and write review.mlt only")
+    s.add_argument('--detector-backend', choices=['torch','onnx','openvino'])
+    s.add_argument('--device', help='auto, cpu or a reference CUDA device')
     s.add_argument("--force", action="store_true")
     s.add_argument("--model")
     s.add_argument("--sample-fps", type=float)

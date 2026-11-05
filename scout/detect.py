@@ -52,7 +52,9 @@ def _precision_name(cfg: Config) -> str:
 
 def _cache_key(cfg: Config, clip: Clip) -> str:
     st = clip.path.stat()
-    weights = Path(cfg.model)
+    from .inference import signature, source_path
+    backend = signature(cfg)
+    weights = source_path(cfg) if backend else Path(cfg.model)
     weight_stat = weights.stat() if weights.is_file() else None
     settings = {
         "version": 2, "file": str(clip.path.resolve()), "size": st.st_size,
@@ -62,6 +64,14 @@ def _cache_key(cfg: Config, clip: Clip) -> str:
         "imgsz": cfg.imgsz, "conf": cfg.conf,
         "fps": cfg.sample_fps,
     }
+    if backend:
+        settings['backend'] = backend
+        if weights.is_dir():
+            settings['graph_files'] = [(p.name,str(p.resolve()),p.stat().st_size,p.stat().st_mtime_ns)
+                                      for p in sorted(weights.iterdir()) if p.suffix in {'.xml','.bin'}]
+        elif weights.suffix=='.xml' and weights.with_suffix('.bin').is_file():
+            binary=weights.with_suffix('.bin')
+            settings['graph_weights']=(str(binary.resolve()),binary.stat().st_size,binary.stat().st_mtime_ns)
     precision = _precision_name(cfg)
     # Keep all existing default fp16 caches valid. Only explicit nondefault
     # precision needs a new identity; aliases share the same cache.
@@ -107,6 +117,10 @@ def field_mask(cfg: Config, clip: Clip, ref: np.ndarray | None = None,
 
 
 def _resolve_device(cfg: Config, progress: bool = False) -> str | int:
+    if cfg.detector_backend != 'torch':
+        if cfg.device not in {'auto','cpu'}:
+            raise ValueError('Exported CPU backends require device=auto or cpu')
+        return 'cpu'
     if cfg.device != "auto":
         return cfg.device
     try:
@@ -134,6 +148,18 @@ def _precision_kwargs(cfg: Config, device) -> dict:
     return {"half": precision in ("fp16", 16)}
 
 
+def create_detector(cfg):
+    from .inference import signature, CpuDetector
+    signature(cfg)
+    if cfg.detector_backend != 'torch':
+        return CpuDetector(cfg)
+    try:
+        from ultralytics import YOLO
+    except ModuleNotFoundError as exc:
+        raise RuntimeError('The reference detector requires scout-flag[reference]') from exc
+    return YOLO(cfg.model)
+
+
 def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detections:
     """Detect people across one clip, using the cache when it is valid."""
     cached = load_cached(cfg, clip)
@@ -142,28 +168,49 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
             print(f"  {clip.path.name}: cached ({len(cached)} frames)")
         return cached
 
-    from ultralytics import YOLO
-    model = model or YOLO(cfg.model)
+    model = model or create_detector(cfg)
+    if hasattr(model,'validate_source'):
+        model.validate_source(cfg)
+    active_cache = cache_path(cfg,clip) if cfg.detector_backend!='torch' else None
     device = _resolve_device(cfg, progress=progress)
     kw = _precision_kwargs(cfg, device)
+    batch_size = 1 if cfg.detector_backend != 'torch' else cfg.batch
     if progress:
         label = f"cuda:{device}" if isinstance(device, int) else str(device)
         print(f"  detector: {cfg.model}, device={label}, imgsz={cfg.imgsz}, "
-              f"batch={cfg.batch}", flush=True)
+              f"backend={cfg.detector_backend}, batch={batch_size}", flush=True)
 
     w, h = clip.info.width, clip.info.height
     n_expected = int(clip.info.duration * cfg.sample_fps)
 
-    q: queue.Queue = queue.Queue(maxsize=cfg.batch * 4)
+    q: queue.Queue = queue.Queue(maxsize=batch_size * 4)
+    stop = threading.Event()
+
+    def send(item):
+        while not stop.is_set():
+            try:
+                q.put(item, timeout=.2)
+                return True
+            except queue.Full:
+                pass
+        return False
 
     def decode():
+        frames = None
         try:
-            for fr in iter_frames(clip.path, cfg.sample_fps, w, h):
-                q.put(fr)
+            frames = iter_frames(clip.path, cfg.sample_fps, w, h,cancel_event=stop)
+            for fr in frames:
+                if not send(fr):
+                    break
         except Exception as exc:                       # surface to consumer
-            q.put(exc)
+            send(exc)
         finally:
-            q.put(None)
+            try:
+                if hasattr(frames,'close'):
+                    frames.close()
+            except Exception as exc:
+                send(exc)
+            send(None)
 
     th = threading.Thread(target=decode, daemon=True)
     th.start()
@@ -180,8 +227,12 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
         res = model.predict(batch, imgsz=cfg.imgsz, conf=cfg.conf, classes=[0],
                             device=device, verbose=False, **kw)
         for r in res:
-            b = r.boxes.xyxy.cpu().numpy().astype(np.float32)
-            c = r.boxes.conf.cpu().numpy().astype(np.float32)
+            from .inference import Prediction
+            if isinstance(r, Prediction):
+                b,c = r.boxes.astype(np.float32),r.conf.astype(np.float32)
+            else:
+                b = r.boxes.xyxy.cpu().numpy().astype(np.float32)
+                c = r.boxes.conf.cpu().numpy().astype(np.float32)
             boxes.append(b)
             confs.append(c)
             offsets.append(offsets[-1] + len(b))
@@ -189,23 +240,26 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
             n += 1
         batch.clear()
 
-    while True:
-        item = q.get()
-        if item is None:
-            break
-        if isinstance(item, Exception):
-            raise item
-        batch.append(cv2.cvtColor(item, cv2.COLOR_RGB2BGR))
-        if len(batch) >= cfg.batch:
-            flush()
-            if progress and n % (cfg.batch * 25) == 0:
-                el = time.time() - t0
-                rate = (n / cfg.sample_fps) / el if el else 0
-                pct = 100 * n / max(n_expected, 1)
-                print(f"\r  {clip.path.name}: {pct:5.1f}%  {rate:4.1f}x realtime",
-                      end="", flush=True)
-    flush()
-    th.join(timeout=5)
+    try:
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            if isinstance(item, Exception):
+                raise item
+            batch.append(cv2.cvtColor(item, cv2.COLOR_RGB2BGR))
+            if len(batch) >= batch_size:
+                flush()
+                if progress and n % (batch_size * 25) == 0:
+                    el = time.time() - t0
+                    rate = (n / cfg.sample_fps) / el if el else 0
+                    pct = 100 * n / max(n_expected, 1)
+                    print(f"\r  {clip.path.name}: {pct:5.1f}%  {rate:4.1f}x realtime",
+                          end="", flush=True)
+        flush()
+    finally:
+        stop.set()
+        th.join(timeout=5)
 
     det = Detections(
         np.array(times, np.float64),
@@ -215,7 +269,11 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
         (h, w),
     )
     import tempfile
-    target = cache_path(cfg, clip)
+    if hasattr(model,'validate_source'):
+        model.validate_source(cfg)
+    if active_cache is not None and cache_path(cfg,clip)!=active_cache:
+        raise RuntimeError('Detector/source settings changed during processing; no detections were saved')
+    target = active_cache or cache_path(cfg, clip)
     with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".npz", delete=False) as fh:
         temporary = Path(fh.name)
     try:

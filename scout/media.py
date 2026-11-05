@@ -12,6 +12,7 @@ import datetime as _dt
 import re
 import shutil
 import subprocess
+import threading
 import sys
 import warnings
 from dataclasses import dataclass
@@ -135,6 +136,7 @@ def iter_frames(
     gray: bool = False,
     *,
     hwaccel: bool = True,
+    cancel_event=None,
 ) -> Iterator[np.ndarray]:
     """Stream frames using CUDA when available, otherwise CPU.
 
@@ -142,17 +144,22 @@ def iter_frames(
     callers see one continuous sequence. Set ``hwaccel=False`` to force CPU.
     """
     delivered = 0
+    if cancel_event is not None and cancel_event.is_set():
+        return
     if hwaccel and ffmpeg_has_cuda():
         try:
             for frame in _iter_frames(path, fps, width, height, start, duration, gray,
-                                      cuda=True):
+                                      cuda=True, cancel_event=cancel_event):
                 delivered += 1
                 yield frame
             return
         except RuntimeError as exc:
+            if cancel_event is not None and cancel_event.is_set():
+                return
             warnings.warn(f"CUDA decode failed for {Path(path).name}; using CPU. {exc}",
                           RuntimeWarning, stacklevel=2)
-    for i, frame in enumerate(_iter_frames(path, fps, width, height, start, duration, gray)):
+    for i, frame in enumerate(_iter_frames(path, fps, width, height, start, duration, gray,
+                                          cancel_event=cancel_event)):
         if i >= delivered:
             yield frame
 
@@ -167,6 +174,7 @@ def _iter_frames(
     gray: bool = False,
     *,
     cuda: bool = False,
+    cancel_event=None,
 ) -> Iterator[np.ndarray]:
     """Yield decoded frames as numpy arrays, resampled to ``fps``.
 
@@ -192,6 +200,19 @@ def _iter_frames(
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, bufsize=nbytes * 8,
                             **background_options())
+    finished = threading.Event()
+    watcher = None
+    if cancel_event is not None:
+        def cancel_decoder():
+            while not finished.wait(.05):
+                if cancel_event.is_set():
+                    try:
+                        proc.kill()  # Interrupt a blocking stdout.read, including on Windows.
+                    except ProcessLookupError:
+                        pass
+                    return
+        watcher = threading.Thread(target=cancel_decoder,daemon=True)
+        watcher.start()
     drained = False
     try:
         while True:
@@ -207,18 +228,25 @@ def _iter_frames(
             arr = np.frombuffer(bytes(buf), np.uint8)
             yield arr.reshape((height, width) if gray else (height, width, chans))
     finally:
-        if not drained:
-            # Caller stopped early: kill ffmpeg rather than let it spew
-            # broken-pipe errors while it tries to finish writing.
-            proc.kill()
-        if proc.stdout:
-            proc.stdout.close()
-        err = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
-        if proc.stderr:
-            proc.stderr.close()
-        rc = proc.wait()
-        if drained and rc not in (0, None) and err.strip():
-            raise RuntimeError(f"ffmpeg decode failed for {Path(path).name}:\n{err[-1500:]}")
+        try:
+            if not drained:
+                # Caller stopped early: kill rather than leave a blocked pipe.
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+            if proc.stdout:
+                proc.stdout.close()
+            err = proc.stderr.read().decode("utf-8", "replace") if proc.stderr else ""
+            if proc.stderr:
+                proc.stderr.close()
+            rc = proc.wait()
+            if drained and rc not in (0, None) and err.strip() and not (cancel_event is not None and cancel_event.is_set()):
+                raise RuntimeError(f"ffmpeg decode failed for {Path(path).name}:\n{err[-1500:]}")
+        finally:
+            finished.set()
+            if watcher is not None:
+                watcher.join(timeout=1)
 
 
 def grab_frame(path: str | Path, t: float, width: int = 0, height: int = 0) -> np.ndarray:

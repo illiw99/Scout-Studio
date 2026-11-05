@@ -50,10 +50,47 @@ performance on the i7-11700F and RTX 3060 Ti.
 For CPU optimization while keeping the same weights, evaluate FP32 ONNX Runtime
 and, on Intel hardware, OpenVINO. Ultralytics documents
 [OpenVINO acceleration](https://docs.ultralytics.com/integrations/openvino/),
-but neither runtime is currently bundled by Scout's standard installer.
-They need explicit dependency, packaging, batch-shape and cache validation before
-being offered as automatic backends. INT8 additionally needs representative
+New candidate builds include exported CPU runtimes, exposed through explicit
+`detector_backend` settings; ONNX works across the installer targets and OpenVINO
+is included on Windows/Linux. They remain experimental choices with separate
+cache identities, not automatic replacements for the reference engine.
+INT8 additionally needs representative
 calibration and accuracy checks.
+
+## Explicit CPU runtime and native profile
+
+Keep the current model and1280 baseline when checking an engine replacement:
+
+```bash
+scout --source-dir '/path/to/Game' detect --model yolo11m.pt \
+  --detector-backend openvino --device cpu
+```
+
+Use `onnx` for ONNX Runtime. Python installations need `[inference]`, plus
+`[reference]` for one-time conversion from trusted `.pt` checkpoints. First
+conversion copies weights to private staging, verifies the source identity,
+and publishes a hashed export in application user cache. It never writes an
+export beside original weights. Verified warm exports need no Torch import.
+An already exported graph runs without reference/training frameworks. Models
+must have ordinary COCO detection output (80 classes, person at class0);
+NMS-free, quantized and other task layouts are not supported by this prototype.
+The CPU engines use FP32 and batch one. `inference_threads=0` lets the engine
+choose; a positive value limits its inference threads.
+
+The native header offers **Faster CPU · experimental**, choosing YOLO11s at1280,
+CPU batch one, and OpenVINO when installed (otherwise ONNX Runtime or reference
+PyTorch). This explicit profile can miss distant players; it is not an accuracy
+equivalence claim. It changes the unique queued job snapshot only, preserving
+the saved library configuration and current editor. **Current detection settings**
+retains the existing model, backend and automatic CUDA/CPU selection.
+
+The new adapters matched the reference's detection counts and order on all eight
+copied frames for YOLO11s and YOLO11m. Maximum coordinate difference was
+0.000244 pixels; confidence difference stayed below0.000003. Both ONNX and
+OpenVINO graph inference ran without importing Torch. Synthetic checks cover
+RGB/letterboxing, best-class filtering, NMS, coordinates, offsets/cache reload,
+changed weights/aliases and failure cleanup of a read-blocked decoder. Broader
+held-out-game and final-play equivalence remain unverified.
 
 ## Safe comparison procedure
 

@@ -55,6 +55,9 @@ class Config:
     conf: float = 0.25
     device: str = "auto"          # "auto" | "cuda" | "cuda:0" | "cpu"
     batch: int = 8
+    detector_backend: str = 'torch'  # reference | explicit onnx/openvino CPU engine
+    inference_threads: int = 0     # 0 lets the exported CPU runtime choose
+    inference_cache_dir: str | None = None  # defaults to application user cache
     half: bool = True             # legacy switch; False disables fp16
     quantize: str | int | None = "fp16"  # fp16/fp32, 16/32, or None
 

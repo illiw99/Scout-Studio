@@ -226,6 +226,14 @@ class Studio(QMainWindow):
         self.subtitle = label('Import a game folder, draw the field, and find every play.', 'muted')
         titles.addWidget(self.subtitle)
         header.addLayout(titles, 1)
+        self.detection_profile = QComboBox()
+        self.detection_profile.addItem('Current detection settings', '')
+        self.detection_profile.addItem('Faster CPU · experimental', 'cpu-fast')
+        self.detection_profile.setToolTip('Faster CPU uses a smaller detector at1280 pixels. It may miss distant players; first use can download and export weights.')
+        self.detection_profile.setCurrentIndex(max(0,self.detection_profile.findData(self.settings.value('detectionProfile',''))))
+        self.detection_profile.currentIndexChanged.connect(
+            lambda _:self.settings.setValue('detectionProfile',self.detection_profile.currentData()))
+        header.addWidget(self.detection_profile)
         self.run_button = button('Find plays  →', self.enqueue_run, True)
         self.run_button.setEnabled(False)
         header.addWidget(self.run_button)
@@ -1188,7 +1196,8 @@ class Studio(QMainWindow):
 
     def enqueue_run(self):
         if self.data and self.data['clips'] and all(self.data['regions']) and not self.data['review'].exists() and self.resolve_dirty():
-            self.enqueue('run')
+            profile = self.detection_profile.currentData()
+            self.enqueue('run', {'detection_profile':profile} if profile else None)
 
     def export_clips(self):
         if not self.data or not self.data['review'].exists() or self.match_busy() or self.importing or not self.resolve_marker_dirty():

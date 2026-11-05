@@ -8,9 +8,40 @@ import tempfile
 import time
 import types
 import unittest
+import codecs
+from unittest.mock import Mock, patch
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 HAS_QT = importlib.util.find_spec('PySide6') is not None
+
+
+@unittest.skipUnless(HAS_QT, 'desktop extra required')
+class JobProfileTests(unittest.TestCase):
+    def test_cpu_profile_only_changes_unique_job_snapshot(self):
+        from scout.desktop.jobs import JobQueue
+        from scout.config import Config
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            original=root/'scout.json';original.write_text('{"model":"custom.pt"}')
+            state=types.SimpleNamespace(root=root,current=('Game','run'),
+                options={('Game','run'):{'detection_profile':'cpu-fast'}},process=Mock(),
+                decoder=codecs.getincrementaldecoder('utf-8')('replace'),output=Mock(),changed=Mock())
+            cfg=Config(source_dir=str(root/'Game'),out_dir=str(root/'processed'))
+            try:
+                with patch('scout.desktop.jobs.configuration',return_value=cfg), \
+                     patch('scout.inference.version',return_value='available'):
+                    JobQueue.launch(state)
+                self.assertEqual(original.read_text(),'{"model":"custom.pt"}')
+                descriptor=next((root/'processed/desktop').glob('*.job.json'))
+                job=json.loads(descriptor.read_text())
+                snapshot=Config.load(job['config'])
+                self.assertEqual((snapshot.model,snapshot.imgsz,snapshot.device,snapshot.batch),
+                                 ('yolo11s.pt',1280,'cpu',1))
+                self.assertEqual(snapshot.detector_backend,'openvino')
+                self.assertEqual(job['options'],{})
+                self.assertEqual(state.process.start.call_args.args[1][-1],str(descriptor))
+            finally:
+                if getattr(state,'log',None):state.log.close()
 
 
 @unittest.skipUnless(HAS_QT and sys.platform.startswith('linux'), 'Linux native process-group cancellation test')

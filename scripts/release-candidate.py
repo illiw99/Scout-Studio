@@ -27,7 +27,7 @@ PLATFORMS = {
     'macos-arm64': ('Darwin', 'arm64', '.dmg', 'macOS 15'),
     'macos-x86_64': ('Darwin', 'x86_64', '.dmg', 'macOS 15'),
 }
-SMOKE_CHECKS = ('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli', 'worker')
+SMOKE_CHECKS = ('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli', 'worker', 'inference')
 
 
 def require(condition, message):

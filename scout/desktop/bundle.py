@@ -167,6 +167,35 @@ def _exercise(root, checks):
     assert events[0]['event'] == 'started' and events[-1]['event'] == 'finished'
     checks['worker'] = True
 
+    # Small constant graph exercises the actual CPU provider, preprocessing and
+    # postprocessing without model downloads or training/football fixtures.
+    import onnx
+    from onnx import helper, TensorProto, numpy_helper
+    from scout.inference import CpuDetector
+    raw = np.zeros((1,84,1), dtype=np.float32)
+    raw[0,:4,0] = [50,50,20,20]
+    raw[0,4,0] = .9
+    graph = helper.make_model(helper.make_graph([
+        helper.make_node('Constant',[],['output0'],value=numpy_helper.from_array(raw))],
+        'installer-cpu-fixture',
+        [helper.make_tensor_value_info('images',TensorProto.FLOAT,[1,3,'height','width'])],
+        [helper.make_tensor_value_info('output0',TensorProto.FLOAT,[1,84,1])]),
+        opset_imports=[helper.make_opsetid('',17)])
+    graph.ir_version = 10
+    graph_file = root / 'fixture.onnx'
+    onnx.save(graph,str(graph_file))
+    frame = np.zeros((96,160,3),dtype=np.uint8)
+    prediction = CpuDetector(Config(model=str(graph_file),detector_backend='onnx',device='cpu',imgsz=160)).predict([frame])[0]
+    assert np.allclose(prediction.boxes, [[40,40,60,60]])
+    checks['inference'] = True
+    if sys.platform in {'win32','linux'} and getattr(sys,'frozen',False):
+        import openvino as ov
+        xml = root / 'fixture.xml'
+        ov.save_model(ov.Core().read_model(str(graph_file)),str(xml),compress_to_fp16=False)
+        exported = CpuDetector(Config(model=str(xml),detector_backend='openvino',device='cpu',imgsz=160)).predict([frame])[0]
+        assert np.allclose(exported.boxes,prediction.boxes)
+        checks['openvino'] = True
+
     from PySide6.QtCore import QLibraryInfo, QSettings
     from PySide6.QtWidgets import QApplication
     from PySide6.QtGui import QIcon

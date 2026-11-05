@@ -122,6 +122,18 @@ the standard export filenames.
 
 ## Improve the model from corrected reviews
 
+Export trusted reference weights/classifiers for the explicit CPU runtime:
+
+```bash
+scout export-detector --model yolo11m.pt --detector-backend onnx --out /new/detector-directory
+scout export-classifier --input /trusted/play.pkl --out /new/play.json
+```
+
+Destinations must be new. Detector export uses managed staging and preserves
+source weights. Classifier export validates numeric binary HGB inference and
+preserves its feature/sample-rate/temporal schema; it does not retrain or access
+reviews. Pickle input must be trusted. JSON classifiers load without scikit-learn.
+
 ```bash
 scout train \
   --mlt media/Match-01/Scout/review.mlt \

@@ -38,6 +38,13 @@ JSON and evaluates them with NumPy. Synthetic threshold/NaN probes and final
 interval comparisons match scikit-learn within `1e-12`; independently reviewed.
 Production-model and held-out-game equivalence remain required before adoption.
 
+Phase4 also implements explicit FP32 ONNX/OpenVINO person inference, managed
+checked exports and backend-specific caches. The native experimental CPU profile
+uses YOLO11s without changing saved configuration or the quality default.
+Eight copied-frame comparisons matched reference counts/order with subpixel
+differences; synthetic ORT/OpenVINO, cache and blocked-decoder checks pass.
+The default backend remains reference Torch pending broader quality validation.
+
 ## Product goal
 
 Someone should be able to download Scout Studio, install it, select a game

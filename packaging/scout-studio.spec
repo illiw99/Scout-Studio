@@ -1,5 +1,6 @@
 """Native onedir build. Run through scripts/build-installers.py."""
 import os
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -12,6 +13,9 @@ for package in ('scout', 'ultralytics', 'imageio_ffmpeg', 'matplotlib'):
     datas += collect_data_files(package, excludes=['**/*.pt', '**/*.onnx', '**/tests/**'])
 for package in ('scout-flag', 'ultralytics', 'torch', 'torchvision', 'imageio-ffmpeg'):
     datas += copy_metadata(package)
+for package in ('onnx', 'onnxruntime', 'openvino'):
+    if importlib.util.find_spec(package):
+        datas += copy_metadata(package)
 hiddenimports = ['PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
                  'PySide6.QtSvg', 'PySide6.QtTest', 'cv2', 'imageio_ffmpeg', 'matplotlib.backends.backend_agg']
 # TorchVision loads its operators with torch.ops.load_library, not a Python
@@ -20,6 +24,10 @@ hiddenimports = ['PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
 binaries = collect_dynamic_libs('torchvision', search_patterns=[
     '*.so', '*.so.*', '*.pyd', '*.dll', '*.dylib',
 ])
+for package in ('onnxruntime', 'openvino'):
+    if importlib.util.find_spec(package):
+        binaries += collect_dynamic_libs(package, search_patterns=['*.so','*.so.*','*.pyd','*.dll','*.dylib'])
+        datas += collect_data_files(package)
 # Dynamic estimator/model imports are not all visible to static analysis.
 for package in ('scout', 'ultralytics', 'sklearn'):
     hiddenimports += collect_submodules(package, filter=lambda name: '.tests' not in name)

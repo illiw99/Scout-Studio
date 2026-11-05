@@ -81,7 +81,7 @@ class InstallerValidationTests(unittest.TestCase):
 
     def test_rejects_source_execution_wrong_version_and_partial_success(self):
         validate = checker().validate_report
-        checks = dict.fromkeys(('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli', 'worker'), True)
+        checks = dict.fromkeys(('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli', 'worker', 'inference'), True)
         report = dict(ok=True, version='1.0.0', frozen=True, checks=checks)
         validate(report, '1.0.0')
         for replacement in ({'ok': False}, {'frozen': False}, {'version': '0.9.0'},
