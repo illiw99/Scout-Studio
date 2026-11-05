@@ -61,6 +61,9 @@ class Config:
     half: bool = True             # legacy switch; False disables fp16
     quantize: str | int | None = "fp16"  # fp16/fp32, 16/32, or None
 
+    model_pack: str | None = None  # explicit id@version or active
+    model_packs_dir: str | None = None
+
     # --- field region ------------------------------------------------------
     #: Polygon of the playing surface in normalised (0-1) frame coordinates.
     #: ``None`` means "estimate it from the green playing surface", which finds

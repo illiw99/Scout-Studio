@@ -179,6 +179,10 @@ class Studio(QMainWindow):
         library_menu.addAction('Reveal library folder', self.reveal_library)
         library_menu.addAction('Back up library index…', self.backup_library_index)
         library_menu.addAction('Import library index…', self.import_library_index)
+        models_menu = self.menuBar().addMenu('Models')
+        models_menu.addAction('Import model pack…', self.import_model_pack)
+        models_menu.addAction('Activate installed pack…', self.activate_model_pack)
+        models_menu.addAction('Roll back model pack', self.rollback_model_pack)
         shell = QWidget()
         self.setCentralWidget(shell)
         outer = QHBoxLayout(shell)
@@ -228,6 +232,7 @@ class Studio(QMainWindow):
         header.addLayout(titles, 1)
         self.detection_profile = QComboBox()
         self.detection_profile.addItem('Current detection settings', '')
+        self.detection_profile.addItem('Installed model pack', 'active-pack')
         self.detection_profile.addItem('Faster CPU · experimental', 'cpu-fast')
         self.detection_profile.setToolTip('Faster CPU uses a smaller detector at1280 pixels. It may miss distant players; first use can download and export weights.')
         self.detection_profile.setCurrentIndex(max(0,self.detection_profile.findData(self.settings.value('detectionProfile',''))))
@@ -601,6 +606,38 @@ class Studio(QMainWindow):
 
     def show_error(self, message):
         QMessageBox.warning(self, 'Scout needs your attention', message)
+
+    def model_store(self):
+        from scout.model_packs import ModelStore
+        base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
+        return ModelStore(Path(base) / 'model-packs')
+
+    def import_model_pack(self):
+        filename, _ = QFileDialog.getOpenFileName(self, 'Import inference model pack', '', 'Model pack (*.zip)')
+        if filename:
+            store = self.model_store()
+            self.task(lambda _: store.install(filename),
+                      lambda selected: QMessageBox.information(self, 'Model pack imported',
+                          f'{selected} is installed. Activate it from the Models menu when ready.'))
+
+    def activate_model_pack(self):
+        store = self.model_store()
+        def choose(packs):
+            if not packs:
+                self.show_error('Import a model pack first.')
+                return
+            selected, ok = QInputDialog.getItem(self, 'Activate model pack', 'Pack:', packs, 0, False)
+            if ok:
+                self.task(lambda _: store.activate(selected), self.model_pack_changed)
+        self.task(lambda _: store.list(), choose)
+
+    def rollback_model_pack(self):
+        store = self.model_store()
+        self.task(lambda _: store.rollback(), self.model_pack_changed)
+
+    def model_pack_changed(self, selected):
+        self.detection_profile.setCurrentIndex(self.detection_profile.findData('active-pack'))
+        self.statusBar().showMessage(f'Active model pack: {selected}. Used by new detection jobs.')
 
     def reveal_library(self):
         if not self.root.is_dir():

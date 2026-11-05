@@ -71,9 +71,9 @@ def index_digest(root: Path) -> str:
 
 
 @contextmanager
-def _index_lock(root):
+def data_lock(root, name):
     """Cooperating index writers serialize; OS releases the lock after a crash."""
-    with (root / '.scout-library.lock').open('a+b') as stream:
+    with (root / name).open('a+b') as stream:
         if os.name == 'nt':
             import msvcrt
             if stream.seek(0, os.SEEK_END) == 0:
@@ -94,10 +94,14 @@ def _index_lock(root):
                 fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
+def _index_lock(root):
+    return data_lock(root, '.scout-library.lock')
+
+
 def write_library(root: Path, games: dict[str, str], removed_legacy=None, *,
                   expected_digest: str | None = None, backup: bool = False) -> None:
     root.mkdir(parents=True, exist_ok=True)
-    with _index_lock(root):
+    with data_lock(root, '.scout-library.lock'):
         target = root / '.scout-library.json'
         if target.is_symlink():
             raise ValueError('The library index must be a regular file, not a link.')

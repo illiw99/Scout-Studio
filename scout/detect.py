@@ -64,6 +64,8 @@ def _cache_key(cfg: Config, clip: Clip) -> str:
         "imgsz": cfg.imgsz, "conf": cfg.conf,
         "fps": cfg.sample_fps,
     }
+    if cfg.model_pack:
+        settings['model_pack'] = cfg.model_pack
     if backend:
         settings['backend'] = backend
         if weights.is_dir():
@@ -279,7 +281,8 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
     try:
         np.savez_compressed(temporary, times=det.times, offsets=det.offsets,
                             boxes=det.boxes, conf=det.conf,
-                            mask_shape=np.array(det.mask_shape))
+                            mask_shape=np.array(det.mask_shape),
+                            model_pack=np.array(cfg.model_pack or ''))
         temporary.replace(target)
     finally:
         temporary.unlink(missing_ok=True)

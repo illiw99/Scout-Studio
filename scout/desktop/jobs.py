@@ -77,11 +77,18 @@ class JobQueue(QObject):
         options = dict(self.options.get(self.current) or {})
         profile = options.pop('detection_profile', None)
         if profile:
-            if command != 'run' or profile != 'cpu-fast':
+            if command != 'run' or profile not in ('cpu-fast', 'active-pack'):
                 raise ValueError('Unknown detection profile')
+            cfg.model_pack = None
+            if profile == 'active-pack':
+                from PySide6.QtCore import QStandardPaths
+                cfg.model_pack = 'active'
+                cfg.model_packs_dir = str(Path(QStandardPaths.writableLocation(
+                    QStandardPaths.StandardLocation.AppLocalDataLocation)) / 'model-packs')
             from scout.inference import version
-            cfg.model,cfg.imgsz,cfg.device,cfg.batch = 'yolo11s.pt',1280,'cpu',1
-            cfg.detector_backend = ('openvino' if version('openvino')!='unavailable' else
+            if profile == 'cpu-fast':
+                cfg.model,cfg.imgsz,cfg.device,cfg.batch = 'yolo11s.pt',1280,'cpu',1
+                cfg.detector_backend = ('openvino' if version('openvino')!='unavailable' else
                                     'onnx' if version('onnxruntime')!='unavailable' else 'torch')
         job = new_job(command, self.root / 'scout.json', options)
         # Use bundled model paths in a fresh library through an explicit config.

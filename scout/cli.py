@@ -18,6 +18,27 @@ from .media import grab_frame
 CONFIG_FILE = "scout.json"
 
 
+def cmd_model_pack(args):
+    from .model_packs import ModelStore, build
+    store = ModelStore(args.store)
+    required = {'build': ('approval', 'inputs', 'out'), 'import': ('file',), 'activate': ('pack',)}
+    for name in required.get(args.action, ()):
+        if not getattr(args, name):
+            raise ValueError(f'--{name} is required for model-pack {args.action}')
+    if args.action == 'build':
+        result = build(args.approval, args.inputs, args.out)
+    elif args.action == 'import':
+        result = store.install(args.file, args.sha256)
+    elif args.action == 'activate':
+        result = store.activate(args.pack)
+    elif args.action == 'rollback':
+        result = store.rollback()
+    else:
+        result = '\n'.join(store.list())
+    print(result)
+    return 0
+
+
 def cmd_export_classifier(args):
     cfg = _load(args)
     source, destination = cfg.path(args.input), cfg.path(args.out)
@@ -120,6 +141,11 @@ def _load(args) -> Config:
             candidate = bundled / "models" / "play.pkl"
             if candidate.is_file():
                 cfg.model_path = str(candidate)
+    selection = getattr(args, 'model_pack', None) or cfg.model_pack
+    if selection and args.cmd in ('run', 'detect', 'segment', 'preview'):
+        from .model_packs import ModelStore
+        ModelStore(getattr(args, 'model_packs_dir', None) or cfg.model_packs_dir).apply(cfg, selection)
+        args.model_pack = cfg.model_pack  # pin active selection across run's repeated loads
     for name in ("sample_fps", "imgsz", "batch", "clip_workers"):
         if getattr(cfg, name) <= 0:
             raise ValueError(f"{name} must be positive")
@@ -680,6 +706,8 @@ def cmd_run(args) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="scout",
                                  description="Cut flag football footage play by play")
+    ap.add_argument('--model-pack', help='explicit installed pack: active or id@version')
+    ap.add_argument('--model-packs-dir', help='model-pack store (default: application user data)')
     ap.add_argument("--match", help="imported game name or match subdirectory under media")
     ap.add_argument("--config", default=CONFIG_FILE, help="config JSON")
     ap.add_argument("--media-dir", dest="media_dir")
@@ -691,6 +719,17 @@ def main(argv=None) -> int:
     ap.add_argument("--files", help="only files whose name contains any of these "
                                     "(comma separated), e.g. --files DJI_0039")
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser('model-pack', help='build, import, activate or roll back inference packs')
+    s.add_argument('action', choices=['build', 'import', 'list', 'activate', 'rollback'])
+    s.add_argument('--store')
+    s.add_argument('--file')
+    s.add_argument('--sha256')
+    s.add_argument('--pack')
+    s.add_argument('--approval')
+    s.add_argument('--inputs')
+    s.add_argument('--out')
+    s.set_defaults(fn=cmd_model_pack)
 
     s = sub.add_parser("scan", help="list media and the timeline")
     s.set_defaults(fn=cmd_scan)
