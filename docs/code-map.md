@@ -14,6 +14,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Background helper launch options and Windows console suppression | `scout/processes.py`, `tests/test_processes.py` |
 | YOLO detection, device choice and persistent caches | `scout/detect.py` |
 | Windows GPU availability and faster detector candidates | `docs/detection-performance.md` |
+| Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `docs/detector-benchmark-2026-11-05.md` |
 | Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py` |
 | Player tracking and motion features | `scout/track.py`, `scout/features.py` |
 | Heuristic play segmentation | `scout/segment.py` |

@@ -43,7 +43,9 @@ model together. YOLO26s is another candidate with newer Ultralytics, although it
 published CPU advantage over YOLO11s is small. Nano models trade much more
 accuracy for speed. YOLO26m does not offer a CPU speed improvement in this table.
 None of these COCO scores establishes similar recall for distant football
-players or similar play segmentation accuracy.
+players or similar play segmentation accuracy. See the
+[local nine-model comparison](detector-benchmark-2026-11-05.md) for measured
+performance on the i7-11700F and RTX 3060 Ti.
 
 For CPU optimization while keeping the same weights, evaluate FP32 ONNX Runtime
 and, on Intel hardware, OpenVINO. Ultralytics documents
@@ -66,5 +68,34 @@ corrected review ranges; agreement with the existing model alone is not accuracy
 
 Do not lower the default resolution or replace the default detector based only
 on the vendor numbers. Scout's configuration documents that reducing resolution
-can lose players on the far side. No alternate weights or real footage were
-processed for this investigation, and no equivalent-quality speedup is yet measured.
+can lose players on the far side. The local comparison measures inference speed
+and agreement on a short scene; equivalent play-detection quality remains unverified.
+
+## Reproducing local measurements
+
+`scripts/benchmark-detectors.py` compares YOLOv8, YOLO11 and YOLO26 nano/small/medium
+models on the same copied PNG frames. Use a separate virtual environment containing
+Ultralytics, PyTorch, OpenCV, NumPy, ONNX, ONNX Runtime and OpenVINO. The script
+does not install missing packages. Choose only installed runtimes with `--runtimes`.
+
+Copy representative frames into an isolated directory; the default batch-eight
+measurements need a frame count divisible by eight, with matching image dimensions.
+Pass a new or empty output directory:
+
+```bash
+python scripts/benchmark-detectors.py \
+  --frames /tmp/scout-comparison/frames \
+  --workspace /tmp/scout-comparison/results --gpu
+```
+
+Omit `--gpu` for a CPU-only system. Model downloads, export graphs, package settings,
+logs and incremental `report.json` stay inside the output directory. Each model,
+runtime and batch combination runs in a fresh subprocess. Timings include
+preprocessing, inference and NMS after a full warmup pass. The median covers three
+passes over every frame; GPU timing synchronizes CUDA. CPU exports use FP32
+weights and dynamic rectangular inputs; GPU PyTorch uses FP16. The report records
+actual input shapes and predictions, so exported model agreement can be checked.
+
+These are inference measurements. Decoding, cold startup and initial export are
+excluded; the inferred realtime factor assumes five sampled frames per video
+second. Unlabeled frame agreement does not establish accuracy or play recall.
