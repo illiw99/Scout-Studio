@@ -179,6 +179,8 @@ class Studio(QMainWindow):
         library_menu.addAction('Reveal library folder', self.reveal_library)
         library_menu.addAction('Back up library index…', self.backup_library_index)
         library_menu.addAction('Import library index…', self.import_library_index)
+        help_menu = self.menuBar().addMenu('Help')
+        help_menu.addAction('Check for updates…', self.check_for_updates)
         models_menu = self.menuBar().addMenu('Models')
         models_menu.addAction('Import model pack…', self.import_model_pack)
         models_menu.addAction('Activate installed pack…', self.activate_model_pack)
@@ -606,6 +608,51 @@ class Studio(QMainWindow):
 
     def show_error(self, message):
         QMessageBox.warning(self, 'Scout needs your attention', message)
+
+    def check_for_updates(self):
+        from scout import __version__
+        from scout.updates import check
+        def found(update):
+            if update is None:
+                QMessageBox.information(self, 'Scout Studio', 'You are using the latest available version.')
+                return
+            answer = QMessageBox.question(self, 'Scout Studio update',
+                f'Version {update.version} is available ({update.size / 1024**2:.0f} MB). '
+                'Download the verified installer? Your games and reviews stay in place.')
+            if answer == QMessageBox.StandardButton.Yes:
+                from scout.updates import stage
+                from threading import Event
+                from PySide6.QtWidgets import QProgressDialog
+                cancelled = Event()
+                dialog = QProgressDialog('Downloading Scout Studio…', 'Cancel', 0, 100, self)
+                dialog.setWindowModality(Qt.WindowModality.WindowModal)
+                dialog.canceled.connect(cancelled.set)
+                root = Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation)) / 'updates'
+                def ready(path):
+                    dialog.close()
+                    self.open_staged_update(path)
+                def failed(message):
+                    dialog.close()
+                    self.show_error(message)
+                task = self.task(lambda progress: stage(update, root, cancelled=cancelled, progress=progress), ready, failed)
+                task.signals.progress.connect(dialog.setValue)
+                dialog.show()
+        self.task(lambda _: check(__version__), found)
+
+    def open_staged_update(self, path):
+        if self.jobs.current or self.jobs.pending or self.tasks or self.importing or self.loading:
+            QMessageBox.information(self, 'Update downloaded',
+                f'The installer is ready at {path}. Finish current work before installing it.')
+            return
+        if not self.resolve_dirty():
+            return
+        answer = QMessageBox.question(self, 'Install Scout Studio update',
+            'Reveal the downloaded installer folder and close Scout Studio? Run the installer after the app closes.')
+        if answer == QMessageBox.StandardButton.Yes:
+            if QDesktopServices.openUrl(QUrl.fromLocalFile(str(path.parent))):
+                self.close()
+            else:
+                self.show_error(f'Open the downloaded installer manually: {path}')
 
     def model_store(self):
         from scout.model_packs import ModelStore

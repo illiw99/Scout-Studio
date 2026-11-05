@@ -10,8 +10,8 @@ Progress on 5 November 2026: the [isolated detector benchmark](detector-benchmar
 records a partial phase0 CPU/GPU baseline. Phase1 now has candidate manifests,
 post-uninstall test evidence and a separate tag-promotion workflow that verifies
 and copies tested installer bytes. Local fixture checks cover identity, test and
-hash rejection paths; hosted workflow execution remains unverified. Signing,
-platform dependency locks, upgrade checks and the remaining phase0 measurements
+hash rejection paths; hosted workflow execution remains unverified. Signing credential provisioning,
+upgrade checks and the remaining phase0 measurements
 are still pending, so neither phase is marked complete.
 
 Phase2 implementation now uses Qt local application-data defaults, preserves
@@ -44,6 +44,19 @@ uses YOLO11s without changing saved configuration or the quality default.
 Eight copied-frame comparisons matched reference counts/order with subpixel
 differences; synthetic ORT/OpenVINO, cache and blocked-decoder checks pass.
 The default backend remains reference Torch pending broader quality validation.
+
+Phase5 now has allowlisted, hash-checked inference-pack builds/imports, exact
+feature/window/sampling checks, CPU probes and atomic activation/rollback. The
+native Models menu and explicit CLI selection retain prior versions. Synthetic
+pack tests and independent integrity review pass. A licensed, quality-approved
+offline baseline and publisher-authenticated model channel remain outstanding.
+
+Phase6 now has a manual native update check, release/test identity validation,
+bounded cancellable HTTPS staging and checksum verification. It reveals the
+installer folder after work/edits are resolved; it never replaces a running app.
+Fake-network tests and independent review pass. Hosted channel and native upgrade
+validation remain outstanding. See [model packs](model-packs.md) and
+[updates](updates.md).
 
 ## Product goal
 

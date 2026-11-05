@@ -16,6 +16,8 @@ when moving responsibilities; read only paths relevant to the task.
 | Explicit CPU graph runtimes, preprocessing/NMS and managed detector exports | `scout/inference.py`, `tests/test_inference.py` |
 | Windows GPU availability and faster detector candidates | `docs/detection-performance.md` |
 | Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `docs/detector-benchmark-2026-11-05.md` |
+| Immutable inference packs, compatibility checks and activation rollback | `scout/model_packs.py`, `tests/test_model_packs.py`, `docs/model-packs.md` |
+| Manual release checks and verified installer staging | `scout/updates.py`, `tests/test_updates.py`, `docs/updates.md` |
 | Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py` |
 | Player tracking and motion features | `scout/track.py`, `scout/features.py` |
 | Heuristic play segmentation | `scout/segment.py` |
