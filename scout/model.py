@@ -29,10 +29,12 @@ import numpy as np
 
 from .config import Config
 from .features import Features
+from . import model_features
 
 #: Seconds either side of a frame that the model is allowed to look.  A snap is
 #: recognised by what happens around it, not at a single instant.
-OFFSETS = (-3.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0)
+OFFSETS = model_features.DEFAULT_OFFSETS
+CONTEXT_PICKLE_FORMAT = 'scout-context-pickle-v1'
 
 
 @dataclass
@@ -81,14 +83,19 @@ def label(t: np.ndarray, marks) -> np.ndarray:
 
 def build(cfg: Config, per_file: list[tuple[str, Features, list]]) -> Dataset:
     """Assemble the training set from files that have been marked by hand."""
+    cfg.validate_pipeline()
     Xs, ys, gs, ts, names = [], [], [], [], None
     files = []
     drop = set(cfg.model_exclude or ())
-    keep = [i for i, nm in enumerate(per_file[0][1].names) if nm not in drop]
+    feature_names = model_features.names(per_file[0][1].names, cfg.model_feature_set)
+    keep = [i for i, nm in enumerate(feature_names) if nm not in drop]
     for gi, (stem, f, marks) in enumerate(per_file):
-        Xw = window(f.X[:, keep], cfg.sample_fps)
+        expanded, expanded_names = model_features.expand(f.X, f.names, cfg.sample_fps, cfg.model_feature_set)
+        if expanded_names != feature_names:
+            raise ValueError('Training files have different feature schemas')
+        Xw = window(expanded[:, keep], cfg.sample_fps, cfg.model_offsets)
         if names is None:
-            names = window_names([f.names[i] for i in keep])
+            names = window_names([feature_names[i] for i in keep], cfg.model_offsets)
         Xs.append(Xw)
         ys.append(label(f.t, marks))
         gs.append(np.full(len(f.t), gi))
@@ -131,9 +138,11 @@ def fit(cfg: Config, ds: Dataset, rows: np.ndarray | None = None):
 
 def predict(clf, f: Features, cfg: Config) -> np.ndarray:
     """P(a play is in progress) for every frame of one file."""
+    cfg.validate_pipeline()
     drop = set(cfg.model_exclude or ())
-    keep = [i for i, nm in enumerate(f.names) if nm not in drop]
-    return clf.predict_proba(window(f.X[:, keep], cfg.sample_fps))[:, 1]
+    expanded, names = model_features.expand(f.X, f.names, cfg.sample_fps, cfg.model_feature_set)
+    keep = [i for i, nm in enumerate(names) if nm not in drop]
+    return clf.predict_proba(window(expanded[:, keep], cfg.sample_fps, cfg.model_offsets))[:, 1]
 
 
 # --- turning probabilities back into plays --------------------------------
@@ -201,14 +210,21 @@ def to_plays(cfg: Config, spans: list[tuple[float, float]], t_end: float | None)
 
 def save(path: Path, clf, names: list[str], cfg: Config) -> None:
     """Store the model together with the shape of input it expects."""
+    cfg.validate_pipeline()
     if path.suffix.lower() == '.json':
         from .classifier_runtime import export
-        export(path, clf, names, cfg, OFFSETS)
+        export(path, clf, names, cfg, cfg.model_offsets)
         return
     from .classifier_runtime import FEATURE_SETTINGS
-    metadata={"clf":clf,"names":names,"sample_fps":cfg.sample_fps,"offsets":OFFSETS,
+    metadata={"clf":clf,"names":names,"sample_fps":cfg.sample_fps,"offsets":tuple(cfg.model_offsets),
               "exclude":tuple(cfg.model_exclude or ()),"n_features":len(names),"feature_pipeline":cfg.feature_pipeline}
     if cfg.feature_pipeline!='legacy':metadata['feature_settings']={key:getattr(cfg,key) for key in FEATURE_SETTINGS}
+    if cfg.model_feature_set != model_features.BASE or tuple(cfg.model_offsets) != OFFSETS:
+        metadata['feature_set'] = cfg.model_feature_set
+        # Older readers must fail rather than evaluate equally wide rows using
+        # their hardcoded short context. They expect an unversioned 'clf' key.
+        metadata['format'] = CONTEXT_PICKLE_FORMAT
+        metadata['classifier'] = metadata.pop('clf')
     path.parent.mkdir(parents=True, exist_ok=True)
     import tempfile
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as fh:
@@ -242,7 +258,8 @@ def load(path: Path, cfg: Config | None = None):
     if path.suffix.lower() == '.json':
         from .classifier_runtime import load as load_exported
         classifier, d = load_exported(path)
-        if d.get('offsets') != list(OFFSETS):
+        from .classifier_runtime import CONTEXT_FORMAT
+        if d.get('format') != CONTEXT_FORMAT and d.get('offsets') != list(OFFSETS):
             raise ValueError('Exported classifier temporal offsets do not match this engine')
         d['clf'] = classifier
     else:
@@ -253,7 +270,22 @@ def load(path: Path, cfg: Config | None = None):
                 if exc.name and exc.name.startswith('sklearn'):
                     raise RuntimeError('Legacy pickle classifiers require scout-flag[reference]; use an exported inference model for a smaller runtime') from exc
                 raise
+        if d.get('format') is not None:
+            if d['format'] != CONTEXT_PICKLE_FORMAT or 'classifier' not in d or 'clf' in d:
+                raise ValueError('Unsupported pickle classifier format')
+            d['clf'] = d['classifier']
+    if (d.get('format') == 'scout-hgb-v3' or d.get('feature_set', model_features.BASE) != model_features.BASE
+            or tuple(d.get('offsets', OFFSETS)) != OFFSETS):
+        offsets = model_features.validate_offsets(d.get('offsets'))
+        from .features import FEATURE_NAMES
+        feature_names = model_features.names(FEATURE_NAMES, d.get('feature_set', model_features.BASE))
+        expected = window_names([name for name in feature_names if name not in set(d.get('exclude', ()))], offsets)
+        if d.get('names') != expected:
+            raise ValueError('Model temporal feature names do not match its recipe')
     if cfg is not None:
+        if (tuple(d.get('offsets', OFFSETS)) != tuple(cfg.model_offsets)
+                or d.get('feature_set', model_features.BASE) != cfg.model_feature_set):
+            raise ValueError('Model temporal context or feature set differs from configuration')
         if d.get('feature_pipeline','legacy')!=cfg.feature_pipeline:
             raise ValueError('Model feature pipeline differs from configuration; use its matching profile or retrain')
         if cfg.feature_pipeline!='legacy':

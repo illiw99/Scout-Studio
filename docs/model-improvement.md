@@ -369,3 +369,37 @@ No confirmation labels may be used to choose the best threshold. Repeated
 confirmation after engineering changes must be disclosed rather than called a
 new blind test. A label-independent CPU/GPU input/feature parity investigation
 and development-only precision-constrained comparison are the next steps.
+
+### Precision-first context and derived-feature study
+
+Development-only comparisons retain day-grouped folds over the original five
+games. Longer context adds no frame inference: it reads already computed player
+observations. The new optional `play-context-v1` recipe adds active/sprint/fast
+player fractions, formation density, activity rise/drop, spread growth, motion
+disorder and relative span change. Four-second neighbor means repeat observed
+edges and ignore missing samples. Raw observations and saved fields are unchanged.
+
+| Development recipe / context | Precision | Recall | Minimum game recall |
+| --- | ---: | ---: | ---: |
+| Raw / original short context | 88.74% | 97.28% | 95.00% |
+| Raw / wide context | 94.20% | 96.30% | 95.00% |
+| Raw / formation context | 94.47% | 97.04% | 95.00% |
+| Derived / formation context | 93.82% | 97.53% | 95.00% |
+| Derived / wide context | 95.16% | 97.04% | 95.29% |
+
+Wide offsets are -10,-6,-3,-1,0,1,3,6,10 seconds; formation offsets are
+-12,-8,-5,-3,-1,0,1,2,3,5,8. Each row calibrates only development out-of-fold
+probabilities. The selected derived/wide operating point is threshold .1,
+smoothing .2 s, proposal minimum 3 s, peak filter .8, relative refinement .5,
+padding .2 s. These are selection scores, not final generalization claims.
+The candidate must be frozen before repeated confirmation; previous confirmation
+results remain documented. Native CPU/GPU development-feature collection is
+also running to investigate extraction-domain differences without fitting on
+confirmation labels.
+
+The recipe is opt-in and versioned with its classifier. Tests cover neighbor
+windows, missing/empty player cases, bounded offset metadata, PKL/JSON prediction
+equivalence, and incompatible recipe/column rejection. The full suite passes 305
+tests with two native-platform skips; package/source checks pass. Independent
+review and a focused follow-up on older-PKL rejection found no remaining defects.
+New-model quality and throughput confirmation remains pending.

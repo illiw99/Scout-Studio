@@ -14,7 +14,7 @@ from scout.model import OFFSETS, window_names
 from scout.model_packs import ModelStore, build, sha, verify, POSTPROCESS, POSTPROCESS_V2, FEATURE_SETTINGS
 
 
-def fixture(root, version='1.0.0',modern=False):
+def fixture(root, version='1.0.0',modern=False,context=False):
     from test_inference import graph
     inputs = root / ('inputs-' + version)
     inputs.mkdir()
@@ -30,6 +30,12 @@ def fixture(root, version='1.0.0',modern=False):
     if modern:
         classifier.update(format='scout-hgb-v2',feature_pipeline='dynamic-field-v1',
             feature_settings={key:getattr(cfg,key) for key in FEATURE_SETTINGS})
+        if context:
+            from scout import model_features
+            offsets=(-10.,-6.,-3.,-1.,0.,1.,3.,6.,10.)
+            names=window_names(model_features.names(FEATURE_NAMES,model_features.CONTEXT),offsets)
+            classifier.update(format='scout-hgb-v3',feature_set=model_features.CONTEXT,
+                offsets=list(offsets),names=names,n_features=len(names))
         (inputs/'classifier.json').write_text(json.dumps(classifier))
     manifest = dict(schema=1, id='synthetic', version=version, backend='onnx',
                     runtime_api=1, preprocessing='scout-coco-person-v1', classifier='scout-hgb-v1',
@@ -40,6 +46,7 @@ def fixture(root, version='1.0.0',modern=False):
         manifest.update(schema=2,runtime_api=2,preprocessing='scout-coco-person-resized-v1',classifier='scout-hgb-v2',
             feature_pipeline='dynamic-field-v1',feature_settings=classifier['feature_settings'],cpu_threads=8,gpu_batch=16,
             gpu_reference=dict(name='yolo26n.pt',sha256='a'*64),settings={key:getattr(cfg,key) for key in POSTPROCESS_V2})
+        manifest['classifier']=classifier['format']
     approval = root / ('approval-' + version + '.json')
     approval.write_text(json.dumps(manifest))
     archive = root / (version + '.zip')
@@ -49,6 +56,23 @@ def fixture(root, version='1.0.0',modern=False):
 
 @unittest.skipUnless(importlib.util.find_spec('onnx') and importlib.util.find_spec('onnxruntime'), 'inference extra required')
 class ModelPackTests(unittest.TestCase):
+    def test_context_pack_binds_feature_recipe_offsets_and_refuses_reordered_context(self):
+        from scout import model_features,model
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);store=ModelStore(root/'store')
+            archive,digest,inputs,manifest=fixture(root,modern=True,context=True)
+            store.install(archive,digest)
+            cfg=store.apply(Config(device='cpu'),'synthetic@1.0.0')
+            self.assertEqual(cfg.model_feature_set,model_features.CONTEXT)
+            self.assertEqual(cfg.model_offsets,(-10.,-6.,-3.,-1.,0.,1.,3.,6.,10.))
+            model.load(Path(cfg.model_path),cfg)
+            classifier=json.loads((inputs/'classifier.json').read_text())
+            classifier['offsets']=[-12.,-6.,-3.,-1.,0.,1.,3.,6.,10.]
+            (inputs/'classifier.json').write_text(json.dumps(classifier))
+            manifest['files']={p.name:dict(size=p.stat().st_size,sha256=sha(p)) for p in inputs.iterdir()}
+            approval=root/'approval-1.0.0.json';approval.write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError,'feature order'):build(approval,inputs,root/'bad.zip')
+            self.assertFalse((root/'bad.zip').exists())
     def test_standalone_segment_reuses_only_a_complete_matching_cpu_cache_set(self):
         import contextlib,io,numpy as np
         from scout import cli,detect

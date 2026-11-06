@@ -29,8 +29,9 @@ def load_head(path,records,weights):
             or set(payload['reserved_games'])!={r['name'] for r in records if r['partition']=='holdout'}):raise ValueError('Frozen training/reserved membership differs')
     if payload['weights_sha256']!=hashlib.sha256(weights.read_bytes()).hexdigest():raise ValueError('Detector weights differ from frozen head')
     cfg=Config(**payload['configuration']);core=payload['classifier']
-    expected=model.window_names([n for n in features.FEATURE_NAMES if n not in set(cfg.model_exclude or ())])
-    if (core['names']!=expected or core['offsets']!=list(model.OFFSETS) or core['sample_fps']!=cfg.sample_fps
+    from scout import model_features
+    expected=model.window_names([n for n in model_features.names(features.FEATURE_NAMES,cfg.model_feature_set) if n not in set(cfg.model_exclude or ())],cfg.model_offsets)
+    if (core['names']!=expected or core['offsets']!=list(cfg.model_offsets) or core['sample_fps']!=cfg.sample_fps
             or core['exclude']!=list(cfg.model_exclude or ())):raise ValueError('Frozen classifier schema differs')
     return classifier_runtime.Classifier(core),cfg,payload
 
@@ -68,7 +69,7 @@ def main():
     dataset=model.build(cfg,cases);classifier=model.fit(cfg,dataset)
     args.out.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.freeze-',dir=args.out.parent) as directory:
-        core=Path(directory)/'core.json';classifier_runtime.export(core,classifier,dataset.names,cfg,model.OFFSETS)
+        core=Path(directory)/'core.json';classifier_runtime.export(core,classifier,dataset.names,cfg,cfg.model_offsets)
         payload=dict(format='scout-research-head-v1',candidate=args.candidate,configuration=asdict(cfg),pipeline=spec,
             classifier=json.loads(core.read_text()),dataset_identity=dataset_identity(records),training_features_sha256=hashes,
             training_games=[r['name'] for r in train],reserved_games=[r['name'] for r in reserved],imgsz=args.size,

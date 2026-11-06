@@ -11,6 +11,7 @@ import json
 from dataclasses import dataclass, field, asdict, fields
 from pathlib import Path
 from .storage import STATE_DIR_NAMES, state_directory
+from .model_features import BASE, DEFAULT_OFFSETS, FEATURE_SETS, validate_offsets
 
 
 @dataclass
@@ -32,6 +33,8 @@ class Config:
     #: the wrong direction; this stops a tilted camera breaking it outright.
     field_axis: bool = True
     feature_pipeline: str = 'legacy'  # versioned feature meaning, stored with classifiers
+    model_feature_set: str = BASE
+    model_offsets: tuple[float, ...] = DEFAULT_OFFSETS
     extensions: tuple[str, ...] = (".mp4", ".mov", ".mts", ".avi", ".mkv")
 
     #: Files whose size is still changing are being copied in; skip them until
@@ -292,6 +295,11 @@ class Config:
         import re
         if self.feature_pipeline not in ('legacy','dynamic-field-v1'):
             raise ValueError('Unsupported feature pipeline')
+        offsets = validate_offsets(self.model_offsets)
+        if self.model_feature_set not in FEATURE_SETS:
+            raise ValueError('Unsupported classifier feature set')
+        if (self.model_feature_set != BASE or offsets != DEFAULT_OFFSETS) and self.feature_pipeline != 'dynamic-field-v1':
+            raise ValueError('Custom classifier features require the dynamic field profile')
         if (type(self.decode_max_side) is not int or not 0<=self.decode_max_side<=2048
                 or (self.decode_max_side and self.decode_max_side%32) or type(self.decode_gpu) is not bool):
             raise ValueError('Invalid detector decode settings')

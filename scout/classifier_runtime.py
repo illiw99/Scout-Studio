@@ -12,9 +12,11 @@ from pathlib import Path
 import tempfile
 
 import numpy as np
+from .model_features import BASE, DEFAULT_OFFSETS, FEATURE_SETS, validate_offsets
 
 FORMAT = 'scout-hgb-v1'
 DYNAMIC_FORMAT = 'scout-hgb-v2'
+CONTEXT_FORMAT = 'scout-hgb-v3'
 FEATURE_SETTINGS=('min_person_h','max_person_h','active_speed','sprint_speed','field_axis','field_shrink_top','horizon_y')
 TREE_FIELDS = {'feature', 'threshold', 'left', 'right', 'value', 'missing_left', 'leaf'}
 
@@ -29,12 +31,18 @@ def _threshold(value):
 
 class Classifier:
     def __init__(self, document):
-        if not isinstance(document, dict) or document.get('format') not in (FORMAT,DYNAMIC_FORMAT):
+        if not isinstance(document, dict) or document.get('format') not in (FORMAT,DYNAMIC_FORMAT,CONTEXT_FORMAT):
             raise ValueError('Unsupported exported classifier format')
         pipeline=document.get('feature_pipeline','legacy')
         if ((document['format']==FORMAT and pipeline!='legacy')
-                or (document['format']==DYNAMIC_FORMAT and pipeline!='dynamic-field-v1')):
+                or (document['format'] in (DYNAMIC_FORMAT,CONTEXT_FORMAT) and pipeline!='dynamic-field-v1')):
             raise ValueError('Unsupported classifier feature pipeline')
+        if document['format'] == CONTEXT_FORMAT:
+            if document.get('feature_set') not in FEATURE_SETS:
+                raise ValueError('Unsupported classifier feature set')
+            validate_offsets(document.get('offsets'))
+        elif document.get('feature_set', BASE) != BASE:
+            raise ValueError('Custom classifier features require a version-three classifier')
         names = document.get('names')
         if (not isinstance(names, list) or not names or len(names) > 10000
                 or any(not isinstance(name, str) or not name or len(name) > 1024 for name in names)
@@ -116,7 +124,7 @@ def load(path):
         raise ValueError('Exported classifier is too large')
     document = json.loads(path.read_text(encoding='utf-8'))
     classifier = Classifier(document)
-    if document['format']==DYNAMIC_FORMAT:
+    if document['format'] in (DYNAMIC_FORMAT,CONTEXT_FORMAT):
         settings=document.get('feature_settings')
         if (not isinstance(settings,dict) or set(settings)!=set(FEATURE_SETTINGS)
                 or type(settings['field_axis']) is not bool
@@ -155,12 +163,17 @@ def export(path, classifier, names, cfg, offsets):
                           leaf=nodes['is_leaf'].astype(bool).tolist()))
     pipeline=getattr(cfg,'feature_pipeline','legacy')
     if pipeline not in ('legacy','dynamic-field-v1'):raise ValueError('Unsupported classifier feature pipeline')
-    document = dict(format=FORMAT if pipeline=='legacy' else DYNAMIC_FORMAT, names=list(names), baseline=float(classifier._baseline_prediction[0, 0]),
+    if tuple(offsets) != tuple(cfg.model_offsets):raise ValueError('Export temporal offsets differ from configuration')
+    context = cfg.model_feature_set != BASE or tuple(offsets) != DEFAULT_OFFSETS
+    if context and pipeline != 'dynamic-field-v1':raise ValueError('Custom classifier features require the dynamic field profile')
+    validate_offsets(offsets)
+    document = dict(format=FORMAT if pipeline=='legacy' else (CONTEXT_FORMAT if context else DYNAMIC_FORMAT), names=list(names), baseline=float(classifier._baseline_prediction[0, 0]),
                     trees=trees, sample_fps=cfg.sample_fps, offsets=list(offsets),
                     exclude=list(cfg.model_exclude or ()), n_features=len(names))
     if pipeline!='legacy':
         document['feature_pipeline']=pipeline
         document['feature_settings']={key:getattr(cfg,key) for key in FEATURE_SETTINGS}
+    if context:document['feature_set']=cfg.model_feature_set
     runtime = Classifier(document)
     probes = np.random.default_rng(0).normal(size=(256, len(names)))
     probes[::7, ::3] = np.nan

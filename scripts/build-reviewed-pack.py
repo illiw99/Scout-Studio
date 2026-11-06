@@ -12,7 +12,7 @@ import shutil
 import sys
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from scout.classifier_runtime import Classifier,DYNAMIC_FORMAT,FEATURE_SETTINGS
+from scout.classifier_runtime import Classifier,DYNAMIC_FORMAT,CONTEXT_FORMAT,FEATURE_SETTINGS
 from scout.model_packs import build,POSTPROCESS_V2,sha
 from scout.inference import REFERENCE_MODELS
 
@@ -39,7 +39,8 @@ def main():
     for file in graph_files:
         if exported['files'].get(file.name)!=sha(file):raise ValueError('Managed graph checksum mismatch')
     settings={key:head['configuration'][key] for key in FEATURE_SETTINGS}
-    core=dict(head['classifier'],format=DYNAMIC_FORMAT,feature_pipeline='dynamic-field-v1',feature_settings=settings)
+    target_format=CONTEXT_FORMAT if head['classifier']['format']==CONTEXT_FORMAT else DYNAMIC_FORMAT
+    core=dict(head['classifier'],format=target_format,feature_pipeline='dynamic-field-v1',feature_settings=settings)
     old,new=Classifier(head['classifier']),Classifier(core)
     probes=np.random.default_rng(0).normal(size=(256,len(core['names'])))
     if not np.array_equal(old.predict_proba(probes),new.predict_proba(probes)):raise ValueError('Classifier changed during packaging')
@@ -52,7 +53,7 @@ def main():
         model_refine_fraction=head['postprocessing'].get('refine_fraction',0.),
         model_refine_padding=head['postprocessing'].get('refine_padding',0.))
     manifest=dict(schema=2,id=args.id,version=args.version,backend=backend,runtime_api=2,
-        preprocessing='scout-coco-person-resized-v1',classifier=DYNAMIC_FORMAT,feature_pipeline='dynamic-field-v1',
+        preprocessing='scout-coco-person-resized-v1',classifier=target_format,feature_pipeline='dynamic-field-v1',
         feature_settings=settings,imgsz=head['imgsz'],sample_fps=head['configuration']['sample_fps'],settings=post,
         cpu_threads=8,gpu_batch=16,gpu_reference=dict(name=args.reference_model,sha256=head['weights_sha256']),
         license='Ultralytics detector AGPL-3.0; private reviewed classifier evaluation',

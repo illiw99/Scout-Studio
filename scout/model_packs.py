@@ -96,7 +96,7 @@ def _manifest(document):
     if sum(item['size'] for item in files.values()) > MAX_TOTAL:
         raise ValueError('Model pack exceeds its size limit')
     if (document.get('preprocessing') != ('scout-coco-person-resized-v1' if modern else 'scout-coco-person-v1')
-            or document.get('classifier') != ('scout-hgb-v2' if modern else 'scout-hgb-v1')
+            or document.get('classifier') not in (('scout-hgb-v2','scout-hgb-v3') if modern else ('scout-hgb-v1',))
             or type(document.get('imgsz')) is not int or not 32 <= document['imgsz'] <= 2048
             or document['imgsz'] % 32 or type(document.get('sample_fps')) not in (int, float)
             or not 0 < document['sample_fps'] <= 30):
@@ -145,6 +145,7 @@ def verify(folder, *, probe=False):
     from .classifier_runtime import load
     from .features import FEATURE_NAMES
     from .model import OFFSETS, window_names
+    from . import model_features
     _, classifier = load(folder / 'classifier.json')
     if (classifier['format']!=document['classifier']
             or classifier.get('feature_pipeline','legacy')!=document.get('feature_pipeline','legacy')):
@@ -152,9 +153,12 @@ def verify(folder, *, probe=False):
     if document['schema']==2 and classifier.get('feature_settings')!=document['feature_settings']:
         raise ValueError('Model-pack classifier feature settings are incompatible')
     excluded = classifier['exclude']
-    if (len(set(excluded)) != len(excluded) or not set(excluded) <= set(FEATURE_NAMES)
-            or classifier['offsets'] != list(OFFSETS) or classifier['sample_fps'] != document['sample_fps']
-            or classifier['names'] != window_names([name for name in FEATURE_NAMES if name not in excluded])):
+    feature_names = model_features.names(FEATURE_NAMES, classifier.get('feature_set', model_features.BASE))
+    offsets = model_features.validate_offsets(classifier['offsets'])
+    if (len(set(excluded)) != len(excluded) or not set(excluded) <= set(feature_names)
+            or (classifier['format'] != 'scout-hgb-v3' and offsets != OFFSETS)
+            or classifier['sample_fps'] != document['sample_fps']
+            or classifier['names'] != window_names([name for name in feature_names if name not in excluded], offsets)):
         raise ValueError('Model-pack feature order, windows or sampling are incompatible')
     if probe:
         import numpy as np
@@ -196,14 +200,19 @@ def _configure(document, folder, cfg=None, *, choose_runtime=False):
     cfg.model_path = str(folder / 'classifier.json')
     cfg.detector_backend, cfg.device, cfg.batch = document['backend'], 'cpu', 1
     cfg.imgsz, cfg.sample_fps = document['imgsz'], document['sample_fps']
-    cfg.model_exclude = tuple(_json(folder / 'classifier.json')['exclude'])
+    classifier = _json(folder / 'classifier.json')
+    cfg.model_exclude = tuple(classifier['exclude'])
     cfg.segmenter = 'model'
     for key, value in document['settings'].items():
         setattr(cfg, key, value)
     cfg.model_pack = identity(document['id'], document['version'])
     cfg.feature_pipeline='legacy';cfg.decode_max_side=0;cfg.decode_gpu=True;cfg.detector_sha256=None;cfg.allow_gpu_fallback=False
+    from .model_features import BASE, DEFAULT_OFFSETS
+    cfg.model_feature_set=BASE;cfg.model_offsets=DEFAULT_OFFSETS
     cfg.model_peak_threshold=cfg.model_refine_fraction=cfg.model_refine_padding=0.
     if document['schema']==2:
+        cfg.model_feature_set=classifier.get('feature_set', BASE)
+        cfg.model_offsets=tuple(classifier['offsets'])
         cfg.feature_pipeline=document['feature_pipeline'];cfg.decode_max_side=cfg.imgsz;cfg.decode_gpu=False
         for key,value in document['feature_settings'].items():setattr(cfg,key,value)
         # The legacy reset above must not discard the new profile's settings.

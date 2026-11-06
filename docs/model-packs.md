@@ -83,3 +83,16 @@ rebase with source ordering just like the raw detections.
 candidate and a managed graph with matching checkpoint/resolution provenance.
 It does not train, activate, scan source libraries or publish anything. The current
 reviewed pack is a local evaluation artifact, not a public model release.
+
+Version-three numeric classifiers (`scout-hgb-v3`) may be carried by schema-two
+packs. They explicitly bind a bounded, ordered list of temporal offsets and a
+known feature recipe: `base-v1` or `play-context-v1`. The latter derives nine cheap
+ratios and formation/activity changes from the same raw player observations,
+without another detector pass. Import validates the complete expanded column
+order; activation restores the recipe and offsets. Older readers reject this
+classifier format. Legacy classifiers retain their original short context.
+
+Custom-context PKLs use `scout-context-pickle-v1` and a distinct classifier key so
+older readers fail instead of silently applying their fixed time offsets. The
+numeric JSON remains the portable inference artifact; matching settings are
+required for either format. Existing PKLs are never replaced by these experiments.

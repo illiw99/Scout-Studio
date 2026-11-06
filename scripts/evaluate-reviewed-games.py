@@ -17,6 +17,7 @@ import numpy as np
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scout.config import Config
+from scout import model_features
 from scout.groundtruth import Marked
 from scout import features, model
 from scout.features import FEATURE_NAMES
@@ -50,8 +51,11 @@ def main():
     parser.add_argument('--rates',nargs='+',type=float,help='feature sampling rates to compare')
     parser.add_argument('--variants',nargs='+',choices=('reference-settings','compact-regularized','recall-weighted','linear-balanced'),default=['reference-settings','compact-regularized','recall-weighted'])
     parser.add_argument('--minimum-recall',type=float,default=.95)
+    parser.add_argument('--feature-set',choices=model_features.FEATURE_SETS,default=model_features.BASE)
+    parser.add_argument('--context-offsets',type=float,nargs='+',default=list(model_features.DEFAULT_OFFSETS))
     parser.add_argument('--development-only',action='store_true',help='do not read/evaluate reserved game features')
     args=parser.parse_args()
+    model_features.validate_offsets(args.context_offsets)
     if not 0 < args.minimum_recall <= 1:raise ValueError('Recall target must be in (0,1]')
     if args.out.exists() or args.out.with_suffix('.partial.json').exists():raise ValueError('Choose a new results file')
     records=json.loads((args.snapshot/'dataset.json').read_text())
@@ -73,6 +77,7 @@ def main():
                 probability_directory=args.out.stem+'.probabilities',
                 selection='highest development precision meeting pooled and minimum-game event recall target; fallback maximum minimum-game recall; holdout never used to select/tune',
                 minimum_event_recall=args.minimum_recall,stretch_event_recall=.98,feature_schema=specification['schema'],
+                feature_set=args.feature_set,context_offsets=args.context_offsets,
                 development_games=[r['name'] for r in records if r['partition']=='development'],
                 holdout_games=[r['name'] for r in records if r['partition']=='holdout'],
                 versions={name:version(name) for name in ('numpy','scikit-learn','scipy')},
@@ -93,6 +98,10 @@ def main():
         loaded[fps]=cases
         for variant in args.variants:
             cfg=configuration(variant,fps)
+            if specification.get('region_policy')=='dynamic' and specification.get('tracker_policy')=='time-scaled':
+                cfg.feature_pipeline='dynamic-field-v1'
+            cfg.model_feature_set=args.feature_set;cfg.model_offsets=tuple(args.context_offsets)
+            cfg.validate_pipeline()
             if 'exclude' in specification:cfg.model_exclude=tuple(specification['exclude'])
             result=dict(id=f'{variant}-{fps:g}fps',sample_fps=fps,variant=variant,configuration=asdict(cfg),
                         head_parameters=(dict(model='LogisticRegression',C=.1,class_weight='balanced',max_iter=500,standardize=True)
