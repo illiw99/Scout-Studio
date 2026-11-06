@@ -149,3 +149,7 @@ detection requires a classifier configured through `model_path` in the library's
 `scout.json`. Source checkouts include `models/play.pkl`; it is deliberately
 excluded from redistributable archives. The rules segmenter is available without
 a trained play classifier.
+
+For approved offline default models and matching standalone media engines, see
+[default-model deployment](default-model.md). Studio chooses the active/bundled
+profile automatically while preserving explicit saved profile choices.

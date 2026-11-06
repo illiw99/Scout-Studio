@@ -1,10 +1,10 @@
 # Default Scout Studio detection profile
 
-The selected local profile is `scout-reviewed-precision@0.3.0`: YOLO26n at1280,
+The selected local profile is `scout-reviewed-precision@0.3.0`: YOLO26n at 1280,
 2.5 samples/s, adaptive fields, time-scaled tracking, derived play features and
 wide temporal context. The profile binds its classifier, detector, sampler and
 postprocessing together; replacing only an old PKL is insufficient. Its operating
-point prioritizes precision while keeping recall above95% in every measured
+point prioritizes precision while keeping recall above 95% in every measured
 validation game. See [measurements and limitations](model-improvement.md).
 
 Studio defaults to **Default model · automatic GPU / CPU** when an active model
@@ -61,3 +61,30 @@ arguments. If that selected executable is missing, it reports the problem instea
 of silently using another processing environment. Removing the path file restores
 the ordinary source-environment fallback. Existing game data is independent of
 this launcher selection.
+
+## Local deployment validation
+
+The approved `scout-reviewed-precision@0.3.0` pack and its matching defaults are
+now active for this user's normal Studio launch. The Applications entry and
+project launcher select the newly frozen reference build. The previous desktop
+entry and detection-profile preference were backed up before changing them.
+The original PKL, game configuration, field polygons and review files were not
+replaced. No personal footage was processed during deployment.
+
+Validation passed on the local Linux machine:
+
+- 325-test suite, with two native-platform skips; source/wheel checks passed.
+- Independent default-activation review, including a reproduced pointer race,
+  corrected snapshot/CAS logic and regression checks.
+- Actual standalone native Qt/X11, synthetic playback/export, CLI, worker,
+  OpenVINO and bundled-default preparation smoke checks.
+- Default Studio job queue to the actual frozen worker, using synthetic video:
+  automatic CUDA and CUDA-disabled CPU fallback both completed successfully.
+- Normal launcher dispatch lists the selected model from the actual user store.
+- Nine-game original integrity checks still pass: 109 snapshotted state-file hashes
+  and 41 original video size/mtime identities.
+
+The standalone carries the tested FFmpeg and approved model archive. Source
+weights remain private; no model/release upload or release tag was performed.
+This validates the local Linux deployment. Windows installer execution and GPU
+hardware still require native validation; no new Windows installer was built here.
