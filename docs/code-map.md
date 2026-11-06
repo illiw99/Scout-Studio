@@ -18,7 +18,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `docs/detector-benchmark-2026-11-05.md` |
 | Immutable inference packs, compatibility checks and activation rollback | `scout/model_packs.py`, `tests/test_model_packs.py`, `docs/model-packs.md` |
 | Manual release checks and verified installer staging | `scout/updates.py`, `tests/test_updates.py`, `docs/updates.md` |
-| Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py` |
+| Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py`; isolated camera-region experiments: `scripts/prepare-camera-region-features.py` |
 | Player tracking and motion features | `scout/track.py`, `scout/features.py` |
 | Heuristic play segmentation | `scout/segment.py` |
 | Reviewed-game improvement protocol and strict interval metrics | `docs/model-improvement.md`, `scout/model_evaluation.py`, `scripts/evaluate-reviewed-games.py`, `scripts/calibrate-play-thresholds.py`, `scripts/extract-video-features.py`, `tests/test_model_evaluation.py` |

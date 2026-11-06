@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 from scout.detect import Detections
-from scout.model_evaluation import subsample, interval_metrics, summarize
+from scout.model_evaluation import subsample, interval_metrics, summarize, project_field_region
 
 
 class EvaluationTests(unittest.TestCase):
@@ -22,6 +22,18 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual(m['hits'],1)
         self.assertEqual((m['start_errors'],m['end_errors']),([-1],[1]))
         self.assertEqual(summarize([m])['boundary_p90'],1)
+
+    def test_camera_projection_recovers_translation_and_refuses_blank_frames(self):
+        import cv2
+        image=np.random.default_rng(4).integers(0,256,(240,320,3),dtype=np.uint8)
+        shifted=cv2.warpAffine(image,np.float32([[1,0,20],[0,1,10]]),(320,240))
+        polygon=np.array([[.2,.2],[.7,.2],[.7,.7],[.2,.7]],np.float32)
+        projected,quality=project_field_region(image,shifted,polygon)
+        self.assertTrue(quality['accepted'])
+        np.testing.assert_allclose(projected,polygon+[20/320,10/240],atol=.006)
+        result,quality=project_field_region(np.zeros_like(image),np.zeros_like(image),polygon)
+        self.assertIsNone(result)
+        self.assertFalse(quality['accepted'])
 
     def test_balanced_training_handles_rare_positive_labels(self):
         from scout.config import Config

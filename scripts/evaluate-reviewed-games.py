@@ -53,7 +53,7 @@ def main():
     parser.add_argument('--development-only',action='store_true',help='do not read/evaluate reserved game features')
     args=parser.parse_args()
     if not 0 < args.minimum_recall <= 1:raise ValueError('Recall target must be in (0,1]')
-    if args.out.exists():raise ValueError('Choose a new results file')
+    if args.out.exists() or args.out.with_suffix('.partial.json').exists():raise ValueError('Choose a new results file')
     records=json.loads((args.snapshot/'dataset.json').read_text())
     feature_file=args.snapshot/'features.json'
     specification=json.loads(feature_file.read_text()) if feature_file.exists() else dict(schema='scout-person-v1',names=FEATURE_NAMES,rates=[5.,2.5,1.])
@@ -69,8 +69,9 @@ def main():
     heldout={r['group'] for r in records if r['partition']=='holdout'}
     if len(development)<2 or not heldout or development&heldout:raise ValueError('Hold out independent match days')
     args.out.parent.mkdir(parents=True,exist_ok=True)
-    report=dict(schema=2,scope='legacy cached-detection screening; not new-detector or resolution validation',
-                selection='highest development precision meeting event recall target; fallback maximum recall; holdout never used to select/tune',
+    report=dict(schema=2,scope=specification.get('scope','private reviewed-game feature screening; backend and source identity in snapshot'),
+                probability_directory=args.out.stem+'.probabilities',
+                selection='highest development precision meeting pooled and minimum-game event recall target; fallback maximum minimum-game recall; holdout never used to select/tune',
                 minimum_event_recall=args.minimum_recall,stretch_event_recall=.98,feature_schema=specification['schema'],
                 development_games=[r['name'] for r in records if r['partition']=='development'],
                 holdout_games=[r['name'] for r in records if r['partition']=='holdout'],
@@ -103,7 +104,7 @@ def main():
                 for r,f,marks in cases:
                     if r['partition']!='development' or r['group']!=group:continue
                     prob=model.predict(classifier,f,cfg);pred=model.intervals(cfg,f.t,prob)
-                    destination=args.out.parent/'probabilities'/result['id']
+                    destination=args.out.parent/report['probability_directory']/result['id']
                     destination.mkdir(parents=True,exist_ok=True)
                     target=destination/(r['name']+'.npz')
                     if target.exists():raise ValueError('Probability snapshot already exists')
@@ -113,7 +114,8 @@ def main():
                         iou30=interval_metrics(r['marks'],pred,.3),iou50=interval_metrics(r['marks'],pred,.5)))
             result['event']=summarize([row['event'] for row in result['folds']])
             result['minimum_game_recall']=min(summarize([row['event']])['recall'] for row in result['folds'])
-            result['meets_recall_target']=result['event']['recall']>=args.minimum_recall
+            result['meets_recall_target']=(result['event']['recall']>=args.minimum_recall
+                                           and result['minimum_game_recall']>=args.minimum_recall)
             result['iou30']=summarize([row['iou30'] for row in result['folds']])
             result['iou50']=summarize([row['iou50'] for row in result['folds']])
             result['fit_evaluate_seconds']=time.perf_counter()-start
@@ -125,7 +127,7 @@ def main():
     candidates=report['candidates']
     qualified=[r for r in candidates if r['meets_recall_target']]
     best=(max(qualified,key=lambda r:(r['event']['precision'],-r['event']['boundary_p90'],-r['sample_fps']))
-          if qualified else max(candidates,key=lambda r:(r['event']['recall'],r['event']['precision'])))
+          if qualified else max(candidates,key=lambda r:(r['minimum_game_recall'],r['event']['recall'],r['event']['precision'])))
     fastest=min(r['sample_fps'] for r in candidates)
     fast=max([r for r in candidates if r['sample_fps']==fastest],key=lambda r:(r['event']['recall'],r['event']['precision']))
     report['final_holdout']=[]
@@ -145,9 +147,9 @@ def main():
         evaluation['event']=summarize([r['event'] for r in evaluation['games']])
         evaluation['iou50']=summarize([r['iou50'] for r in evaluation['games']])
         evaluation['iou30']=summarize([r['iou30'] for r in evaluation['games']])
-        export=args.out.parent/(choice['id']+'-development-only.json')
-        if export.exists():raise ValueError('Candidate export already exists')
+        export=args.out.parent/(args.out.stem+'-'+choice['id']+'-development-only.json')
         if specification['schema']=='scout-person-v1' and choice['variant']!='linear-balanced':
+            if export.exists():raise ValueError('Candidate export already exists')
             model.save(export,classifier,ds.names,cfg)
             evaluation['classifier_file']=export.name
         else:

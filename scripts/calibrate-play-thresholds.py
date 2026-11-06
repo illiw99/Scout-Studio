@@ -8,6 +8,7 @@ import sys
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scout.config import Config
+from scout.storage import validate_name
 from scout.model import intervals
 from scout.model_evaluation import interval_metrics,summarize
 
@@ -22,10 +23,13 @@ def main():
     if not 0<args.minimum_recall<=1:raise ValueError('Invalid recall target')
     report=json.loads(args.comparison.read_text());expected=set(report['development_games'])
     if expected & set(report['holdout_games']):raise ValueError('Training/holdout overlap')
+    probability_directory=report.get('probability_directory','probabilities')
+    validate_name(probability_directory)
     output=dict(schema=1,scope='development calibration/selection scores, not unbiased final accuracy',
                 minimum_game_recall=args.minimum_recall,holdout_used=False,candidates=[])
     for candidate in report['candidates']:
-        folder=args.comparison.parent/'probabilities'/candidate['id']
+        validate_name(candidate['id'])
+        folder=args.comparison.parent/probability_directory/candidate['id']
         files=list(folder.glob('*.npz'))
         if {p.stem for p in files}!=expected:raise ValueError('Probability files must contain exactly the development games')
         cfg=Config(**candidate['configuration']);cases=[]

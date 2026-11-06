@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scout import groundtruth,media
+from scout.storage import validate_name
 
 
 MOTION_NAMES=['camera_x','camera_y','camera_speed']
@@ -62,6 +63,10 @@ def main():
     if args.out.exists():raise ValueError('Choose a new experiment directory')
     if args.batch<=0:raise ValueError('Batch must be positive')
     records=json.loads((args.snapshot/'dataset.json').read_text())
+    if len({r['name'] for r in records})!=len(records):raise ValueError('Duplicate games')
+    for record in records:
+        validate_name(record['name'])
+        if record['partition'] not in ('development','holdout'):raise ValueError('Unknown data split')
     args.out.mkdir(parents=True)
     import torch
     from torchvision.models.video import s3d,S3D_Weights
@@ -81,7 +86,9 @@ def main():
         if record['partition']!='development':continue
         game=record['name'];motion_parts=[];video_parts=[];motion_times=[];video_times=[]
         clips=groundtruth.project_clips(args.snapshot/game/'review.mlt')
+        if len(clips)!=len(record['clips']):raise ValueError('Snapshot source count changed')
         for clip,identity in zip(clips,record['clips']):
+            if clip.path.name!=Path(identity['source']).name:raise ValueError('Snapshot source ordering changed')
             before=clip.path.stat()
             if (before.st_size,before.st_mtime_ns)!=(identity['bytes'],identity['mtime_ns']):raise ValueError('Source changed since snapshot')
             original_mask=np.load(args.snapshot/game/(clip.path.stem+'-mask.npy'),allow_pickle=False)

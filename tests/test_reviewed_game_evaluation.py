@@ -44,6 +44,8 @@ class GroupedEvaluationTests(unittest.TestCase):
             self.assertTrue(all(len(f)==1 for f in fits[:cv_fits]))
             self.assertTrue(all(set(f)=={'dev-a','dev-b'} for f in fits[cv_fits:]))
             self.assertEqual(report['holdout_games'],['reserved'])
+            self.assertEqual(report['probability_directory'],'result.probabilities')
+            self.assertTrue((root/'result.probabilities').is_dir())
 
 
 class CalibrationTests(unittest.TestCase):
@@ -52,10 +54,10 @@ class CalibrationTests(unittest.TestCase):
         from scout.config import Config
         script=load_script('calibrate-play-thresholds.py')
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory);folder=root/'probabilities'/'candidate';folder.mkdir(parents=True)
+            root=Path(directory);folder=root/'comparison.probabilities'/'candidate';folder.mkdir(parents=True)
             t=np.arange(0,8,.2);prob=((t>=2)&(t<=4)).astype(float)
             np.savez(folder/'dev.npz',t=t,prob=prob,truth=np.array([[2.,4.]]))
-            comparison=dict(development_games=['dev'],holdout_games=['reserved'],
+            comparison=dict(development_games=['dev'],holdout_games=['reserved'],probability_directory='comparison.probabilities',
                 candidates=[dict(id='candidate',configuration=asdict(Config()))])
             (root/'comparison.json').write_text(json.dumps(comparison))
             arguments=['calibrate','--comparison',str(root/'comparison.json'),'--out',str(root/'calibration.json')]

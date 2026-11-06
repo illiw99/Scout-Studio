@@ -180,3 +180,12 @@ have already been inspected and that use is recorded. HON/PAN remain entirely
 untouched confirmation games while downloading. Further threshold calibration
 reads development out-of-fold probabilities only and rejects reserved files.
 Experimental feature schemas cannot be exported as ordinary production packs.
+
+The camera experiment now recomputes tracking features using a union of the
+original region and accepted reference projections at five fixed, label-independent
+times per source. It preserves the original polygons and compares on development
+games only. Fresh YOLO11s 960 px detections have also completed on all five
+development games; YOLO26n 1280 px extraction continues. These known-weight
+datasets replace ambiguous legacy-cache provenance in subsequent comparisons.
+Each comparison now has its own probability directory so independent experiments
+cannot accidentally overwrite or mix calibration inputs.
