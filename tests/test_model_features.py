@@ -13,6 +13,19 @@ from scout.groundtruth import Marked
 
 
 class DerivedPlayFeaturesTests(unittest.TestCase):
+    def test_freezer_refuses_an_existing_pickle_before_reading_training_inputs(self):
+        import subprocess,sys
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);existing=root/'play.pkl';existing.write_bytes(b'protected model')
+            process=subprocess.run([sys.executable,'scripts/freeze-reviewed-candidate.py',
+                '--features',str(root/'missing'),'--calibration',str(root/'missing.json'),
+                '--candidate','fixture','--weights',str(root/'missing.pt'),
+                '--out',str(root/'new.json'),'--pickle-out',str(existing)],capture_output=True,text=True)
+            self.assertNotEqual(process.returncode,0)
+            self.assertIn('never overwritten',process.stderr)
+            self.assertEqual(existing.read_bytes(),b'protected model')
+            self.assertFalse((root/'new.json').exists())
+
     def observations(self, n=24):
         X = np.zeros((n, len(features.FEATURE_NAMES)), np.float32)
         for name, value in (('n_field', 10.), ('hull', .2), ('x_span', .4), ('coherence', .25)):

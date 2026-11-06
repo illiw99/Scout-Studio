@@ -399,7 +399,27 @@ confirmation labels.
 
 The recipe is opt-in and versioned with its classifier. Tests cover neighbor
 windows, missing/empty player cases, bounded offset metadata, PKL/JSON prediction
-equivalence, and incompatible recipe/column rejection. The full suite passes 305
+equivalence, and incompatible recipe/column rejection. The full suite passes 306
 tests with two native-platform skips; package/source checks pass. Independent
 review and a focused follow-up on older-PKL rejection found no remaining defects.
 New-model quality and throughput confirmation remains pending.
+
+The derived/wide head is now frozen as candidate0.3, with separately saved
+versioned PKL and numeric JSON artifacts; neither replaces an original model.
+Optional `freeze-reviewed-candidate.py --pickle-out NEW_PATH` writes the same
+fitted head, refuses existing files, and uses exclusive publication.
+Repeated four-game scoring reuses the already generated raw detector/camera/
+tracker features; this is a quality comparison, not a new throughput measurement.
+
+| Candidate0.3 runtime | Hits / GT | Recall | Precision | False clips | Boundary p90 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| CUDA features | 319 / 328 | 97.26% | 93.27% | 23 | 1.396 s |
+| CPU features | 318 / 328 | 96.95% | 93.81% | 21 | 1.356 s |
+
+CPU false clips fell from 58 to21 while missed plays fell from17 to10, across
+the same four untrained games. PAN remains weak: 93.59% GPU / 92.31% CPU recall;
+all other games reach at least97.40% GPU /97.67% CPU except HON at97.40% CPU.
+Thus aggregate recall meets the floor, but the improvement is not uniform and
+new-profile application timing is not yet established. Native extraction of the
+original five development games continues; these features can test whether
+matching the application's input path improves transfer without fitting on PAN.

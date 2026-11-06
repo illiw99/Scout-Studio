@@ -44,12 +44,18 @@ def main():
     parser.add_argument('--weights',type=Path,required=True)
     parser.add_argument('--size',type=int,default=1280)
     parser.add_argument('--out',type=Path,required=True)
+    parser.add_argument('--pickle-out',type=Path,help='optional new private PKL of the same fitted head; never replaces an existing file')
     args=parser.parse_args()
     if args.out.exists():raise ValueError('Frozen heads are never overwritten')
+    if args.pickle_out is not None and (args.pickle_out.exists() or args.pickle_out.is_symlink()):
+        raise ValueError('Frozen pickle models are never overwritten')
     if args.size<64 or args.size%32:raise ValueError('Invalid detector size')
     candidate=next(c for c in json.loads(args.calibration.read_text())['candidates'] if c['id']==args.candidate)
     cfg=Config(**candidate['configuration']);best=candidate['best']
     cfg.model_threshold=best['threshold'];cfg.model_smooth=best['smooth'];cfg.model_min_duration=best['minimum_duration']
+    cfg.model_peak_threshold=best.get('peak_threshold',0.)
+    cfg.model_refine_fraction=best.get('refine_fraction',0.)
+    cfg.model_refine_padding=best.get('refine_padding',0.)
     records=json.loads((args.features/'dataset.json').read_text());spec=json.loads((args.features/'features.json').read_text())
     for record in records:
         validate_name(record['name'])
@@ -79,7 +85,13 @@ def main():
             development_quality=best['event'],development_minimum_game_recall=best['minimum_game_recall'])
         temporary=Path(directory)/'head.json';temporary.write_text(json.dumps(payload,separators=(',',':')))
         load_head(temporary,records,args.weights)
+        if args.pickle_out is not None:
+            pickle_file=Path(directory)/'head.pkl';model.save(pickle_file,classifier,dataset.names,cfg)
+            model.load(pickle_file,cfg)
         os.link(temporary,args.out)
+        if args.pickle_out is not None:
+            args.pickle_out.parent.mkdir(parents=True,exist_ok=True)
+            os.link(pickle_file,args.pickle_out)
     print('Frozen numeric head; reserved arrays were not read',flush=True)
     return 0
 
