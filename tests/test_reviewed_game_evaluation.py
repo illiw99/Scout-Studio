@@ -49,6 +49,17 @@ class GroupedEvaluationTests(unittest.TestCase):
 
 
 class CalibrationTests(unittest.TestCase):
+    def test_peak_filter_uses_only_probability_inside_the_proposal(self):
+        script=load_script('calibrate-play-thresholds.py')
+        self.assertEqual(script.filter_by_peak(np.arange(6),np.array([0,.9,.2,.3,.4,1]),[(2.,4.)],.8),[])
+        self.assertEqual(script.filter_by_peak(np.arange(6),np.array([0,.9,.2,.3,.4,1]),[(1.,4.)],.8),[(1.,4.)])
+
+    def test_refinement_keeps_peak_and_clamps_padding_to_proposal(self):
+        script=load_script('calibrate-play-thresholds.py')
+        t=np.arange(0,4,.2);prob=np.zeros(len(t));prob[5:10]=.8
+        np.testing.assert_allclose(script.refine_boundaries(t,prob,[(.2,3.)],.5,.2),[(.8,2.2)])
+        self.assertEqual(script.refine_boundaries(t,prob,[(.2,3.)],.5,10),[(.2,3.)])
+
     def test_calibration_uses_development_probabilities_and_rejects_reserved_files(self):
         from dataclasses import asdict
         from scout.config import Config
@@ -76,6 +87,44 @@ class CalibrationTests(unittest.TestCase):
 
 
 class MotionFeatureTests(unittest.TestCase):
+    def test_time_scaled_tracker_preserves_5hz_and_associates_one_second_motion(self):
+        from scout.track import Tracker
+        script=load_script('prepare-camera-region-features.py')
+        reference=Tracker(.2);scaled=script.TimeScaledTracker(.2)
+        for x in range(10):
+            pts=np.array([[float(x),20.]]);hs=np.array([10.])
+            a,b=reference.update(pts,hs)[0],scaled.update(pts,hs)[0]
+            np.testing.assert_array_equal(a.vel,b.vel)
+            self.assertEqual((a.id,a.age,a.missed),(b.id,b.age,b.missed))
+        sparse=script.TimeScaledTracker(1.)
+        sparse.update(np.array([[5.,20.]]),np.array([10.]))
+        track=sparse.update(np.array([[35.,20.]]),np.array([10.]))[0]
+        self.assertEqual(track.id,1)
+        self.assertEqual(track.age,2)
+        self.assertGreater(track.speed,2.)
+
+    def test_dynamic_regions_filter_in_source_coordinates_and_use_legacy_fallback(self):
+        from scout.detect import Detections
+        from scout.config import Config
+        script=load_script('prepare-camera-region-features.py')
+        boxes=np.tile(np.array([[5,10,10,20],[45,10,50,20]],np.float32),(2,1))
+        det=Detections(np.array([0.,1.]),np.array([0,2,4]),boxes,np.ones(4,np.float32),(100,100))
+        keyframes=[dict(at=0.,polygon=[[0,0],[.2,0],[.2,1],[0,1]]),dict(at=1.,polygon=[[.4,0],[.6,0],[.6,1],[.4,1]])]
+        cfg=Config(field_shrink_top=0)
+        selected=script.dynamic_region_detections(det,keyframes,np.ones((100,100),bool),cfg)
+        np.testing.assert_array_equal(selected.offsets,[0,1,2])
+        np.testing.assert_array_equal(selected.boxes,boxes[[0,3]])
+        fallback=script.dynamic_region_detections(det,[],np.zeros((100,100),bool),cfg)
+        self.assertEqual(len(fallback.boxes),0)
+
+    def test_prescaled_boxes_return_to_source_geometry(self):
+        script=load_script('prepare-scaled-detector-features.py')
+        self.assertEqual(script.resized_shape(1920,1080,640),(640,360))
+        self.assertEqual(script.resized_shape(360,640,1280),(360,640))
+        shape=script.resized_shape(1919,1079,640)
+        np.testing.assert_allclose(script.source_boxes([[0,0,*shape]],shape,(1919,1079)),[[0,0,1919,1079]])
+        np.testing.assert_array_equal(script.source_boxes(np.empty((0,4)),shape,(1919,1079)).shape,(0,4))
+
     def test_fusion_uses_nearest_clock_and_rejects_misaligned_sources(self):
         script=load_script('combine-video-features.py')
         np.testing.assert_array_equal(script.align_nearest([0,.2,.5,.8,1.8],[0,1,2],1.001),[0,0,0,1,2])

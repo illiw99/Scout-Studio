@@ -238,3 +238,39 @@ only; throughput and equivalence to the current decoder remain unverified.
 [X3D's official model zoo](https://github.com/facebookresearch/pytorchvideo/blob/main/docs/source/model_zoo.md)
 also provides a smaller video-model candidate, including an optimized CPU model.
 Its published benchmarks are not Scout play accuracy or end-to-end speed evidence.
+
+### Proposal and preprocessing experiments
+
+On the fixed development folds, camera-union YOLO11s with a compact head,
+threshold 0.1, 0.6 s smoothing and a 4 s minimum proposal duration reaches
+**395/405 event hits (97.53%), minimum game 95%, precision 78.69%**. Refining
+proposal boundaries using their own peak improves boundary p90 to about 1.25 s
+and mean IoU to 0.838, while preserving those event counts. This is a development
+selection score, not a final confirmation result. The extra 107 clips are still
+too many to declare a finished improvement. All tested durations, peak filters
+and boundary refinements are recorded in private calibration reports.
+
+Two targeted changes follow from the error analysis:
+
+- A dynamic-region variant interpolates reference-projected field polygons
+  between seven fixed keyframes, filters boxes in source coordinates, and falls
+  back to the original region if all projections fail. This avoids admitting
+  everyone inside the union of every camera position at every time. Saved field
+  files remain unchanged.
+- A sparse-sampling tracker ablation expresses association gates, smoothing,
+  track lifetime and confirmation in elapsed time. The current tracker uses
+  some frame-based settings: two confirmations take 0.4 s at 5 Hz but 2 s at
+  1 Hz. The ablation exactly preserves the 5 Hz settings and tests 1/2.5 Hz
+  features from existing detections. It is not enabled in production.
+
+The pre-scaled YOLO26n 640 experiment resizes on CUDA before RGB transfer, then
+maps boxes back to original source geometry before field filtering and tracking.
+It keeps its own caches and experimental schema. Some extraction segments exceed
+15x realtime, but shared workload, cold-start effects and excluded final-head
+cost mean these are not accepted end-to-end benchmarks. GT quality is still under
+evaluation; CPU-only acceleration remains to be measured on a selected pipeline.
+
+Validation at this stage: full local check passed 278 tests (four skips) and
+source/wheel packaging passed; focused research checks also pass. Those
+checks establish code/fixture behavior, not real Windows GPU performance or
+the accuracy/speed targets.

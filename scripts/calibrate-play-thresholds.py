@@ -11,6 +11,28 @@ from scout.config import Config
 from scout.storage import validate_name
 from scout.model import intervals
 from scout.model_evaluation import interval_metrics,summarize
+from itertools import product
+
+
+def filter_by_peak(t,prob,predictions,threshold):
+    if threshold==0:return predictions
+    result=[]
+    for start,end in predictions:
+        first,last=np.searchsorted(t,start,side='left'),np.searchsorted(t,end,side='right')
+        if last>first and np.max(prob[first:last])>=threshold:result.append((start,end))
+    return result
+
+
+def refine_boundaries(t,prob,predictions,fraction,padding):
+    if fraction==0:return predictions
+    dt=float(np.median(np.diff(t))) if len(t)>1 else .2
+    result=[]
+    for start,end in predictions:
+        first,last=np.searchsorted(t,start,side='left'),np.searchsorted(t,end,side='right')
+        if last<=first:continue
+        active=np.flatnonzero(prob[first:last]>=fraction*np.max(prob[first:last]))+first
+        result.append((max(start,float(t[active[0]])-padding),min(end,float(t[active[-1]])+dt+padding)))
+    return result
 
 
 def main():
@@ -18,16 +40,26 @@ def main():
     parser.add_argument('--comparison',type=Path,required=True)
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--minimum-recall',type=float,default=.95)
+    parser.add_argument('--minimum-durations',type=float,nargs='+',default=[1.5,2.])
+    parser.add_argument('--peak-thresholds',type=float,nargs='+',default=[0.],help='optional proposal peak-probability filter; experimental postprocessing')
+    parser.add_argument('--candidates',nargs='+',help='evaluate only these candidate IDs')
+    parser.add_argument('--refine-fractions',type=float,nargs='+',default=[0.],help='crop proposals to a fraction of their own peak; zero disables refinement')
+    parser.add_argument('--refine-padding',type=float,default=0.)
     args=parser.parse_args()
     if args.out.exists():raise ValueError('Choose a new calibration output')
     if not 0<args.minimum_recall<=1:raise ValueError('Invalid recall target')
+    if any(not np.isfinite(x) or x<=0 for x in args.minimum_durations):raise ValueError('Invalid minimum duration')
+    if any(not np.isfinite(x) or not 0<=x<=1 for x in args.peak_thresholds):raise ValueError('Invalid peak threshold')
+    if any(not np.isfinite(x) or not 0<=x<=1 for x in args.refine_fractions) or not np.isfinite(args.refine_padding) or args.refine_padding<0:raise ValueError('Invalid boundary refinement')
     report=json.loads(args.comparison.read_text());expected=set(report['development_games'])
+    if args.candidates and not set(args.candidates)<={c['id'] for c in report['candidates']}:raise ValueError('Unknown candidate')
     if expected & set(report['holdout_games']):raise ValueError('Training/holdout overlap')
     probability_directory=report.get('probability_directory','probabilities')
     validate_name(probability_directory)
     output=dict(schema=1,scope='development calibration/selection scores, not unbiased final accuracy',
                 minimum_game_recall=args.minimum_recall,holdout_used=False,candidates=[])
     for candidate in report['candidates']:
+        if args.candidates and candidate['id'] not in args.candidates:continue
         validate_name(candidate['id'])
         folder=args.comparison.parent/probability_directory/candidate['id']
         files=list(folder.glob('*.npz'))
@@ -41,19 +73,21 @@ def main():
         trials=[];seen=set()
         for threshold in (.1,.15,.2,.25,.3,.4,.5,.6):
             for smooth in (.2,.6):
-                for duration in (1.5,2.):
-                    key=(threshold,max(1,round(smooth*cfg.sample_fps)),duration)
+                for duration,peak,refine in product(args.minimum_durations,args.peak_thresholds,args.refine_fractions):
+                    key=(threshold,max(1,round(smooth*cfg.sample_fps)),duration,peak,refine)
                     if key in seen:continue
                     seen.add(key)
                     trial=replace(cfg,model_threshold=threshold,model_smooth=smooth,model_min_duration=duration)
                     metrics=[];per_game=[]
                     for name,t,prob,truth in cases:
-                        predictions=intervals(trial,t,prob)
+                        predictions=filter_by_peak(t,prob,intervals(trial,t,prob),peak)
+                        predictions=refine_boundaries(t,prob,predictions,refine,args.refine_padding)
                         m=interval_metrics(truth,predictions,0);metrics.append(m)
                         per_game.append(dict(game=name,**summarize([m])))
                     summary=summarize(metrics)
                     minimum=min(g['recall'] for g in per_game)
-                    trials.append(dict(threshold=threshold,smooth=smooth,minimum_duration=duration,
+                    trials.append(dict(threshold=threshold,smooth=smooth,minimum_duration=duration,peak_threshold=peak,
+                        refine_fraction=refine,refine_padding=args.refine_padding,
                         event=summary,minimum_game_recall=minimum,meets_target=minimum>=args.minimum_recall,
                         per_game=per_game))
         qualified=[t for t in trials if t['meets_target']]

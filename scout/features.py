@@ -190,10 +190,10 @@ def _coherence(pos: np.ndarray, vel: np.ndarray) -> tuple[float, float]:
     return divergence, coherence
 
 
-def compute(cfg: Config, det: Detections, mask: np.ndarray) -> Features:
-    """Feature matrix for one camera file."""
+def compute(cfg: Config, det: Detections, mask: np.ndarray, *, tracker_factory=None) -> Features:
+    """Feature matrix for one camera file; optional factory supports isolated experiments."""
     dt = 1.0 / cfg.sample_fps
-    tracker = Tracker(dt=dt)
+    tracker = (tracker_factory or Tracker)(dt=dt)
     H, W = mask.shape
     axis = field_axis(det, mask, cfg) if cfg.field_axis else np.array([1.0, 0.0])
     F = len(det)
