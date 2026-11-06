@@ -1,4 +1,4 @@
-"""Allowlisted, immutable inference packs. Never load pickle or executable code."""
+"""Immutable non-executable packs; optional GPU references are approved assets."""
 from __future__ import annotations
 
 import hashlib
@@ -11,10 +11,12 @@ import stat
 import tempfile
 import time
 import zipfile
+from .classifier_runtime import FEATURE_SETTINGS
 
 SCHEMA = 1
 POSTPROCESS = ('conf', 'model_threshold', 'model_low_ratio', 'model_smooth',
                'model_min_duration', 'model_pre_roll', 'model_post_roll', 'merge_gap')
+POSTPROCESS_V2=POSTPROCESS+('model_peak_threshold','model_refine_fraction','model_refine_padding')
 MAX_FILE = 256 * 1024 * 1024
 MAX_TOTAL = 384 * 1024 * 1024
 
@@ -75,8 +77,9 @@ def _write(path, value):
 
 
 def _manifest(document):
-    if not isinstance(document, dict) or type(document.get('schema')) is not int or document['schema'] != SCHEMA:
+    if not isinstance(document, dict) or type(document.get('schema')) is not int or document['schema'] not in (1,2):
         raise ValueError('Unsupported model-pack schema')
+    modern=document['schema']==2
     identity(document.get('id'), document.get('version'))
     backend = document.get('backend')
     if backend not in ('onnx', 'openvino'):
@@ -92,19 +95,37 @@ def _manifest(document):
             raise ValueError('Invalid model-pack file hash/size')
     if sum(item['size'] for item in files.values()) > MAX_TOTAL:
         raise ValueError('Model pack exceeds its size limit')
-    if (document.get('preprocessing') != 'scout-coco-person-v1' or document.get('classifier') != 'scout-hgb-v1'
+    if (document.get('preprocessing') != ('scout-coco-person-resized-v1' if modern else 'scout-coco-person-v1')
+            or document.get('classifier') != ('scout-hgb-v2' if modern else 'scout-hgb-v1')
             or type(document.get('imgsz')) is not int or not 32 <= document['imgsz'] <= 2048
             or document['imgsz'] % 32 or type(document.get('sample_fps')) not in (int, float)
             or not 0 < document['sample_fps'] <= 30):
         raise ValueError('Incompatible model-pack preprocessing or sampling')
     import math
     settings = document.get('settings')
-    if (not isinstance(settings, dict) or set(settings) != set(POSTPROCESS)
+    if (not isinstance(settings, dict) or set(settings) != set(POSTPROCESS_V2 if modern else POSTPROCESS)
             or any(type(value) not in (int, float) or not math.isfinite(value) or value < 0
                    for value in settings.values())
             or any(settings[key] > 1 for key in ('conf', 'model_threshold', 'model_low_ratio'))
-            or type(document.get('runtime_api')) is not int or document['runtime_api'] != 1):
+            or type(document.get('runtime_api')) is not int or document['runtime_api'] != (2 if modern else 1)):
         raise ValueError('Incompatible model-pack runtime or postprocessing settings')
+    if modern:
+        feature_settings=document.get('feature_settings')
+        if (document.get('feature_pipeline')!='dynamic-field-v1' or not isinstance(feature_settings,dict)
+                or set(feature_settings)!=set(FEATURE_SETTINGS) or type(feature_settings['field_axis']) is not bool
+                or any(type(v) not in (int,float) or not math.isfinite(v) or v<0 for k,v in feature_settings.items() if k!='field_axis')
+                or not 0<feature_settings['min_person_h']<feature_settings['max_person_h']<=1
+                or any(feature_settings[k]>1 for k in ('field_shrink_top','horizon_y'))
+                or any(settings[k]>1 for k in ('model_peak_threshold','model_refine_fraction'))
+                or any(type(document.get(k)) is not int or not 1<=document[k]<=64 for k in ('cpu_threads','gpu_batch'))):
+            raise ValueError('Incompatible model-pack feature pipeline settings')
+        reference=document.get('gpu_reference')
+        if reference is not None:
+            from .inference import REFERENCE_MODELS
+            if (not isinstance(reference,dict) or set(reference)!={'name','sha256'}
+                    or not isinstance(reference['name'],str) or reference['name'] not in REFERENCE_MODELS
+                    or not isinstance(reference['sha256'],str) or not re.fullmatch('[0-9a-f]{64}',reference['sha256'])):
+                raise ValueError('Only approved built-in GPU reference assets are supported')
     if any(not isinstance(document.get(key), str) or not document[key].strip() for key in ('license', 'source')):
         raise ValueError('Model-pack license and source attribution are required')
     return document
@@ -125,6 +146,11 @@ def verify(folder, *, probe=False):
     from .features import FEATURE_NAMES
     from .model import OFFSETS, window_names
     _, classifier = load(folder / 'classifier.json')
+    if (classifier['format']!=document['classifier']
+            or classifier.get('feature_pipeline','legacy')!=document.get('feature_pipeline','legacy')):
+        raise ValueError('Model-pack classifier feature pipeline is incompatible')
+    if document['schema']==2 and classifier.get('feature_settings')!=document['feature_settings']:
+        raise ValueError('Model-pack classifier feature settings are incompatible')
     excluded = classifier['exclude']
     if (len(set(excluded)) != len(excluded) or not set(excluded) <= set(FEATURE_NAMES)
             or classifier['offsets'] != list(OFFSETS) or classifier['sample_fps'] != document['sample_fps']
@@ -144,9 +170,28 @@ def verify(folder, *, probe=False):
     return document
 
 
-def _configure(document, folder, cfg=None):
+def _cuda_status(reference_name=None):
+    import importlib.util
+    from .runtime import profile
+    if profile()=='inference':return False,'this build provides CPU inference'
+    try:
+        if importlib.util.find_spec('ultralytics') is None:return False,'GPU reference runtime is incomplete (Ultralytics unavailable)'
+        if importlib.util.find_spec('torch') is None:return False,'GPU reference runtime is not installed'
+        import torch
+        if torch.cuda.is_available():
+            import ultralytics
+            if reference_name and reference_name.startswith('yolo26'):
+                release=re.match(r'(\d+)\.(\d+)\.(\d+)',getattr(ultralytics,'__version__',''))
+                if release is None or tuple(map(int,release.groups()))<(8,4,0):return False,'YOLO26 requires a compatible Ultralytics runtime'
+            return True,''
+        return False,('PyTorch has no CUDA support' if torch.version.cuda is None else 'no usable CUDA device/driver')
+    except Exception as exc:return False,str(exc)
+
+
+def _configure(document, folder, cfg=None, *, choose_runtime=False):
     from .config import Config
     cfg = cfg or Config()
+    requested_device=cfg.device
     cfg.model = str(folder / ('detector.onnx' if document['backend'] == 'onnx' else 'detector.xml'))
     cfg.model_path = str(folder / 'classifier.json')
     cfg.detector_backend, cfg.device, cfg.batch = document['backend'], 'cpu', 1
@@ -156,7 +201,43 @@ def _configure(document, folder, cfg=None):
     for key, value in document['settings'].items():
         setattr(cfg, key, value)
     cfg.model_pack = identity(document['id'], document['version'])
+    cfg.feature_pipeline='legacy';cfg.decode_max_side=0;cfg.decode_gpu=True;cfg.detector_sha256=None;cfg.allow_gpu_fallback=False
+    cfg.model_peak_threshold=cfg.model_refine_fraction=cfg.model_refine_padding=0.
+    if document['schema']==2:
+        cfg.feature_pipeline=document['feature_pipeline'];cfg.decode_max_side=cfg.imgsz;cfg.decode_gpu=False
+        for key,value in document['feature_settings'].items():setattr(cfg,key,value)
+        # The legacy reset above must not discard the new profile's settings.
+        for key in POSTPROCESS_V2:setattr(cfg,key,document['settings'][key])
+        if cfg.inference_threads==0:cfg.inference_threads=min(document['cpu_threads'],os.cpu_count() or 1)
+        reference=document.get('gpu_reference')
+        if choose_runtime and requested_device!='cpu' and reference is not None:
+            available,reason=_cuda_status(reference['name'])
+            if available:
+                try:
+                    from .inference import reference_weights
+                    weights=reference_weights(cfg,reference['name'],reference['sha256'])
+                    cfg.model=str(weights);cfg.detector_backend='torch';cfg.device='cuda:0' if requested_device=='auto' else requested_device
+                    cfg.batch=document['gpu_batch'];cfg.decode_gpu=True;cfg.detector_sha256=reference['sha256']
+                    cfg.allow_gpu_fallback=requested_device=='auto'
+                    print('  model pack: using verified GPU reference detector',flush=True)
+                except (OSError,ValueError,RuntimeError) as exc:
+                    if requested_device!='auto':raise
+                    print(f'  model pack: using CPU; GPU reference preparation failed: {exc}',flush=True)
+            elif requested_device!='auto':raise ValueError(f'GPU reference unavailable: {reason}')
+            else:print(f'  model pack: using CPU ({reason})',flush=True)
+        elif choose_runtime and requested_device not in ('cpu','auto'):
+            raise ValueError('This model pack has no GPU reference detector')
+    cfg.validate_pipeline()
     return cfg
+
+
+def fallback_to_cpu(cfg):
+    """Reverify the same installed pack before any inference starts; never mix caches."""
+    if not cfg.allow_gpu_fallback or not cfg.model_pack:raise ValueError('GPU fallback was not requested')
+    folder=Path(cfg.model_path).parent;document=verify(folder)
+    if identity(document['id'],document['version'])!=cfg.model_pack:raise ValueError('GPU fallback model-pack identity changed')
+    cfg.device='cpu'
+    return _configure(document,folder,cfg,choose_runtime=False)
 
 
 class ModelStore:
@@ -189,7 +270,7 @@ class ModelStore:
     def apply(self, cfg, selection):
         selection = self.active() if selection == 'active' else selection
         folder = self.folder(selection)
-        return _configure(verify(folder), folder, cfg)
+        return _configure(verify(folder),folder,cfg,choose_runtime=True)
 
     def list(self):
         if not self.root.exists():

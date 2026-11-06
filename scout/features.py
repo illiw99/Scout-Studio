@@ -33,7 +33,7 @@ import numpy as np
 
 from .config import Config
 from .detect import Detections
-from .track import Tracker
+from .track import Tracker, TimeScaledTracker
 
 #: Speeds (body heights / second) at which player counts are taken.  Several
 #: thresholds mean the model can find its own cut rather than inheriting mine.
@@ -193,7 +193,10 @@ def _coherence(pos: np.ndarray, vel: np.ndarray) -> tuple[float, float]:
 def compute(cfg: Config, det: Detections, mask: np.ndarray, *, tracker_factory=None) -> Features:
     """Feature matrix for one camera file; optional factory supports isolated experiments."""
     dt = 1.0 / cfg.sample_fps
-    tracker = (tracker_factory or Tracker)(dt=dt)
+    if cfg.feature_pipeline not in ('legacy','dynamic-field-v1'):
+        raise ValueError('Unsupported feature pipeline')
+    factory=tracker_factory or (TimeScaledTracker if cfg.feature_pipeline=='dynamic-field-v1' else Tracker)
+    tracker = factory(dt=dt)
     H, W = mask.shape
     axis = field_axis(det, mask, cfg) if cfg.field_axis else np.array([1.0, 0.0])
     F = len(det)

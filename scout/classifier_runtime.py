@@ -14,6 +14,8 @@ import tempfile
 import numpy as np
 
 FORMAT = 'scout-hgb-v1'
+DYNAMIC_FORMAT = 'scout-hgb-v2'
+FEATURE_SETTINGS=('min_person_h','max_person_h','active_speed','sprint_speed','field_axis','field_shrink_top','horizon_y')
 TREE_FIELDS = {'feature', 'threshold', 'left', 'right', 'value', 'missing_left', 'leaf'}
 
 
@@ -27,8 +29,12 @@ def _threshold(value):
 
 class Classifier:
     def __init__(self, document):
-        if not isinstance(document, dict) or document.get('format') != FORMAT:
+        if not isinstance(document, dict) or document.get('format') not in (FORMAT,DYNAMIC_FORMAT):
             raise ValueError('Unsupported exported classifier format')
+        pipeline=document.get('feature_pipeline','legacy')
+        if ((document['format']==FORMAT and pipeline!='legacy')
+                or (document['format']==DYNAMIC_FORMAT and pipeline!='dynamic-field-v1')):
+            raise ValueError('Unsupported classifier feature pipeline')
         names = document.get('names')
         if (not isinstance(names, list) or not names or len(names) > 10000
                 or any(not isinstance(name, str) or not name or len(name) > 1024 for name in names)
@@ -110,6 +116,14 @@ def load(path):
         raise ValueError('Exported classifier is too large')
     document = json.loads(path.read_text(encoding='utf-8'))
     classifier = Classifier(document)
+    if document['format']==DYNAMIC_FORMAT:
+        settings=document.get('feature_settings')
+        if (not isinstance(settings,dict) or set(settings)!=set(FEATURE_SETTINGS)
+                or type(settings['field_axis']) is not bool
+                or any(type(v) not in (int,float) or not math.isfinite(v) or v<0 for k,v in settings.items() if k!='field_axis')
+                or not 0<settings['min_person_h']<settings['max_person_h']<=1
+                or any(settings[k]>1 for k in ('field_shrink_top','horizon_y'))):
+            raise ValueError('Invalid classifier feature settings')
     fps, offsets, excluded = document.get('sample_fps'), document.get('offsets'), document.get('exclude')
     if (type(document.get('n_features')) is not int or document['n_features'] != len(classifier.names)
             or type(fps) not in (int, float) or not math.isfinite(fps) or fps <= 0
@@ -139,9 +153,14 @@ def export(path, classifier, names, cfg, offsets):
                           value=nodes['value'].astype(float).tolist(),
                           missing_left=nodes['missing_go_to_left'].astype(bool).tolist(),
                           leaf=nodes['is_leaf'].astype(bool).tolist()))
-    document = dict(format=FORMAT, names=list(names), baseline=float(classifier._baseline_prediction[0, 0]),
+    pipeline=getattr(cfg,'feature_pipeline','legacy')
+    if pipeline not in ('legacy','dynamic-field-v1'):raise ValueError('Unsupported classifier feature pipeline')
+    document = dict(format=FORMAT if pipeline=='legacy' else DYNAMIC_FORMAT, names=list(names), baseline=float(classifier._baseline_prediction[0, 0]),
                     trees=trees, sample_fps=cfg.sample_fps, offsets=list(offsets),
                     exclude=list(cfg.model_exclude or ()), n_features=len(names))
+    if pipeline!='legacy':
+        document['feature_pipeline']=pipeline
+        document['feature_settings']={key:getattr(cfg,key) for key in FEATURE_SETTINGS}
     runtime = Classifier(document)
     probes = np.random.default_rng(0).normal(size=(256, len(names)))
     probes[::7, ::3] = np.nan

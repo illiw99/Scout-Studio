@@ -10,8 +10,6 @@ import hashlib
 from pathlib import Path
 import sys
 import time
-import math
-from dataclasses import replace
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from scout import detect,features,field,groundtruth
@@ -20,36 +18,8 @@ from scout.cli import _region_for
 from scout.media import grab_frame
 from scout.model_evaluation import project_field_region,subsample
 from scout.storage import validate_name
-from scout.track import Tracker
-
-
-class TimeScaledTracker(Tracker):
-    """Research ablation: preserve the 5 Hz settings in units of elapsed time."""
-    def __init__(self,dt):
-        super().__init__(dt=dt,gate=1.5*max(1.,5*dt),smooth=1-.4**(5*dt),
-                         max_missed=max(1,math.ceil(.6/dt-1e-9)))
-        self.required=max(1,math.ceil(.4/dt-1e-9))
-
-    def update(self,pts,hs):
-        live=super().update(pts,hs)
-        # Features require age>=2. Adapt that view without mutating track ages.
-        return [replace(track,age=2) if self.required<=track.age<2 else track for track in live]
-
-
-def dynamic_region_detections(det,keyframes,fallback,cfg):
-    """Filter source-coordinate boxes with an interpolated, time-local polygon."""
-    accepted=sorted((k['at'],k['polygon']) for k in keyframes if k.get('polygon') is not None)
-    times=np.asarray([k[0] for k in accepted]);points=np.asarray([k[1] for k in accepted])
-    boxes=[];conf=[];offsets=[0]
-    for i,when in enumerate(det.times):
-        if len(accepted):
-            coordinates=np.asarray([np.interp(when,times,points[:,vertex,axis])
-                for vertex in range(points.shape[1]) for axis in range(2)]).reshape(-1,2)
-            mask=field.polygon_mask(coordinates,fallback.shape,cfg.field_shrink_top)
-        else:mask=fallback
-        b,c=det.frame(i);keep=features._on_field(b,mask,cfg)
-        boxes.append(b[keep]);conf.append(c[keep]);offsets.append(offsets[-1]+int(keep.sum()))
-    return detect.Detections(det.times.copy(),np.asarray(offsets,np.int64),np.concatenate(boxes),np.concatenate(conf),det.mask_shape)
+from scout.track import TimeScaledTracker
+from scout.camera import filter_detections as dynamic_region_detections
 
 
 def main():

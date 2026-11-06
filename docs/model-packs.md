@@ -3,7 +3,7 @@
 Model packs are separate ZIP files, installed under application user data rather
 than beside a game. Importing or activating one does not scan footage, rerun
 predictions, or change saved game configuration. The desktop Models menu imports,
-activates and rolls back packs; choose **Installed model pack** for new detection
+activates and rolls back packs; choose **Installed model pack · automatic** for new detection
 jobs. Running jobs keep their selected version. The default reference detector
 and experimental faster CPU profile remain available.
 
@@ -16,7 +16,7 @@ models. A smaller detector's speed does not establish equivalent play accuracy.
 
 Packs contain exactly `manifest.json`, `classifier.json`, `LICENSE.txt`, and either
 `detector.onnx` or `detector.xml` with `detector.bin`. Pickles, checkpoints, scripts,
-training provenance and arbitrary model-directory contents are excluded. The
+training datasets, footage and arbitrary model-directory contents are excluded. The
 version1 manifest records ID/version, exact file sizes/SHA-256 hashes, engine,
 runtime API, preprocessing, image size, sampling, classifier format, license,
 source and postprocessing settings. Runtime API1 supports FP32 CPU COCO80/person0
@@ -49,3 +49,37 @@ are immutable through this API: a different pack cannot replace the same version
 Activation atomically records current and previous selections; repeated activation
 is a no-op and a failed activation preserves rollback. Old versions stay installed.
 Detection caches record pack identity and remain separate from reference caches.
+
+## Version-two adaptive-field profiles
+
+Schema2/runtime API2 packs use `scout-coco-person-resized-v1` preprocessing,
+`scout-hgb-v2` classifiers and the `dynamic-field-v1` feature pipeline. They bind
+the numeric feature settings to the classifier, restore resized boxes to source
+coordinates, project field regions from observed camera frames, and scale tracker
+timing with sampling rate. Their settings add `model_peak_threshold`,
+`model_refine_fraction` and `model_refine_padding`. Saved polygons are never
+replaced. Legacy packs, classifier files and default cache identities remain valid.
+Older builds reject version-two classifiers/packs rather than silently using
+legacy feature meanings.
+
+These packs keep the same non-executable file allowlist. An optional
+`gpu_reference` specifies only an approved built-in detector name and SHA-256.
+It cannot choose an arbitrary URL or carry a checkpoint. On a compatible reference
+build, automatic mode verifies an official pinned asset before Torch loads a
+private snapshot. CPU-only builds do not probe Torch. Missing/incompatible GPU
+libraries, asset preparation failure or automatic reference initialization failure
+select the pack's CPU graph. Explicit GPU requests report failures. A standalone
+segment job can reuse a complete matching CPU cache set after a prior automatic
+fallback; it never combines partial CPU/GPU cache sets.
+
+CPU import/probing does not download or initialize the GPU reference. Runtime
+selection and loading happen in the processing worker. `cpu_threads` and
+`gpu_batch` provide bounded defaults; per-game polygons remain authoritative.
+Additional camera samples are stored with new detections, so normal processing
+does not need a second source decode for camera alignment. Cached camera clocks
+rebase with source ordering just like the raw detections.
+
+`scripts/build-reviewed-pack.py` builds a private pack from an explicit frozen
+candidate and a managed graph with matching checkpoint/resolution provenance.
+It does not train, activate, scan source libraries or publish anything. The current
+reviewed pack is a local evaluation artifact, not a public model release.

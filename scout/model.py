@@ -205,13 +205,15 @@ def save(path: Path, clf, names: list[str], cfg: Config) -> None:
         from .classifier_runtime import export
         export(path, clf, names, cfg, OFFSETS)
         return
+    from .classifier_runtime import FEATURE_SETTINGS
+    metadata={"clf":clf,"names":names,"sample_fps":cfg.sample_fps,"offsets":OFFSETS,
+              "exclude":tuple(cfg.model_exclude or ()),"n_features":len(names),"feature_pipeline":cfg.feature_pipeline}
+    if cfg.feature_pipeline!='legacy':metadata['feature_settings']={key:getattr(cfg,key) for key in FEATURE_SETTINGS}
     path.parent.mkdir(parents=True, exist_ok=True)
     import tempfile
     with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as fh:
         temporary = Path(fh.name)
-        pickle.dump({"clf": clf, "names": names, "sample_fps": cfg.sample_fps,
-                     "offsets": OFFSETS, "exclude": tuple(cfg.model_exclude or ()),
-                     "n_features": len(names)}, fh)
+        pickle.dump(metadata,fh)
     temporary.replace(path)
 
 
@@ -252,6 +254,12 @@ def load(path: Path, cfg: Config | None = None):
                     raise RuntimeError('Legacy pickle classifiers require scout-flag[reference]; use an exported inference model for a smaller runtime') from exc
                 raise
     if cfg is not None:
+        if d.get('feature_pipeline','legacy')!=cfg.feature_pipeline:
+            raise ValueError('Model feature pipeline differs from configuration; use its matching profile or retrain')
+        if cfg.feature_pipeline!='legacy':
+            from .classifier_runtime import FEATURE_SETTINGS
+            if d.get('feature_settings')!={key:getattr(cfg,key) for key in FEATURE_SETTINGS}:
+                raise ValueError('Model feature settings differ from configuration; use its matching profile or retrain')
         want = tuple(cfg.model_exclude or ())
         got = tuple(d.get("exclude", ()))
         if set(want) != set(got):
@@ -309,3 +317,33 @@ def importances(clf, names: list[str], X: np.ndarray, y: np.ndarray,
 def grouped_importances(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]:
     """Already grouped; kept so callers need not care."""
     return pairs
+
+
+def filter_by_peak(t,prob,predictions,threshold):
+    """Keep proposals with enough evidence somewhere inside the proposal."""
+    if threshold==0:return predictions
+    result=[]
+    for start,end in predictions:
+        first,last=np.searchsorted(t,start,side='left'),np.searchsorted(t,end,side='right')
+        if last>first and np.max(prob[first:last])>=threshold:result.append((start,end))
+    return result
+
+
+def refine_boundaries(t,prob,predictions,fraction,padding):
+    """Refine a proposal relative to its own peak, retaining weak true plays."""
+    if fraction==0:return predictions
+    dt=float(np.median(np.diff(t))) if len(t)>1 else .2
+    result=[]
+    for start,end in predictions:
+        first,last=np.searchsorted(t,start,side='left'),np.searchsorted(t,end,side='right')
+        if last<=first:continue
+        active=np.flatnonzero(prob[first:last]>=fraction*np.max(prob[first:last]))+first
+        result.append((max(start,float(t[active[0]])-padding),min(end,float(t[active[-1]])+dt+padding)))
+    return result
+
+
+def postprocess(cfg,t,prob):
+    """Versioned-profile postprocessing; legacy defaults preserve old intervals."""
+    cfg.validate_pipeline()
+    predictions=filter_by_peak(t,prob,intervals(cfg,t,prob),cfg.model_peak_threshold)
+    return refine_boundaries(t,prob,predictions,cfg.model_refine_fraction,cfg.model_refine_padding)

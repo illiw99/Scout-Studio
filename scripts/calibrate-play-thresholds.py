@@ -14,25 +14,7 @@ from scout.model_evaluation import interval_metrics,summarize
 from itertools import product
 
 
-def filter_by_peak(t,prob,predictions,threshold):
-    if threshold==0:return predictions
-    result=[]
-    for start,end in predictions:
-        first,last=np.searchsorted(t,start,side='left'),np.searchsorted(t,end,side='right')
-        if last>first and np.max(prob[first:last])>=threshold:result.append((start,end))
-    return result
-
-
-def refine_boundaries(t,prob,predictions,fraction,padding):
-    if fraction==0:return predictions
-    dt=float(np.median(np.diff(t))) if len(t)>1 else .2
-    result=[]
-    for start,end in predictions:
-        first,last=np.searchsorted(t,start,side='left'),np.searchsorted(t,end,side='right')
-        if last<=first:continue
-        active=np.flatnonzero(prob[first:last]>=fraction*np.max(prob[first:last]))+first
-        result.append((max(start,float(t[active[0]])-padding),min(end,float(t[active[-1]])+dt+padding)))
-    return result
+from scout.model import filter_by_peak,refine_boundaries
 
 
 def main():

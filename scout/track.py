@@ -12,7 +12,8 @@ appearance model - because the camera is fixed and the sampling interval short.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field as _field
+from dataclasses import dataclass, field as _field, replace
+import math
 
 import numpy as np
 
@@ -105,3 +106,17 @@ class Tracker:
 
     def reset(self) -> None:
         self.tracks.clear()
+
+
+class TimeScaledTracker(Tracker):
+    """Preserve the 5 Hz settings in units of elapsed time at sparse sampling rates."""
+    def __init__(self,dt):
+        if not np.isfinite(dt) or dt<=0:raise ValueError('Positive finite tracker time step required')
+        super().__init__(dt=dt,gate=1.5*max(1.,5*dt),smooth=1-.4**(5*dt),
+                         max_missed=max(1,math.ceil(.6/dt-1e-9)))
+        self.required=max(1,math.ceil(.4/dt-1e-9))
+
+    def update(self,pts,hs):
+        live=super().update(pts,hs)
+        # Features require age>=2. Adapt that view without mutating track ages.
+        return [replace(track,age=2) if self.required<=track.age<2 else track for track in live]

@@ -13,6 +13,21 @@ from scout.classifier_runtime import Classifier, load
 
 @unittest.skipUnless(importlib.util.find_spec('sklearn'), 'training extra needed for equivalence reference')
 class ClassifierExportTests(unittest.TestCase):
+    def test_feature_pipeline_is_versioned_and_cannot_load_under_legacy_settings(self):
+        import json
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        X=np.arange(30.).reshape(-1,1);y=(X[:,0]>15).astype(int)
+        clf=HistGradientBoostingClassifier(max_iter=2,min_samples_leaf=2).fit(X,y)
+        cfg=Config(model_exclude=(),feature_pipeline='dynamic-field-v1')
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'model.json';model.save(path,clf,['x'],cfg)
+            _,metadata=load(path)
+            self.assertEqual(metadata['format'],'scout-hgb-v2')
+            model.load(path,cfg)
+            with self.assertRaisesRegex(ValueError,'pipeline differs'):model.load(path,Config(model_exclude=()))
+            document=json.loads(path.read_text());document['format']='scout-hgb-v1'
+            with self.assertRaisesRegex(ValueError,'feature pipeline'):Classifier(document)
+
     def test_probabilities_missing_values_and_final_intervals_match(self):
         from sklearn.ensemble import HistGradientBoostingClassifier
         rng=np.random.default_rng(4)

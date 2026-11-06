@@ -321,5 +321,28 @@ GPU confirmation is now complete on both reserved games: **169/173 hits
 (97.69% recall), 90.86% precision, boundary p90 1.402 s, mean IoU 0.834**, with
 minimum-game recall 97.67%. The complete 124.2 minutes processed at **17.26x
 realtime including loading**. CPU confirmation of the identical numeric head
-is underway. This establishes the GPU prototype's target on this holdout;
-native application integration and complete CPU quality verification remain.
+has also completed on the identical fixed head. Final reserved full-game results:
+
+| Runtime | Hits / GT | Recall | Precision | Boundary p90 | Realtime including loading |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPU, CUDA FP16 | 169 / 173 | 97.69% | 90.86% | 1.402 s | 17.26x |
+| CPU, OpenVINO FP32 + CPU decode | 168 / 173 | 97.11% | 89.84% | 1.642 s | 7.59x |
+
+Each run processes the complete 124.2 minutes. Minimum per-game recall is 97.67%
+on GPU and 96.51% on CPU. Both boundaries fall within one second for 71.0%/67.3%
+of matched plays respectively. This exposes the timestamp trade-off; high event
+recall is not a claim of frame-accurate cuts. These measurements meet the stated
+prototype recall and speed aims on the local Linux hardware.
+
+Native integration now provides the version-two pack/profile path described in
+[model packs](model-packs.md). It preserves legacy defaults and model semantics;
+activating a new profile is explicit. Compatibility review found an initialization
+fallback gap; the fix also carries the effective backend across `run` stages and
+reuses only complete matching cache sets for standalone segmentation. Regression
+tests cover both automatic fallback and explicit-GPU errors.
+
+The full suite passed 300 tests (two skips) using the isolated OpenVINO environment;
+source/wheel checks passed. HON/PAN, which were never used for model selection,
+are now copied into a separate native-worker confirmation workspace. Only new
+private fields/reviews/configuration/caches are written there; source video links
+remain read-only inputs. Native-worker confirmation on those games remains pending.

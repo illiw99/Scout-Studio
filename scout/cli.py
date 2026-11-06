@@ -12,7 +12,7 @@ from .config import Config
 from .storage import read_library, validate_name, STATE_DIR_NAMES
 from . import (timeline, detect, features, segment, cut, report, field, pick,
                shotcut, groundtruth, evaluate, tune, collect,
-               merge, model)
+               merge, model, camera)
 from .media import grab_frame
 
 CONFIG_FILE = "scout.json"
@@ -219,7 +219,8 @@ def _mask_for(cfg: Config, clips, clip):
                          or c.path.name == region["ref_file"]), None)
         if ref_clip is not None:
             try:
-                ref = grab_frame(ref_clip.path, region.get("ref_time", 60.0))
+                options={} if cfg.decode_gpu else dict(hwaccel=False)
+                ref = grab_frame(ref_clip.path,region.get('ref_time',60.0),**options)
             except Exception:
                 ref = None
     else:
@@ -228,6 +229,44 @@ def _mask_for(cfg: Config, clips, clip):
               f"Run: scout pick")
     mask = detect.field_mask(cfg, clip, ref, poly)
     return mask
+
+
+def _camera_features(cfg,clips,clip,det):
+    """Project the saved reference in memory; never replace a saved field."""
+    region=_region_for(cfg,clips,clip)
+    reference_clip=(next((c for c in clips if str(c.path.resolve())==region['ref_file']
+                         or c.path.name==region['ref_file']),None) if region else None)
+    reference=None;keyframes=[]
+    if reference_clip is not None:
+        try:
+            rw,rh=detect.decode_shape(reference_clip.info.width,reference_clip.info.height,640)
+            reference=grab_frame(reference_clip.path,region.get('ref_time',60.),rw,rh,hwaccel=cfg.decode_gpu)
+        except Exception:pass
+    if reference is not None:
+        times,frames=det.camera_times,det.camera_frames
+        if times is None or frames is None:
+            dw,dh=detect.decode_shape(clip.info.width,clip.info.height,cfg.decode_max_side)
+            samples=[]
+            indices={round(f*(max(1,round(clip.info.duration*cfg.sample_fps))-1)) for f in (0,.15,.325,.5,.675,.85,1)}
+            import cv2
+            for index in sorted(indices):
+                when=min(index/cfg.sample_fps,max(0,clip.info.duration-.1))
+                try:
+                    image=grab_frame(clip.path,when,dw,dh,hwaccel=cfg.decode_gpu,
+                        gpu_resize=bool(cfg.decode_max_side and cfg.decode_gpu))
+                    cw,ch=detect.decode_shape(image.shape[1],image.shape[0],640)
+                    samples.append((clip.start+when,cv2.resize(image,(cw,ch),interpolation=cv2.INTER_LINEAR)))
+                except Exception:pass
+            times=[t for t,_ in samples];frames=[rgb for _,rgb in samples]
+        for when,rgb in zip(times,frames):
+            polygon,quality=camera.project_field_region(reference,rgb,region['polygon'])
+            keyframes.append(dict(at=float(when),polygon=polygon,**quality))
+    # Compute the legacy mask only when it is needed; healthy projections use
+    # already observed frames and avoid a second decode of the source.
+    fallback=(np.ones(det.mask_shape,bool) if any(k['polygon'] is not None for k in keyframes)
+              else _mask_for(cfg,clips,clip))
+    filtered=camera.filter_detections(det,keyframes,fallback,cfg)
+    return features.compute(cfg,filtered,np.ones(det.mask_shape,bool))
 
 
 # --- commands -------------------------------------------------------------
@@ -338,7 +377,7 @@ def _gt_files(cfg: Config, mlts: list[str]):
 
 def _plays_from_model(cfg: Config, clf, f, t_end):
     prob = model.predict(clf, f, cfg)
-    return model.to_plays(cfg, model.intervals(cfg, f.t, prob), t_end)
+    return model.to_plays(cfg,model.postprocess(cfg,f.t,prob),t_end)
 
 
 def cmd_train(args) -> int:
@@ -584,22 +623,39 @@ def cmd_strips(args) -> int:
 def cmd_detect(args) -> int:
     cfg = _load(args)
     clips = _clips(cfg, args)
-    detector = None
-    print(f"  model {cfg.model} @ {cfg.imgsz}px, sampling {cfg.sample_fps} fps")
-    for c in clips:
-        if detect.load_cached(cfg, c) is None and detector is None:
-            detector = detect.create_detector(cfg)
-        detect.run(cfg, c, model=detector)
+    _detect_for(cfg,clips)
     return 0
 
 
+def _detect_for(cfg,clips):
+    """Resolve the effective backend before reading or producing any source cache."""
+    detector = None
+    if any(detect.load_cached(cfg,c) is None for c in clips):
+        detector=detect.create_detector(cfg)  # automatic initialization can select CPU
+    print(f"  model {cfg.model} @ {cfg.imgsz}px, sampling {cfg.sample_fps} fps")
+    for c in clips:
+        detect.run(cfg, c, model=detector)
+
+
 def _features_for(cfg: Config, clips) -> features.Features:
+    cfg.validate_pipeline()
+    if cfg.allow_gpu_fallback and cfg.model_pack and any(not detect.cache_path(cfg,c).is_file() for c in clips):
+        # Standalone detect/segment jobs may be separate processes. Reuse a
+        # complete, matching CPU cache set after automatic GPU initialization
+        # failed; never combine different detector backends within a game.
+        from dataclasses import replace
+        from .model_packs import fallback_to_cpu
+        cpu=replace(cfg);fallback_to_cpu(cpu)
+        if all(detect.cache_path(cpu,c).is_file() for c in clips):
+            cfg.__dict__.update(cpu.__dict__)
+            print('  model pack: using complete CPU detection cache for segmentation',flush=True)
     parts = []
     for c in clips:
         det = detect.load_cached(cfg, c)
         if det is None:
             raise ValueError(f"{c.path}: missing detection cache; run scout detect with the same settings")
-        parts.append(features.compute(cfg, det, _mask_for(cfg, clips, c)))
+        parts.append(_camera_features(cfg,clips,c,det) if cfg.feature_pipeline=='dynamic-field-v1'
+                     else features.compute(cfg,det,_mask_for(cfg,clips,c)))
     if not parts:
         raise SystemExit("no detections available")
     return features.Features(
@@ -694,7 +750,7 @@ def cmd_run(args) -> int:
     dst = cfg.path(cfg.out_dir) / "review.mlt"
     if dst.exists() and not args.force:
         raise ValueError(f"{dst} exists; use --force only to replace the review")
-    cmd_detect(args)
+    _detect_for(cfg,clips)
     f = _features_for(cfg, clips)
     plays = _segment(cfg, f, clips[-1].end)
     shotcut.write_review(cfg, clips, plays, dst)

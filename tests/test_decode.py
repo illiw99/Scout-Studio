@@ -9,6 +9,29 @@ from scout import media
 
 
 class DecodeTests(unittest.TestCase):
+    def test_resize_decode_and_cpu_fallbacks_preserve_one_continuous_sequence(self):
+        def failure(count):
+            yield from range(count)
+            raise RuntimeError('unsupported backend')
+        with patch.object(media,'ffmpeg_has_cuda',return_value=True), \
+             patch.object(media,'_iter_frames',side_effect=[failure(2),failure(4),iter(range(6))]) as decode, \
+             warnings.catch_warnings(record=True) as notices:
+            self.assertEqual(list(media.iter_frames('video',5,2,2,gpu_resize=True)),list(range(6)))
+        self.assertEqual(len(notices),2)
+        self.assertTrue(decode.call_args_list[0].kwargs['gpu_resize'])
+        self.assertNotIn('gpu_resize',decode.call_args_list[1].kwargs)
+        self.assertFalse(decode.call_args_list[2].kwargs.get('cuda',False))
+
+    def test_cuda_resize_happens_before_download(self):
+        import io
+        from types import SimpleNamespace
+        proc=SimpleNamespace(stdout=io.BytesIO(bytes(12)),stderr=io.BytesIO(),wait=lambda:0)
+        with patch.object(media.subprocess,'Popen',return_value=proc) as start:
+            self.assertEqual(len(list(media._iter_frames('video',5,2,2,cuda=True,gpu_resize=True))),1)
+        cmd=start.call_args.args[0];filters=cmd[cmd.index('-vf')+1]
+        self.assertIn('-hwaccel_output_format',cmd)
+        self.assertLess(filters.index('scale_cuda'),filters.index('hwdownload'))
+
     def test_gpu_success(self):
         with patch.object(media, 'ffmpeg_has_cuda', return_value=True), \
              patch.object(media, '_iter_frames', return_value=iter([1, 2])) as decode:

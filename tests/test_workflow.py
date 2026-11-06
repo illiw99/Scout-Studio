@@ -119,15 +119,19 @@ class WorkflowTests(unittest.TestCase):
             cut.cut_all(self.cfg,self.clips,self.plays,progress=False)
 
     def test_protect_review_before_detection(self):
-        with patch('scout.cli._clips',return_value=self.clips), patch('scout.cli._region_for',return_value={'polygon':[]}), patch('scout.cli.cmd_detect') as detect_cmd, contextlib.redirect_stderr(io.StringIO()):
+        with patch('scout.cli._clips',return_value=self.clips), patch('scout.cli._region_for',return_value={'polygon':[]}), patch('scout.cli._detect_for') as detect_cmd, contextlib.redirect_stderr(io.StringIO()):
             rc=cli.main(['--out-dir',str(self.root),'run'])
         self.assertEqual(rc,2)
         detect_cmd.assert_not_called()
 
     def test_run_only_review(self):
         output=self.root/'new'
-        with patch('scout.cli._clips',return_value=self.clips), patch('scout.cli._region_for',return_value={'polygon':[]}), patch('scout.cli.cmd_detect'), patch('scout.cli._features_for'), patch('scout.cli._segment',return_value=self.plays), contextlib.redirect_stdout(io.StringIO()):
+        def effective_cpu(cfg,clips):cfg.device='cpu';cfg.detector_backend='onnx';cfg.decode_gpu=False
+        with patch('scout.cli._clips',return_value=self.clips), patch('scout.cli._region_for',return_value={'polygon':[]}), patch('scout.cli._detect_for',side_effect=effective_cpu), patch('scout.cli._features_for') as compute, patch('scout.cli._segment',return_value=self.plays), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(cli.main(['--out-dir',str(output),'run']),0)
+        self.assertEqual(compute.call_args.args[0].device,'cpu')
+        self.assertEqual(compute.call_args.args[0].detector_backend,'onnx')
+        self.assertFalse(compute.call_args.args[0].decode_gpu)
         self.assertEqual([p.name for p in output.iterdir()],['review.mlt'])
 
     def test_single_match_training(self):

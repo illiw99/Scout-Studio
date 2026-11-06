@@ -136,28 +136,33 @@ def iter_frames(
     gray: bool = False,
     *,
     hwaccel: bool = True,
+    gpu_resize: bool = False,
     cancel_event=None,
 ) -> Iterator[np.ndarray]:
     """Stream frames using CUDA when available, otherwise CPU.
 
-    If CUDA fails, restart on CPU and discard already delivered frames so
-    callers see one continuous sequence. Set ``hwaccel=False`` to force CPU.
+    Optional GPU resizing avoids downloading source-resolution frames. Failed
+    resizing retries CUDA decoding alone, then CPU, without repeating frames.
+    Set ``hwaccel=False`` to force CPU.
     """
     delivered = 0
     if cancel_event is not None and cancel_event.is_set():
         return
     if hwaccel and ffmpeg_has_cuda():
-        try:
-            for frame in _iter_frames(path, fps, width, height, start, duration, gray,
-                                      cuda=True, cancel_event=cancel_event):
-                delivered += 1
-                yield frame
-            return
-        except RuntimeError as exc:
-            if cancel_event is not None and cancel_event.is_set():
+        for resize in ([True,False] if gpu_resize else [False]):
+            try:
+                options=dict(cuda=True,cancel_event=cancel_event)
+                if resize:options['gpu_resize']=True
+                for i,frame in enumerate(_iter_frames(path,fps,width,height,start,duration,gray,**options)):
+                    if i>=delivered:
+                        delivered+=1
+                        yield frame
                 return
-            warnings.warn(f"CUDA decode failed for {Path(path).name}; using CPU. {exc}",
-                          RuntimeWarning, stacklevel=2)
+            except RuntimeError as exc:
+                if cancel_event is not None and cancel_event.is_set():return
+                message=(f'CUDA resize failed for {Path(path).name}; retrying without GPU resizing. {exc}' if resize else
+                         f'CUDA decode failed for {Path(path).name}; using CPU. {exc}')
+                warnings.warn(message,RuntimeWarning,stacklevel=2)
     for i, frame in enumerate(_iter_frames(path, fps, width, height, start, duration, gray,
                                           cancel_event=cancel_event)):
         if i >= delivered:
@@ -174,6 +179,7 @@ def _iter_frames(
     gray: bool = False,
     *,
     cuda: bool = False,
+    gpu_resize: bool = False,
     cancel_event=None,
 ) -> Iterator[np.ndarray]:
     """Yield decoded frames as numpy arrays, resampled to ``fps``.
@@ -186,13 +192,16 @@ def _iter_frames(
     cmd = [ffmpeg_exe(), "-hide_banner", "-loglevel", "error"]
     if cuda:
         cmd += ["-hwaccel", "cuda"]
+        if gpu_resize:cmd += ['-hwaccel_output_format','cuda']
     if start:
         cmd += ["-ss", f"{start:.3f}"]
     cmd += ["-i", str(path)]
     if duration is not None:
         cmd += ["-t", f"{duration:.3f}"]
+    video_filter=(f'fps={fps},scale_cuda={width}:{height}:format=nv12,hwdownload,format=nv12,format={pix}'
+                  if cuda and gpu_resize else f'fps={fps},scale={width}:{height}:flags=bilinear')
     cmd += [
-        "-vf", f"fps={fps},scale={width}:{height}:flags=bilinear",
+        "-vf", video_filter,
         "-pix_fmt", pix, "-f", "rawvideo", "-",
     ]
 
@@ -249,12 +258,16 @@ def _iter_frames(
                 watcher.join(timeout=1)
 
 
-def grab_frame(path: str | Path, t: float, width: int = 0, height: int = 0) -> np.ndarray:
+def grab_frame(path: str | Path, t: float, width: int = 0, height: int = 0, *,
+               hwaccel: bool = True, gpu_resize: bool = False) -> np.ndarray:
     """Single RGB frame at time ``t`` (native size when width/height are 0)."""
     info = probe(path)
     w = width or info.width
     h = height or info.height
-    for frame in iter_frames(path, fps=1000, width=w, height=h, start=t, duration=0.2):
+    options={}
+    if not hwaccel:options['hwaccel']=False
+    if gpu_resize:options['gpu_resize']=True
+    for frame in iter_frames(path,fps=1000,width=w,height=h,start=t,duration=.2,**options):
         return frame
     raise ValueError(f"no frame at t={t} in {Path(path).name}")
 

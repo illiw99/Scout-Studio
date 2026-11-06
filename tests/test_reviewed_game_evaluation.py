@@ -145,6 +145,17 @@ class CalibrationTests(unittest.TestCase):
 
 
 class MotionFeatureTests(unittest.TestCase):
+    def test_application_feature_pipeline_selects_time_scaled_tracking(self):
+        from scout.config import Config
+        from scout.detect import Detections
+        from scout.features import compute
+        det=Detections(np.array([0.,1.]),np.array([0,1,2]),np.array([[0,10,10,20],[30,10,40,20]],np.float32),np.ones(2),(100,100))
+        mask=np.ones((100,100),bool)
+        legacy=compute(Config(sample_fps=1,field_axis=False),det,mask)
+        dynamic=compute(Config(sample_fps=1,field_axis=False,feature_pipeline='dynamic-field-v1'),det,mask)
+        self.assertEqual(legacy.n_active[1],0)
+        self.assertEqual(dynamic.n_active[1],1)
+
     def test_source_stage_restores_decoder_when_detector_fails(self):
         from types import SimpleNamespace
         from scout.config import Config

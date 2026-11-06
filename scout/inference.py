@@ -21,6 +21,67 @@ import cv2
 import numpy as np
 
 REVISION = 1
+REFERENCE_MODELS={f'{family}{size}.pt' for family in ('yolov8','yolo11','yolo26') for size in ('n','s','m')}
+
+
+def reference_path(cfg,name,expected):
+    if not isinstance(name,str) or name not in REFERENCE_MODELS or not isinstance(expected,str) or not re.fullmatch('[0-9a-f]{64}',expected):
+        raise ValueError('Unsupported built-in reference detector')
+    return cache_root(cfg)/'reference-weights'/expected/name
+
+
+def reference_weights(cfg,name,expected):
+    """Fetch only fixed official assets; verify bytes before any Torch loading."""
+    import urllib.request
+    path=reference_path(cfg,name,expected)
+    if path.is_symlink() or path.parent.is_symlink():raise ValueError('Reference weights must not be links')
+    if path.exists():
+        if digest(path)!=expected:raise ValueError('Reference weight cache checksum mismatch')
+        return path
+    path.parent.mkdir(parents=True,exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.download-',dir=path.parent) as directory:
+        staged=Path(directory)/name
+        request=urllib.request.Request('https://github.com/ultralytics/assets/releases/download/v8.4.0/'+name,
+            headers={'User-Agent':'Scout-Studio','Accept':'application/octet-stream'})
+        with urllib.request.urlopen(request,timeout=30) as response,staged.open('xb') as target:
+            total=0
+            while True:
+                chunk=response.read(1024*1024)
+                if not chunk:break
+                total+=len(chunk)
+                if total>64*1024*1024:raise ValueError('Reference detector download exceeds size limit')
+                target.write(chunk)
+        if digest(staged)!=expected:raise ValueError('Reference detector download checksum mismatch')
+        try:os.link(staged,path)
+        except FileExistsError:pass
+    if path.is_symlink() or digest(path)!=expected:raise ValueError('Reference detector changed during publication')
+    return path
+
+
+class CheckedReferenceDetector:
+    """Load an immutable verified snapshot of an approved reference checkpoint."""
+    def __init__(self,cfg,loader):
+        self.path=Path(cfg.model).resolve();self.expected=cfg.detector_sha256
+        self.settings=self._settings(cfg)
+        self.validate_source(cfg)
+        payload=self.path.read_bytes()
+        if hashlib.sha256(payload).hexdigest()!=self.expected:raise ValueError('Reference checkpoint changed while loading')
+        directory=cache_root(cfg)/'reference-loads';directory.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='.load-',dir=directory) as temporary:
+            snapshot=Path(temporary)/'checkpoint.pt';snapshot.write_bytes(payload)
+            self.engine=loader(str(snapshot))
+        self.validate_source(cfg)
+
+    @staticmethod
+    def _settings(cfg):
+        return (cfg.model,cfg.detector_sha256,cfg.imgsz,cfg.conf,cfg.sample_fps,cfg.batch,cfg.half,cfg.quantize,
+                cfg.decode_max_side,cfg.decode_gpu,cfg.model_pack,cfg.device,cfg.detector_backend,cfg.allow_gpu_fallback)
+
+    def validate_source(self,cfg):
+        if self._settings(cfg)!=self.settings or Path(cfg.model).resolve()!=self.path or digest(self.path)!=self.expected:
+            raise RuntimeError('Reference detector identity changed; no detections were saved')
+
+    def predict(self,frames,**kwargs):return self.engine.predict(frames,**kwargs)
 
 
 def version(name):

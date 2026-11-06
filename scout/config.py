@@ -31,6 +31,7 @@ class Config:
     #: horizontal, so "spread across the field" was already being measured along
     #: the wrong direction; this stops a tilted camera breaking it outright.
     field_axis: bool = True
+    feature_pipeline: str = 'legacy'  # versioned feature meaning, stored with classifiers
     extensions: tuple[str, ...] = (".mp4", ".mov", ".mts", ".avi", ".mkv")
 
     #: Files whose size is still changing are being copied in; skip them until
@@ -52,6 +53,10 @@ class Config:
     #: Inference resolution.  Players are 60-100 px tall in a 1080p frame, so
     #: downscaling below 1280 starts to lose the far side of the field.
     imgsz: int = 1280
+    decode_max_side: int = 0       # 0 preserves source-resolution legacy decoding
+    decode_gpu: bool = True        # False explicitly disables GPU video decoding
+    detector_sha256: str | None = None  # checked built-in GPU reference for a model pack
+    allow_gpu_fallback: bool = False   # automatic pack selection, before inference starts
     conf: float = 0.25
     device: str = "auto"          # "auto" | "cuda" | "cuda:0" | "cpu"
     batch: int = 8
@@ -181,6 +186,9 @@ class Config:
     model_threshold: float = 0.50
     model_low_ratio: float = 0.55
     model_smooth: float = 0.6
+    model_peak_threshold: float = 0.0
+    model_refine_fraction: float = 0.0
+    model_refine_padding: float = 0.0
     model_min_duration: float = 2.0
     #: Padding around what the model calls the play.  Both are zero because the
     #: learned interval already lands on the marked boundaries: measured over
@@ -273,7 +281,24 @@ class Config:
             raise SystemExit(f"{p}: unknown config keys: {', '.join(sorted(unknown))}")
         for k, v in data.items():
             setattr(cfg, k, v)
+        cfg.validate_pipeline()
         return cfg
 
     def save(self, path: str | Path) -> None:
         Path(path).write_text(json.dumps(asdict(self), indent=2))
+
+    def validate_pipeline(self) -> None:
+        import math
+        import re
+        if self.feature_pipeline not in ('legacy','dynamic-field-v1'):
+            raise ValueError('Unsupported feature pipeline')
+        if (type(self.decode_max_side) is not int or not 0<=self.decode_max_side<=2048
+                or (self.decode_max_side and self.decode_max_side%32) or type(self.decode_gpu) is not bool):
+            raise ValueError('Invalid detector decode settings')
+        if self.detector_sha256 is not None and (not isinstance(self.detector_sha256,str) or not re.fullmatch('[0-9a-f]{64}',self.detector_sha256)):
+            raise ValueError('Invalid detector weight checksum')
+        if type(self.allow_gpu_fallback) is not bool:raise ValueError('Invalid GPU fallback setting')
+        for name in ('model_peak_threshold','model_refine_fraction','model_refine_padding'):
+            value=getattr(self,name)
+            if type(value) not in (int,float) or not math.isfinite(value) or value<0 or (name!='model_refine_padding' and value>1):
+                raise ValueError(f'Invalid {name}')

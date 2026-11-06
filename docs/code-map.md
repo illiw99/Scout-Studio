@@ -18,11 +18,12 @@ when moving responsibilities; read only paths relevant to the task.
 | Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `scripts/prepare-scaled-detector-features.py`, `docs/detector-benchmark-2026-11-05.md` |
 | Immutable inference packs, compatibility checks and activation rollback | `scout/model_packs.py`, `tests/test_model_packs.py`, `docs/model-packs.md` |
 | Manual release checks and verified installer staging | `scout/updates.py`, `tests/test_updates.py`, `docs/updates.md` |
-| Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py`; isolated camera-region experiments: `scripts/prepare-camera-region-features.py` |
+| Field masks, camera movement and polygon setup | `scout/field.py`, `scout/camera.py`, `scout/pick.py`; isolated experiments: `scripts/prepare-camera-region-features.py` |
 | Player tracking and motion features | `scout/track.py`, `scout/features.py` |
 | Heuristic play segmentation | `scout/segment.py` |
 | Reviewed-game improvement protocol and strict interval metrics | `docs/model-improvement.md`, `scout/model_evaluation.py`, `scripts/evaluate-reviewed-games.py`, `scripts/calibrate-play-thresholds.py`, `scripts/extract-video-features.py`, `scripts/combine-video-features.py`, `tests/test_model_evaluation.py` |
 | Frozen research heads, complete-pipeline timing and reserved full-game confirmation | `scripts/freeze-reviewed-candidate.py`, `scripts/benchmark-reviewed-pipeline.py`, `scripts/evaluate-frozen-candidate.py`, `tests/test_reviewed_game_evaluation.py` |
+| Native adaptive-field profiles, resized decode/cache coordinates and verified GPU references | `scout/cli.py`, `scout/detect.py`, `scout/media.py`, `scout/inference.py`, `tests/test_decode_profile.py`, `tests/test_reference_assets.py` |
 | Trained classifier, evaluation and parameter tuning | `scout/model.py`, `scout/evaluate.py`, `scout/tune.py` |
 | NumPy-only exported classifier inference and numerical/boundary checks | `scout/classifier_runtime.py`, `tests/test_classifier_runtime.py` |
 | MP4 cuts, cross-source clips, audio and encoding | `scout/cut.py` |
