@@ -308,10 +308,18 @@ The 640 px YOLO26n candidate was rejected: default-threshold recall fell to
 82.47% at 5 Hz. Calibration recovered high overlap recall only with about 55%
 precision. This directly argues against selecting resolution on speed alone.
 Frozen S3D112 also failed: direct linear-head recall was 50.86%; its completed
-balanced tree head reached 32.84%. These are specific negative configurations,+not a rejection of every video architecture.
+balanced tree head reached 32.84%. These are specific negative configurations,
+not a rejection of every video architecture.
 
 New research checks cover frozen-head split/weight guards, source-coordinate
 mapping, decoder restoration after errors, and reserved source concatenation
 without fitting. Sixteen focused checks pass. The last full suite passed 278
 tests with four skips; a final full run follows timed confirmation so it does
 not compete with CPU measurements. No production defaults have been changed.
+
+GPU confirmation is now complete on both reserved games: **169/173 hits
+(97.69% recall), 90.86% precision, boundary p90 1.402 s, mean IoU 0.834**, with
+minimum-game recall 97.67%. The complete 124.2 minutes processed at **17.26x
+realtime including loading**. CPU confirmation of the identical numeric head
+is underway. This establishes the GPU prototype's target on this holdout;
+native application integration and complete CPU quality verification remain.
