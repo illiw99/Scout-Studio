@@ -18,6 +18,64 @@ def load_script(filename='evaluate-reviewed-games.py'):
 
 
 class GroupedEvaluationTests(unittest.TestCase):
+    def test_full_confirmation_joins_reserved_sources_without_fitting(self):
+        from types import SimpleNamespace
+        from scout.config import Config
+        from scout.media import MediaInfo
+        from scout.timeline import Clip
+        from scout.features import Features
+        script=load_script('evaluate-frozen-candidate.py');calls=[]
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'head.json').write_text('{}');(root/'weights.pt').write_bytes(b'fixture')
+            records=[dict(name='dev',partition='development',clips=[]),dict(name='reserved',partition='holdout',marks=[[1,3]],clips=[dict(start=0),dict(start=2)])]
+            (root/'dataset.json').write_text(json.dumps(records))
+            clips=[Clip(MediaInfo(root/f'clip{i}.mp4',2,1920,1080,30,None),i*2,0) for i in range(2)]
+            def run_source(cfg,source,*args,**kwargs):
+                calls.append(source.start);t=source.start+np.arange(0,2,.5)
+                return Features(t,np.zeros((4,len(FEATURE_NAMES))),FEATURE_NAMES),dict(pipeline_seconds=.1)
+            head=dict(imgsz=1280,candidate='fixture',reserved_games=['reserved'],training_games=['dev'],pipeline={},postprocessing={})
+            helpers={'freeze-reviewed-candidate':SimpleNamespace(load_head=lambda *a:(object(),Config(sample_fps=2),head)),
+                'benchmark-reviewed-pipeline':SimpleNamespace(run_source=run_source),
+                'calibrate-play-thresholds':SimpleNamespace(filter_by_peak=lambda t,p,plays,*a:plays,refine_boundaries=lambda t,p,plays,*a:plays)}
+            arguments=['confirm','--snapshot',str(root),'--head',str(root/'head.json'),'--weights',str(root/'weights.pt'),'--backend','cuda','--out',str(root/'out')]
+            with patch.object(script.sys,'argv',arguments),patch.object(script,'helper',side_effect=lambda name:helpers.get(name,object())), \
+                 patch.object(script.detect,'create_detector',return_value=object()),patch.object(script.groundtruth,'project_clips',return_value=clips), \
+                 patch.object(script.model,'fit',side_effect=AssertionError('Confirmation must never fit')), \
+                 patch.object(script.model,'predict',side_effect=lambda clf,f,cfg:((f.t>=1)&(f.t<=3)).astype(float)),contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(script.main(),0)
+            report=json.loads((root/'out/report.json').read_text())
+            self.assertEqual(calls,[0,2])
+            self.assertEqual(report['event']['hits'],1)
+            self.assertEqual([g['game'] for g in report['games']],['reserved'])
+
+    def test_frozen_head_never_reads_reserved_features_and_locks_truth_and_weights(self):
+        from dataclasses import asdict
+        from scout.config import Config
+        from scout.classifier_runtime import Classifier
+        script=load_script('freeze-reviewed-candidate.py')
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);records=[]
+            for name,group,partition in [('dev-a','day-a','development'),('dev-b','day-b','development'),('reserved','day-c','holdout')]:
+                records.append(dict(name=name,group=group,partition=partition,marks=[[1.,3.]]))
+                if partition=='development':
+                    (root/name).mkdir();t=np.arange(8.)
+                    np.savez(root/name/'features-1.npz',t=t,X=np.ones((8,len(FEATURE_NAMES))),names=np.asarray(FEATURE_NAMES))
+            (root/'dataset.json').write_text(json.dumps(records))
+            (root/'features.json').write_text(json.dumps(dict(schema='fixture',names=FEATURE_NAMES,rates=[1],region_policy='dynamic')))
+            cfg=Config(sample_fps=1,model_max_iter=2,model_max_depth=2,model_min_leaf=1)
+            calibration=dict(candidates=[dict(id='candidate',configuration=asdict(cfg),best=dict(threshold=.3,smooth=.2,minimum_duration=2,event=dict(recall=1),minimum_game_recall=1))])
+            (root/'calibration.json').write_text(json.dumps(calibration));(root/'weights.pt').write_bytes(b'fixture')
+            arguments=['freeze','--features',str(root),'--calibration',str(root/'calibration.json'),'--candidate','candidate','--weights',str(root/'weights.pt'),'--out',str(root/'head.json')]
+            with patch.object(script.sys,'argv',arguments),contextlib.redirect_stdout(io.StringIO()):self.assertEqual(script.main(),0)
+            classifier,_,payload=script.load_head(root/'head.json',records,root/'weights.pt')
+            self.assertEqual(set(payload['training_games']),{'dev-a','dev-b'})
+            self.assertEqual(payload['reserved_games'],['reserved'])
+            with self.assertRaisesRegex(ValueError,'Unsupported'):Classifier(payload)
+            records[-1]['marks']=[[1.,3.1]]
+            with self.assertRaisesRegex(ValueError,'identity changed'):script.load_head(root/'head.json',records,root/'weights.pt')
+            records[-1]['marks']=[[1.,3.]];(root/'weights.pt').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError,'weights differ'):script.load_head(root/'head.json',records,root/'weights.pt')
+
     def test_reserved_game_never_enters_any_training_fit(self):
         script=load_script()
         with tempfile.TemporaryDirectory() as directory:
@@ -87,6 +145,39 @@ class CalibrationTests(unittest.TestCase):
 
 
 class MotionFeatureTests(unittest.TestCase):
+    def test_source_stage_restores_decoder_when_detector_fails(self):
+        from types import SimpleNamespace
+        from scout.config import Config
+        from scout.media import MediaInfo
+        from scout.timeline import Clip
+        script=load_script('benchmark-reviewed-pipeline.py');original=script.detect.iter_frames
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'source.mp4';path.write_bytes(b'fixture');state=path.stat()
+            clip=Clip(MediaInfo(path,5,1920,1080,30,None),0,0)
+            identity=dict(source=path.name,bytes=state.st_size,mtime_ns=state.st_mtime_ns)
+            args=SimpleNamespace(size=1280,backend='cuda')
+            scaled=SimpleNamespace(resized_shape=lambda *a:(1280,720))
+            with patch.object(script.detect,'run',side_effect=RuntimeError('detector failed')),self.assertRaisesRegex(RuntimeError,'detector failed'):
+                script.run_source(Config(),clip,[clip],dict(name='dev'),identity,args,object(),object(),scaled,{},5)
+            self.assertIs(script.detect.iter_frames,original)
+
+    def test_benchmark_maps_predictions_back_to_source_geometry(self):
+        from scout.inference import Prediction
+        from types import SimpleNamespace
+        script=load_script('benchmark-reviewed-pipeline.py')
+        engine=SimpleNamespace(predict=lambda frames,**kw:[Prediction(np.array([[1,2,3,4]],np.float32),np.array([.8],np.float32))])
+        wrapper=script.SourceGeometryDetector(engine,(1920,1080))
+        result=wrapper.predict([np.zeros((180,320,3),np.uint8)])[0]
+        np.testing.assert_array_equal(result.boxes,[[6,12,18,24]])
+        np.testing.assert_allclose(result.conf,[.8])
+        with self.assertRaises(ValueError):wrapper.predict([])
+
+    def test_active_benchmark_window_stays_inside_source(self):
+        script=load_script('benchmark-reviewed-pipeline.py')
+        self.assertEqual(script.active_window_start([[100,110]],0,900,300),70)
+        self.assertEqual(script.active_window_start([[880,890]],0,900,300),600)
+        self.assertEqual(script.active_window_start([],0,900,300),300)
+
     def test_time_scaled_tracker_preserves_5hz_and_associates_one_second_motion(self):
         from scout.track import Tracker
         script=load_script('prepare-camera-region-features.py')

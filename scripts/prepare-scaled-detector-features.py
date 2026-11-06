@@ -7,6 +7,7 @@ failure stops the experiment rather than silently changing its backend.
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -30,9 +31,13 @@ def source_boxes(boxes,decoded_shape,source_shape):
     return np.asarray(boxes,np.float32)*np.asarray([original_w/w,original_h/h,original_w/w,original_h/h],np.float32)
 
 
-def cuda_frames(path,fps,width,height):
+def cuda_frames(path,fps,width,height,duration=None,start=0.):
     cmd=[media.ffmpeg_exe(),'-hide_banner','-loglevel','error','-hwaccel','cuda',
-         '-hwaccel_output_format','cuda','-i',str(path),'-vf',
+         '-hwaccel_output_format','cuda']
+    if start:cmd+=['-ss',str(start)]
+    cmd+=['-i',str(path)]
+    if duration is not None:cmd+=['-t',str(duration)]
+    cmd+=['-vf',
          f'fps={fps:g},scale_cuda={width}:{height},hwdownload,format=nv12,format=rgb24',
          '-f','rawvideo','-']
     proc=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
@@ -71,6 +76,10 @@ def main():
     for record in records:
         validate_name(record['name'])
         if record['partition'] not in ('development','holdout'):raise ValueError('Unknown split')
+    runtime=args.out.parent/'.scout-experiment-runtime'
+    for variable,folder in [('YOLO_CONFIG_DIR','ultralytics'),('MPLCONFIGDIR','matplotlib'),('CUDA_CACHE_PATH','cuda')]:
+        destination=runtime/folder;destination.mkdir(parents=True,exist_ok=True,mode=0o700)
+        os.environ[variable]=str(destination)
     import cv2
     import torch
     from ultralytics import YOLO

@@ -274,3 +274,44 @@ Validation at this stage: full local check passed 278 tests (four skips) and
 source/wheel packaging passed; focused research checks also pass. Those
 checks establish code/fixture behavior, not real Windows GPU performance or
 the accuracy/speed targets.
+
+### Fixed candidate and full-pipeline confirmation
+
+The next candidate is locked before its reserved-game run: **YOLO26n 1280,
+2.5 Hz, dynamic field regions, time-scaled tracking, reference HGB head**.
+Its development selection uses threshold 0.2, minimum proposal duration 3 s,
+0.2 s smoothing, and half-peak boundary refinement with 0.2 s padding.
+Development overlap recall is **395/405 (97.53%)**, weakest game **95%**,
+precision **88.37%**, boundary p90 **1.287 s**, and mean IoU **0.825**.
+
+The head is exported once as numeric trees inside a research-specific wrapper.
+Both backends use that exact head. The wrapper locks source/GT/split identity,
+detector weight hash, sampling, feature order and temporal offsets; ordinary
+production classifier loading rejects it. Reserved arrays never enter fitting.
+Full-game confirmation joins features in original source order before temporal
+prediction, rather than treating each camera file as an independent game.
+
+Three 180 s Linux timing windows measured **7.62x CPU** including detector loading,
+CPU-only decoding, camera correction, tracking, features, prediction and
+postprocessing. OpenVINO explicitly reported CPU execution and CUDA was disabled.
+GPU aggregate timing was **13.40x** including cold initialization; the two later
+windows measured **15.29x/15.39x**. Two windows were before the first marked play,
+so these are timing evidence, not quality evidence. Full reserved games now test
+active play, quality and longer-run throughput together.
+
+The first reserved full game completed on GPU: **84/86 hits (97.67%)**, **90.32%
+precision**, boundary p90 **1.570 s**, **17.15x realtime**. The second game and
+CPU confirmation remain in progress. Do not report the complete reserved test,
+or the application integration, as finished from this partial result.
+
+The 640 px YOLO26n candidate was rejected: default-threshold recall fell to
+82.47% at 5 Hz. Calibration recovered high overlap recall only with about 55%
+precision. This directly argues against selecting resolution on speed alone.
+Frozen S3D112 also failed: direct linear-head recall was 50.86%; its completed
+balanced tree head reached 32.84%. These are specific negative configurations,+not a rejection of every video architecture.
+
+New research checks cover frozen-head split/weight guards, source-coordinate
+mapping, decoder restoration after errors, and reserved source concatenation
+without fitting. Sixteen focused checks pass. The last full suite passed 278
+tests with four skips; a final full run follows timed confirmation so it does
+not compete with CPU measurements. No production defaults have been changed.

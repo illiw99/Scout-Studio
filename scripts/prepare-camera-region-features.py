@@ -6,6 +6,7 @@ private feature dataset and does not process reserved games by default.
 """
 import argparse
 import json
+import hashlib
 from pathlib import Path
 import sys
 import time
@@ -57,6 +58,7 @@ def main():
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--detections-from',type=Path,help='optional fresh-detector dataset')
     parser.add_argument('--masks-from',type=Path,help='reuse completed masks from this exact snapshot')
+    parser.add_argument('--dynamic-from',type=Path,help='reuse dynamic keyframe polygons from this exact snapshot')
     parser.add_argument('--include-holdout',action='store_true')
     parser.add_argument('--region-policy',choices=('camera-union','full-frame','dynamic'),default='camera-union')
     parser.add_argument('--min-person-height',type=float,help='experimental minimum height as fraction of frame height')
@@ -65,10 +67,16 @@ def main():
     args=parser.parse_args()
     if args.min_person_height is not None and not 0<args.min_person_height<Config().max_person_h:raise ValueError('Invalid minimum person height')
     if args.masks_from and args.region_policy!='camera-union':raise ValueError('Reused masks require camera-union policy')
+    if args.dynamic_from and (args.region_policy!='dynamic' or args.masks_from):raise ValueError('Reused dynamic polygons require dynamic policy')
     if not set(args.rates)<={5.,2.5,1.} or len(set(args.rates))!=len(args.rates):raise ValueError('Use unique supported rates:5,2.5,1')
     if args.out.exists():raise ValueError('Choose a new experiment directory')
     records=json.loads((args.snapshot/'dataset.json').read_text())
     for record in records:validate_name(record['name'])
+    if args.detections_from:
+        detector_records=json.loads((args.detections_from/'dataset.json').read_text())
+        identity=lambda rows:[{k:v for k,v in row.items() if k!='cache_provenance'} for row in rows]
+        if identity(records)!=identity(detector_records):raise ValueError('Detector dataset source identities, labels or splits differ')
+        records=[dict(record,cache_provenance=source.get('cache_provenance','unverified')) for record,source in zip(records,detector_records)]
     args.out.mkdir(parents=True)
     (args.out/'dataset.json').write_text(json.dumps(records,indent=2))
     (args.out/'features.json').write_text(json.dumps(dict(schema='scout-person-camera-union-v1',
@@ -88,7 +96,13 @@ def main():
             if clip.path.name!=Path(identity['source']).name or (before.st_size,before.st_mtime_ns)!=(identity['bytes'],identity['mtime_ns']):raise ValueError('Source identity/order changed')
             start=time.perf_counter()
             legacy=np.load(args.snapshot/game/(clip.path.stem+'-mask.npy'),allow_pickle=False)
-            if args.region_policy=='full-frame':
+            if args.dynamic_from:
+                original=json.loads((args.dynamic_from/game/'region-provenance.json').read_text())
+                if original['source_clips']!=record['clips'] or original.get('region_policy')!='dynamic':raise ValueError('Dynamic region source identity/policy differs')
+                entry=next(q for q in original['quality'] if q['source']==identity['source'])
+                accepted=entry['keyframes']
+                mask=np.load(args.dynamic_from/game/(clip.path.stem+'-mask.npy'),allow_pickle=False)
+            elif args.region_policy=='full-frame':
                 mask=np.ones_like(legacy);accepted=[]
             elif args.masks_from:
                 original=json.loads((args.masks_from/game/'region-provenance.json').read_text())
@@ -120,16 +134,20 @@ def main():
             with np.load(files[0],allow_pickle=False) as z:
                 det=detect.Detections(clip.start+np.arange(len(z['times']))/5,z['offsets'],z['boxes'],z['conf'],tuple(z['mask_shape']))
             if abs(len(det)/5-clip.info.duration)>.25 or det.mask_shape!=mask.shape:raise ValueError('Detection timing/geometry mismatch')
+            det_fps=5.
             if args.region_policy=='dynamic':
+                if len(parts)==1:
+                    det_fps=next(iter(parts));det=subsample(det,5,det_fps)
                 absolute=[dict(k,at=k['at']+clip.start) for k in accepted]
                 det=dynamic_region_detections(det,absolute,legacy,cfg)
                 mask=np.ones_like(legacy)
             for fps in parts:
-                cfg.sample_fps=fps;parts[fps].append(features.compute(cfg,subsample(det,5,fps),mask,
+                cfg.sample_fps=fps;parts[fps].append(features.compute(cfg,subsample(det,det_fps,fps),mask,
                     tracker_factory=TimeScaledTracker if args.time_scaled_tracker else None))
             after=clip.path.stat()
             if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError('Source changed during extraction')
-            quality.append(dict(source=identity['source'],keyframes=accepted,legacy_area=int(legacy.sum()),union_area=int(mask.sum()),seconds=time.perf_counter()-start))
+            quality.append(dict(source=identity['source'],input_cache_sha256=hashlib.sha256(files[0].read_bytes()).hexdigest(),
+                keyframes=accepted,legacy_area=int(legacy.sum()),union_area=int(mask.sum()),seconds=time.perf_counter()-start))
         for fps,items in parts.items():np.savez_compressed(private/f'features-{fps:g}.npz',t=np.concatenate([f.t for f in items]),X=np.concatenate([f.X for f in items]),names=np.asarray(items[0].names))
         (private/'region-provenance.json').write_text(json.dumps(dict(source_clips=record['clips'],quality=quality,
             region_policy=args.region_policy,min_person_height=cfg.min_person_h,
