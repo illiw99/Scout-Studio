@@ -3,7 +3,7 @@
 Model packs are separate ZIP files, installed under application user data rather
 than beside a game. Importing or activating one does not scan footage, rerun
 predictions, or change saved game configuration. The desktop Models menu imports,
-activates and rolls back packs; choose **Installed model pack · automatic** for new detection
+activates and rolls back packs; choose **Default model · automatic GPU / CPU** for new detection
 jobs. Running jobs keep their selected version. The default reference detector
 and experimental faster CPU profile remain available.
 
@@ -96,3 +96,6 @@ Custom-context PKLs use `scout-context-pickle-v1` and a distinct classifier key 
 older readers fail instead of silently applying their fixed time offsets. The
 numeric JSON remains the portable inference artifact; matching settings are
 required for either format. Existing PKLs are never replaced by these experiments.
+
+See [default-model deployment](default-model.md) for automatic Studio selection,
+verified offline standalone packs and preserving explicit model choices.

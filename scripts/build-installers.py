@@ -2,14 +2,16 @@
 """Build the current platform's standalone installer using an isolated build env.
 
 Install packaging/build-requirements.txt and .[desktop] first. The script never
-installs dependencies or reads user libraries. Outputs go only to build/installer
-and dist/installers. Windows requires Inno Setup; Linux requires dpkg-deb;
+installs dependencies or reads user libraries. Outputs default to build/installer
+and dist/installers; explicit work/output directories support isolated builds.
+Windows requires Inno Setup; Linux requires dpkg-deb;
 macOS requires hdiutil and builds for the running Python architecture.
 """
 from __future__ import annotations
 
 import argparse
 import ast
+import contextlib
 import hashlib
 import json
 import os
@@ -102,9 +104,16 @@ def notarize(path):
 def build() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version-only', action='store_true')
+    parser.add_argument('--baseline-pack', type=Path, help='private baseline model-pack archive to verify and bundle')
+    parser.add_argument('--baseline-sha256', help='expected SHA256 of --baseline-pack (required together)')
+    parser.add_argument('--ffmpeg-binary', type=Path, help='explicit FFmpeg executable to stage and bundle with its dynamic dependencies')
+    parser.add_argument('--work-dir', type=Path, help='override the platform build working directory')
+    parser.add_argument('--output-dir', type=Path, help='override the installer output directory')
     parser.add_argument('--runtime-profile', choices=('reference', 'inference'), default='reference',
                         help='inference excludes training/reference frameworks; requires an installed inference model pack')
     args = parser.parse_args()
+    if (args.baseline_pack is None) != (args.baseline_sha256 is None):
+        parser.error('--baseline-pack and --baseline-sha256 must be supplied together')
     version = project_version()
     if args.version_only:
         print(version)
@@ -117,15 +126,45 @@ def build() -> None:
     if system in {'Windows', 'Linux'} and arch not in {'x86_64', 'amd64'}:
         raise SystemExit('Windows and Debian installers currently target x86-64')
     suffix = '-inference' if args.runtime_profile == 'inference' else ''
-    work = ROOT / ('build/installer' + suffix)
-    output = ROOT / ('dist/installers' + suffix)
+    work = args.work_dir.resolve() if args.work_dir is not None else ROOT / ('build/installer' + suffix)
+    output = args.output_dir.resolve() if args.output_dir is not None else ROOT / ('dist/installers' + suffix)
     work.mkdir(parents=True, exist_ok=True)
     output.mkdir(parents=True, exist_ok=True)
     os.environ['SCOUT_STUDIO_BUILD_VERSION'] = version
     os.environ['SCOUT_RUNTIME_PROFILE'] = args.runtime_profile
-    run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
-        '--distpath', work / 'dist', '--workpath', work / 'pyinstaller',
-        ROOT / 'packaging/scout-studio.spec')
+    previous_baseline = os.environ.pop('SCOUT_BASELINE_DIR', None)
+    previous_ffmpeg = os.environ.pop('SCOUT_FFMPEG_BINARY', None)
+    try:
+        with contextlib.ExitStack() as staging:
+            if args.ffmpeg_binary is not None:
+                ffmpeg_source = args.ffmpeg_binary.resolve()
+                if not ffmpeg_source.is_file() or not os.access(ffmpeg_source, os.X_OK):
+                    raise ValueError(f'FFmpeg must be a regular executable file: {ffmpeg_source}')
+                temporary_media = staging.enter_context(tempfile.TemporaryDirectory(prefix='ffmpeg-', dir=work))
+                ffmpeg = Path(temporary_media) / ('ffmpeg.exe' if system == 'Windows' else 'ffmpeg')
+                shutil.copy2(ffmpeg_source, ffmpeg)
+                os.environ['SCOUT_FFMPEG_BINARY'] = str(ffmpeg)
+            if args.baseline_pack is not None:
+                # Use the source helper even when this script is launched directly.
+                sys.path.insert(0, str(ROOT))
+                try:
+                    from scout.model_defaults import prepare_bundle
+                finally:
+                    sys.path.pop(0)
+                temporary = staging.enter_context(tempfile.TemporaryDirectory(prefix='baseline-', dir=work))
+                baseline = prepare_bundle(args.baseline_pack.resolve(), args.baseline_sha256,
+                                          Path(temporary) / 'bundle')
+                os.environ['SCOUT_BASELINE_DIR'] = str(baseline)
+            run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
+                '--distpath', work / 'dist', '--workpath', work / 'pyinstaller',
+                ROOT / 'packaging/scout-studio.spec')
+    finally:
+        os.environ.pop('SCOUT_BASELINE_DIR', None)
+        if previous_baseline is not None:
+            os.environ['SCOUT_BASELINE_DIR'] = previous_baseline
+        os.environ.pop('SCOUT_FFMPEG_BINARY', None)
+        if previous_ffmpeg is not None:
+            os.environ['SCOUT_FFMPEG_BINARY'] = previous_ffmpeg
     bundle = work / 'dist/Scout-Studio'
     if system == 'Windows':
         if signed:

@@ -16,6 +16,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Explicit CPU graph runtimes, preprocessing/NMS and managed detector exports | `scout/inference.py`, `tests/test_inference.py` |
 | Windows GPU availability and faster detector candidates | `docs/detection-performance.md` |
 | Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `scripts/prepare-scaled-detector-features.py`, `docs/detector-benchmark-2026-11-05.md` |
+| Offline Studio defaults and approved standalone model/media inputs | `scout/model_defaults.py`, `docs/default-model.md`, `tests/test_model_defaults.py`, `tests/test_default_profile.py` |
 | Immutable inference packs, compatibility checks and activation rollback | `scout/model_packs.py`, `tests/test_model_packs.py`, `docs/model-packs.md` |
 | Manual release checks and verified installer staging | `scout/updates.py`, `tests/test_updates.py`, `docs/updates.md` |
 | Field masks, camera movement and polygon setup | `scout/field.py`, `scout/camera.py`, `scout/pick.py`; isolated experiments: `scripts/prepare-camera-region-features.py` |

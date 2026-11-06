@@ -48,7 +48,8 @@ def smoke_test(report_path: Path) -> int:
     """Exercise the installed bundle using synthetic media and isolated settings.
 
     A JSON file works for GUI executables that have no stdout on Windows. No
-    model weights, personal footage, library or existing preferences are used.
+    personal footage, library or existing preferences are used. A bundled default
+    is prepared only in an isolated model store.
     Run in a separate process: Qt and dependency environment changes are local.
     """
     report = dict(ok=False, version=__version__, frozen=bool(getattr(sys, 'frozen', False)), checks={})
@@ -120,7 +121,7 @@ def _exercise(root, checks):
     from scout.segment import Play
     from scout.timeline import Clip
     # Explicitly verify the bundled FFmpeg, even on runners with system FFmpeg.
-    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg = media.ffmpeg_exe()
     source = root / 'source.mp4'
     subprocess.run([ffmpeg, '-v', 'error', '-f', 'lavfi', '-i',
                     'color=c=blue:s=160x96:r=25:d=2', '-c:v', 'libx264',
@@ -234,7 +235,13 @@ def _exercise(root, checks):
         checks['preservation_paths'] = True
     app.setWindowIcon(QIcon(str(application_icon_path())))
     from scout.desktop.app import Studio
-    window = Studio(root / 'empty-library', settings=QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat))
+    from scout.model_packs import ModelStore
+    from scout.model_defaults import bundled_directory
+    smoke_store = ModelStore(root / 'model-packs')
+    class SmokeStudio(Studio):
+        def model_store(self):
+            return smoke_store
+    window = SmokeStudio(root / 'empty-library', settings=QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat))
     try:
         window.show()
         app.processEvents()
@@ -248,5 +255,13 @@ def _exercise(root, checks):
             QTest.qWait(25)
         assert window.video_widget.videoSink().videoFrame().isValid(), window.player.errorString()
         checks['playback'] = True
+        deadline = time.monotonic() + 60
+        while window.tasks and time.monotonic() < deadline:
+            app.processEvents()
+            QTest.qWait(25)
+        assert not window.tasks, 'Default model preparation did not finish'
+        if bundled_directory() is not None:
+            assert window.detection_profile.currentData() == 'active-pack'
+            checks['bundled_default'] = smoke_store.active()
     finally:
         _dispose_smoke_window(window, app)

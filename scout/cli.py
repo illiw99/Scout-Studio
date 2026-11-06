@@ -144,7 +144,11 @@ def _load(args) -> Config:
     selection = getattr(args, 'model_pack', None) or cfg.model_pack
     if selection and args.cmd in ('run', 'detect', 'segment', 'preview'):
         from .model_packs import ModelStore
-        ModelStore(getattr(args, 'model_packs_dir', None) or cfg.model_packs_dir).apply(cfg, selection)
+        store = ModelStore(getattr(args, 'model_packs_dir', None) or cfg.model_packs_dir)
+        if selection == 'active':
+            from .model_defaults import ensure_default
+            ensure_default(store)
+        store.apply(cfg, selection)
         args.model_pack = cfg.model_pack  # pin active selection across run's repeated loads
     for name in ("sample_fps", "imgsz", "batch", "clip_workers"):
         if getattr(cfg, name) <= 0:

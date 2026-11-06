@@ -33,7 +33,13 @@ _CREATED = re.compile(r"creation_time\s*:\s*(\S+)")
 @lru_cache(maxsize=1)
 def ffmpeg_exe() -> str:
     """Standalone apps use their bundled build; source installs prefer system."""
-    if not getattr(sys, 'frozen', False):
+    if getattr(sys, 'frozen', False):
+        selected = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent)) / '_scout_media' / ('ffmpeg.exe' if sys.platform == 'win32' else 'ffmpeg')
+        if selected.exists():
+            if not selected.is_file():
+                raise RuntimeError('Bundled FFmpeg is not an executable file')
+            return str(selected)
+    else:
         exe = shutil.which("ffmpeg")
         if exe:
             return exe

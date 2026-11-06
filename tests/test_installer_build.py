@@ -10,7 +10,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 
 def builder():
@@ -195,3 +196,192 @@ class SigningTests(unittest.TestCase):
             run.side_effect = subprocess.CalledProcessError(1, ['signtool'])
             with self.assertRaises(subprocess.CalledProcessError):
                 module.sign_windows(Path('fixture.exe'))
+
+
+class BaselineBuildTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.module = builder()
+
+    def test_paired_arguments_required_before_any_build_work(self):
+        for arguments in (['--baseline-pack', 'pack.zip'], ['--baseline-sha256', 'a' * 64]):
+            with self.subTest(arguments=arguments), \
+                 patch.object(sys, 'argv', ['build-installers.py', *arguments]), \
+                 patch.object(self.module, 'run') as run, \
+                 patch.object(self.module, 'project_version') as version, \
+                 contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as error:
+                    self.module.build()
+                self.assertEqual(error.exception.code, 2)
+                run.assert_not_called()
+                version.assert_not_called()
+
+    def test_version_only_does_not_prepare_or_build(self):
+        helper = Mock()
+        with patch.object(sys, 'argv', ['build-installers.py', '--version-only']), \
+             patch.object(self.module, 'project_version', return_value='1.2.3'), \
+             patch.object(self.module, 'run') as run, \
+             patch.dict(sys.modules, {'scout.model_defaults': SimpleNamespace(prepare_bundle=helper)}), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.module.build()
+        self.assertEqual(output.getvalue(), '1.2.3\n')
+        run.assert_not_called()
+        helper.assert_not_called()
+
+    def build_isolated(self, *, baseline=True, failure=False, ffmpeg=False, ffmpeg_invalid=False):
+        source = self.root / 'source'
+        (source / 'scripts').mkdir(parents=True)
+        (source / 'scripts/test-installer.py').write_text('# fixture')
+        work, output = self.root / 'isolated/work', self.root / 'isolated/output'
+        archive = self.root / 'private.zip'
+        archive.write_bytes(b'fixture archive')
+        arguments = ['--work-dir', str(work), '--output-dir', str(output),
+                     '--runtime-profile', 'inference']
+        if baseline:
+            arguments += ['--baseline-pack', str(archive), '--baseline-sha256', 'a' * 64]
+        ffmpeg_source = self.root / 'custom-ffmpeg-build'
+        if ffmpeg:
+            if not ffmpeg_invalid:
+                ffmpeg_source.write_bytes(b'fixture executable')
+                ffmpeg_source.chmod(0o755)
+            arguments += ['--ffmpeg-binary', str(ffmpeg_source)]
+        staged_media = []
+        staged = []
+        def prepare(pack, digest, destination):
+            self.assertEqual(pack, archive)
+            self.assertEqual(digest, 'a' * 64)
+            self.assertFalse(destination.exists())
+            if failure:
+                raise ValueError('invalid baseline fixture')
+            destination.mkdir()
+            (destination / 'model-pack.zip').write_bytes(pack.read_bytes())
+            (destination / 'receipt.json').write_text('{}')
+            staged.append(destination)
+            return destination
+        helper = Mock(side_effect=prepare)
+        commands = []
+        def run(*args):
+            commands.append(args)
+            if args[1:3] == ('-m', 'PyInstaller'):
+                self.assertEqual(args[args.index('--distpath') + 1], work / 'dist')
+                self.assertEqual(args[args.index('--workpath') + 1], work / 'pyinstaller')
+                if ffmpeg:
+                    media = Path(os.environ['SCOUT_FFMPEG_BINARY'])
+                    staged_media.append(media)
+                    self.assertEqual(media.name, 'ffmpeg.exe')
+                    self.assertEqual(media.read_bytes(), ffmpeg_source.read_bytes())
+                    self.assertNotEqual(media, ffmpeg_source)
+                    self.assertTrue(os.access(media, os.X_OK))
+                else:
+                    self.assertNotIn('SCOUT_FFMPEG_BINARY', os.environ)
+                if baseline:
+                    self.assertEqual(Path(os.environ['SCOUT_BASELINE_DIR']), staged[0])
+                    self.assertTrue((staged[0] / 'receipt.json').is_file())
+                else:
+                    self.assertNotIn('SCOUT_BASELINE_DIR', os.environ)
+            else:
+                (output / 'Scout-Studio-1.2.3-windows-x86_64.exe').write_bytes(b'installer fixture')
+        with patch.object(self.module, 'ROOT', source), \
+             patch.object(self.module, 'project_version', return_value='1.2.3'), \
+             patch.object(self.module.platform, 'system', return_value='Windows'), \
+             patch.object(self.module.platform, 'machine', return_value='amd64'), \
+             patch.object(self.module, 'run', side_effect=run), \
+             patch.object(self.module.shutil, 'which', return_value='iscc'), \
+             patch.dict(sys.modules, {'scout.model_defaults': SimpleNamespace(prepare_bundle=helper)}), \
+             patch.dict(os.environ, {'SCOUT_BASELINE_DIR': 'ambient-stale-input',
+                                     'SCOUT_FFMPEG_BINARY': 'ambient-ffmpeg'}, clear=True), \
+             patch.object(sys, 'argv', ['build-installers.py', *arguments]), \
+             contextlib.redirect_stdout(io.StringIO()):
+            if failure or ffmpeg_invalid:
+                with self.assertRaisesRegex(ValueError, 'regular executable' if ffmpeg_invalid else 'invalid baseline'):
+                    self.module.build()
+                self.assertEqual(commands, [])
+            else:
+                self.module.build()
+                self.assertEqual(len(commands), 2)
+                self.assertTrue((output / 'build-info.json').is_file())
+            self.assertEqual(os.environ['SCOUT_BASELINE_DIR'], 'ambient-stale-input')
+            self.assertEqual(os.environ['SCOUT_FFMPEG_BINARY'], 'ambient-ffmpeg')
+        self.assertFalse((source / 'build').exists())
+        self.assertFalse((source / 'dist').exists())
+        self.assertEqual(list(work.glob('baseline-*')), [])
+        self.assertEqual(list(work.glob('ffmpeg-*')), [])
+        self.assertTrue(all(not path.exists() for path in staged_media))
+        self.assertEqual(helper.call_count, 1 if baseline and not ffmpeg_invalid else 0)
+
+    def test_baseline_is_prepared_before_freezing_with_isolated_paths(self):
+        self.build_isolated()
+
+    def test_explicit_ffmpeg_is_staged_with_normalized_name(self):
+        self.build_isolated(ffmpeg=True)
+
+    def test_missing_ffmpeg_prevents_build(self):
+        self.build_isolated(ffmpeg=True, ffmpeg_invalid=True)
+
+    def test_baseline_validation_failure_prevents_build(self):
+        self.build_isolated(failure=True)
+
+    def test_no_baseline_does_not_bundle_ambient_input(self):
+        self.build_isolated(baseline=False)
+
+    def test_spec_includes_exact_baseline_files_and_rejects_missing_files(self):
+        source = Path(__file__).resolve().parents[1] / 'packaging/scout-studio.spec'
+        tree = ast.parse(source.read_text())
+        nodes = [node for node in tree.body if
+                 (isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and
+                  target.id == 'baseline_dir' for target in node.targets)) or
+                 (isinstance(node, ast.If) and isinstance(node.test, ast.Name) and
+                  node.test.id == 'baseline_dir')]
+        code = compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec')
+        for name in ('model-pack.zip', 'receipt.json', 'private-unrelated.pt'):
+            (self.root / name).write_bytes(b'fixture')
+        with patch.dict(os.environ, {'SCOUT_BASELINE_DIR': str(self.root)}):
+            namespace = dict(os=os, Path=Path, datas=[])
+            exec(code, namespace)
+            self.assertEqual(namespace['datas'], [
+                (str(self.root / 'model-pack.zip'), '_scout_baseline'),
+                (str(self.root / 'receipt.json'), '_scout_baseline')])
+            (self.root / 'receipt.json').unlink()
+            with self.assertRaisesRegex(ValueError, 'Missing verified baseline'):
+                exec(code, dict(os=os, Path=Path, datas=[]))
+        with patch.dict(os.environ, {}, clear=True):
+            namespace = dict(os=os, Path=Path, datas=[])
+            exec(code, namespace)
+            self.assertEqual(namespace['datas'], [])
+
+
+    def test_spec_ffmpeg_and_optional_linux_cursor_shim(self):
+        source = Path(__file__).resolve().parents[1] / 'packaging/scout-studio.spec'
+        tree = ast.parse(source.read_text())
+        start = next(index for index, node in enumerate(tree.body)
+                     if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and
+                        target.id == 'ffmpeg_binary' for target in node.targets))
+        code = compile(ast.Module(body=tree.body[start:start + 3], type_ignores=[]), str(source), 'exec')
+        ffmpeg = self.root / 'ffmpeg'
+        ffmpeg.write_bytes(b'fixture executable')
+        ffmpeg.chmod(0o755)
+        prefix = self.root / 'private-prefix'
+        shim = prefix / 'lib/scout-native/usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0'
+        shim.parent.mkdir(parents=True)
+        shim.write_bytes(b'fixture library')
+        with patch.dict(os.environ, {'SCOUT_FFMPEG_BINARY': str(ffmpeg)}, clear=True):
+            namespace = dict(os=os, sys=SimpleNamespace(platform='linux', prefix=str(prefix)), Path=Path, binaries=[])
+            exec(code, namespace)
+            self.assertEqual(namespace['binaries'], [(str(ffmpeg), '_scout_media'),
+                (str(shim), 'lib/scout-native/usr/lib/x86_64-linux-gnu')])
+            ffmpeg.chmod(0o644)
+            with self.assertRaisesRegex(ValueError, 'non-executable'):
+                exec(code, namespace)
+            ffmpeg.unlink()
+            with self.assertRaisesRegex(ValueError, 'Missing'):
+                exec(code, namespace)
+        with patch.dict(os.environ, {}, clear=True):
+            namespace = dict(os=os, sys=SimpleNamespace(platform='win32', prefix=str(prefix)), Path=Path, binaries=[])
+            exec(code, namespace)
+            self.assertEqual(namespace['binaries'], [])
+            shim.unlink()
+            namespace['sys'].platform = 'linux'
+            exec(code, namespace)
+            self.assertEqual(namespace['binaries'], [])

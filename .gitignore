@@ -40,3 +40,4 @@ htmlcov/
 
 # Local agent task ledgers
 .codex/runs/
+.scout-studio-runtime

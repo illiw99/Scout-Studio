@@ -173,6 +173,7 @@ class Studio(QMainWindow):
         self.refresh_library()
         self.refresh_queue()
         self.statusBar().showMessage('Import a game folder to use its videos in place. Right-click a match for actions.')
+        QTimer.singleShot(0, self.prepare_default_model)
 
     def build_ui(self):
         library_menu = self.menuBar().addMenu('Library')
@@ -234,7 +235,7 @@ class Studio(QMainWindow):
         header.addLayout(titles, 1)
         self.detection_profile = QComboBox()
         self.detection_profile.addItem('Current detection settings', '')
-        self.detection_profile.addItem('Installed model pack · automatic', 'active-pack')
+        self.detection_profile.addItem('Default model · automatic GPU / CPU', 'active-pack')
         self.detection_profile.addItem('Faster CPU · experimental', 'cpu-fast')
         from scout.runtime import profile
         if profile() == 'inference':
@@ -242,7 +243,9 @@ class Studio(QMainWindow):
             cpu_item.setEnabled(False)
             cpu_item.setToolTip('Import an inference model pack to detect without reference frameworks.')
         self.detection_profile.setToolTip('Installed packs use supported acceleration and CPU fallback. Check experimental profiles against reviewed footage, especially distant players.')
-        selected_profile = self.settings.value('detectionProfile', 'active-pack' if profile() == 'inference' else '')
+        from scout.model_defaults import available
+        selected_profile = self.settings.value('detectionProfile',
+            'active-pack' if profile() == 'inference' or available(self.model_store()) else '')
         if profile() == 'inference' and selected_profile == 'cpu-fast':
             selected_profile = 'active-pack'
         self.detection_profile.setCurrentIndex(max(0, self.detection_profile.findData(selected_profile)))
@@ -666,6 +669,14 @@ class Studio(QMainWindow):
         from scout.model_packs import ModelStore
         base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
         return ModelStore(Path(base) / 'model-packs')
+
+    def prepare_default_model(self):
+        from scout.model_defaults import bundled_directory, ensure_default
+        directory = bundled_directory()
+        if directory is not None:
+            store = self.model_store()
+            self.task(lambda _: ensure_default(store, directory),
+                      lambda _: self.statusBar().showMessage('Default detection model ready.', 8000))
 
     def import_model_pack(self):
         filename, _ = QFileDialog.getOpenFileName(self, 'Import inference model pack', '', 'Model pack (*.zip)')

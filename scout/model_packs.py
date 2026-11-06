@@ -14,6 +14,7 @@ import zipfile
 from .classifier_runtime import FEATURE_SETTINGS
 
 SCHEMA = 1
+_UNSET_POINTER = object()
 POSTPROCESS = ('conf', 'model_threshold', 'model_low_ratio', 'model_smooth',
                'model_min_duration', 'model_pre_roll', 'model_post_roll', 'merge_gap')
 POSTPROCESS_V2=POSTPROCESS+('model_peak_threshold','model_refine_fraction','model_refine_padding')
@@ -343,11 +344,11 @@ class ModelStore:
                     stage.rename(target)
             return selection
 
-    def activate(self, selection, *, expected_pointer=None):
+    def activate(self, selection, *, expected_pointer=_UNSET_POINTER):
         self.root.mkdir(parents=True, exist_ok=True)
         pointer = self.root / 'active.json'
         before = pointer.read_bytes() if pointer.exists() else None
-        if expected_pointer is not None and before != expected_pointer:
+        if expected_pointer is not _UNSET_POINTER and before != expected_pointer:
             raise ValueError('Active model pack changed; try again')
         folder = self.folder(selection)
         document = verify(folder, probe=True)

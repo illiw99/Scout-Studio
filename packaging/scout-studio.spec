@@ -19,6 +19,13 @@ profile_file.parent.mkdir(parents=True, exist_ok=True)
 profile_file.write_text(json.dumps(dict(schema=1, profile=profile)))
 datas = [(str(profile_file), '.')]
 datas += [(str(root / 'LICENSE'), '.')]
+baseline_dir = os.environ.get('SCOUT_BASELINE_DIR')
+if baseline_dir:
+    for name in ('model-pack.zip', 'receipt.json'):
+        source = Path(baseline_dir) / name
+        if not source.is_file():
+            raise ValueError(f'Missing verified baseline bundle file: {source}')
+        datas.append((str(source), '_scout_baseline'))
 for package in ('scout', 'imageio_ffmpeg') + (('ultralytics', 'matplotlib') if reference else ()):
     datas += collect_data_files(package, excludes=['**/*.pt', '**/*.onnx', '**/tests/**'])
 for package in ('scout-flag', 'imageio-ffmpeg') + (('ultralytics', 'torch', 'torchvision') if reference else ()):
@@ -36,6 +43,16 @@ if reference:
 binaries = collect_dynamic_libs('torchvision', search_patterns=[
     '*.so', '*.so.*', '*.pyd', '*.dll', '*.dylib',
 ]) if reference else []
+ffmpeg_binary = os.environ.get('SCOUT_FFMPEG_BINARY')
+if ffmpeg_binary:
+    source = Path(ffmpeg_binary)
+    if not source.is_file() or not os.access(source, os.X_OK):
+        raise ValueError(f'Missing or non-executable FFmpeg binary: {source}')
+    binaries.append((str(source), '_scout_media'))
+if sys.platform == 'linux':
+    for cursor_lib in sorted((Path(sys.prefix) / 'lib/scout-native').glob('usr/lib/*/libxcb-cursor.so.0')):
+        if cursor_lib.is_file():
+            binaries.append((str(cursor_lib), str(cursor_lib.parent.relative_to(sys.prefix))))
 for package in ('onnxruntime', 'openvino'):
     if importlib.util.find_spec(package):
         binaries += collect_dynamic_libs(package, search_patterns=['*.so','*.so.*','*.pyd','*.dll','*.dylib'])
