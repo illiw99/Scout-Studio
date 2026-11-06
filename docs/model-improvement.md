@@ -5,14 +5,17 @@ and make full processing efficient on CPU. Targets supplied by the user are
 15× realtime on the local GPU and 5–10× on CPU; these are targets, not promises.
 Existing game footage, Scout state, reviews, fields, caches and production models
 remain unchanged. All data copies, trained candidates and generated predictions
-live in a separate temporary experiment directory, outside the repository.
+live in separate private experiment directories, outside the repository, with a
+persistent isolated backup and desktop evaluation workspace.
 
 ## Available reviewed data
 
 Initial read-only inventory: seven games have current review MLTs and cached
 5 fps detections, totaling 578 play ranges across 31 original videos, about 449
 minutes. W3_SAI-HON and W3_SAI-PAN are incomplete with Nextcloud placeholders;
-they are excluded until their reviews and complete sources are available.
+they were excluded from initial model selection. Both subsequently completed and
+were admitted only for additional confirmation; their W3 day also occurs in
+development through DUC, so they do not add an unseen-day claim.
 Authoritative labels are current `Scout/review.mlt` files, not backups or prior
 prediction checks. The labels describe play intervals, not individual person
 bounding boxes. They support classifier training and end-to-end play evaluation;
@@ -299,11 +302,6 @@ windows measured **15.29x/15.39x**. Two windows were before the first marked pla
 so these are timing evidence, not quality evidence. Full reserved games now test
 active play, quality and longer-run throughput together.
 
-The first reserved full game completed on GPU: **84/86 hits (97.67%)**, **90.32%
-precision**, boundary p90 **1.570 s**, **17.15x realtime**. The second game and
-CPU confirmation remain in progress. Do not report the complete reserved test,
-or the application integration, as finished from this partial result.
-
 The 640 px YOLO26n candidate was rejected: default-threshold recall fell to
 82.47% at 5 Hz. Calibration recovered high overlap recall only with about 55%
 precision. This directly argues against selecting resolution on speed alone.
@@ -311,17 +309,10 @@ Frozen S3D112 also failed: direct linear-head recall was 50.86%; its completed
 balanced tree head reached 32.84%. These are specific negative configurations,
 not a rejection of every video architecture.
 
-New research checks cover frozen-head split/weight guards, source-coordinate
-mapping, decoder restoration after errors, and reserved source concatenation
-without fitting. Sixteen focused checks pass. The last full suite passed 278
-tests with four skips; a final full run follows timed confirmation so it does
-not compete with CPU measurements. No production defaults have been changed.
-
 GPU confirmation is now complete on both reserved games: **169/173 hits
 (97.69% recall), 90.86% precision, boundary p90 1.402 s, mean IoU 0.834**, with
 minimum-game recall 97.67%. The complete 124.2 minutes processed at **17.26x
-realtime including loading**. CPU confirmation of the identical numeric head
-has also completed on the identical fixed head. Final reserved full-game results:
+realtime including loading**. CPU confirmation has also completed using the identical fixed numeric head. Final reserved full-game results:
 
 | Runtime | Hits / GT | Recall | Precision | Boundary p90 | Realtime including loading |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -346,3 +337,35 @@ source/wheel checks passed. HON/PAN, which were never used for model selection,
 are now copied into a separate native-worker confirmation workspace. Only new
 private fields/reviews/configuration/caches are written there; source video links
 remain read-only inputs. Native-worker confirmation on those games remains pending.
+
+### Native confirmation and revised priority
+
+The complete additional native-worker run used HON/PAN only after locking the
+head and thresholds. It processed 141.8 minutes per backend, including worker
+startup, source probing, detection, camera features, numeric classification and
+review creation; video export encoding is excluded.
+
+| Runtime / game | Hits / GT | Recall | Precision | Realtime |
+| --- | ---: | ---: | ---: | ---: |
+| CUDA / HON | 74 / 77 | 96.10% | 81.32% | 16.02x |
+| CUDA / PAN | 74 / 78 | 94.87% | 81.32% | 16.05x |
+| CPU / HON | 73 / 77 | 94.81% | 76.04% | 7.31x |
+| CPU / PAN | 70 / 78 | 89.74% | 81.40% | 7.41x |
+
+This exposes a CPU quality shortfall. Across all four confirmation games the GPU
+reaches 96.65% recall / 86.14% precision at 16.58x, but CPU reaches only 94.82%
+recall / 84.28% precision at 7.47x. The earlier two-game success does not establish
+that the integrated candidate meets the complete quality aim. It remains an
+evaluation candidate, not an accepted final model. Original integrity checks
+passed for nine games: SHA-256 of 109 review/field/copied-cache files and size /
+mtime of 41 source videos; full video hashes were not computed.
+
+The user clarified the objective after these runs: **maximize precision while
+still requiring at least 95% recall**. Recall above that floor is secondary to
+reducing false clips. Continue reporting each game's results, strict IoU and
+boundary errors. Model fitting and parameter selection remain restricted to the
+five development games; the four confirmation games remain outside training.
+No confirmation labels may be used to choose the best threshold. Repeated
+confirmation after engineering changes must be disclosed rather than called a
+new blind test. A label-independent CPU/GPU input/feature parity investigation
+and development-only precision-constrained comparison are the next steps.

@@ -3,8 +3,20 @@
 [README](../README.md) · [Development](development.md) · [Code map](code-map.md)
 
 Status: roadmap recorded 4 November 2026, with local implementation progress
-updated 5 November. Implemented features below are not yet a published release. Follow the [installation guide](installation.md)
+updated 6 November. Implemented features below are not yet a published release. Follow the [installation guide](installation.md)
 and [development guide](development.md) for the current application.
+
+Model improvement is now the priority. The [reviewed-game study](model-improvement.md)
+uses five development games and game/day-separated reserved confirmation. A fixed
+YOLO26n1280, 2.5 Hz adaptive-field profile meets the local Linux prototype aims:
+97.69% event recall at 17.26x on GPU and 97.11% at 7.59x on CPU. Motion/S3D
+alternatives and lower-resolution detectors were measured before selection.
+Version-two model packs integrate the profile into the native worker with
+verified automatic GPU selection and CPU fallback; original settings and Scout
+game data are preserved. Additional HON/PAN native-worker confirmation exposes a CPU quality gap
+(92.26% recall on those games); the candidate is not accepted as final. The user
+now prioritizes maximum precision subject to recall of at least 95%. The model remains a private evaluation artifact; production
+model distribution and Windows hardware validation are separate outstanding work.
 
 Progress on 5 November 2026: the [isolated detector benchmark](detector-benchmark-2026-11-05.md)
 records a partial phase0 CPU/GPU baseline. Phase1 now has candidate manifests,

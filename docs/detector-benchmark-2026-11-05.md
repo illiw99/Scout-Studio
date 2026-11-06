@@ -1,5 +1,11 @@
 # Local detector comparison — 2026-11-05
 
+Update, 6 November: the [reviewed-game study](model-improvement.md) supersedes
+these frame-speed recommendations for play detection. It evaluates sampling,
+adaptive fields, tracking and the classifier together, selecting YOLO26n1280 at
+2.5 Hz after held-out play scoring. This original detector-only benchmark remains
+recorded below; its box coverage is not play recall.
+
 Nine pretrained detectors were measured on the same eight copied 1920×1080 game
 frames. All 45 model/runtime/batch combinations completed. The largest practical
 CPU improvement comes from a smaller model; changing inference engines alone
