@@ -21,6 +21,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Field masks, camera movement and polygon setup | `scout/field.py`, `scout/pick.py` |
 | Player tracking and motion features | `scout/track.py`, `scout/features.py` |
 | Heuristic play segmentation | `scout/segment.py` |
+| Reviewed-game improvement protocol and strict interval metrics | `docs/model-improvement.md`, `scout/model_evaluation.py`, `scripts/evaluate-reviewed-games.py`, `scripts/calibrate-play-thresholds.py`, `scripts/extract-video-features.py`, `tests/test_model_evaluation.py` |
 | Trained classifier, evaluation and parameter tuning | `scout/model.py`, `scout/evaluate.py`, `scout/tune.py` |
 | NumPy-only exported classifier inference and numerical/boundary checks | `scout/classifier_runtime.py`, `tests/test_classifier_runtime.py` |
 | MP4 cuts, cross-source clips, audio and encoding | `scout/cut.py` |

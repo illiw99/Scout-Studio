@@ -173,6 +173,7 @@ class Config:
     model_learning_rate: float = 0.06
     model_min_leaf: int = 60
     model_l2: float = 1.0
+    model_class_weight: str | None = None  # optional balanced play/non-play training costs
 
     #: A play opens where the probability clears `model_threshold` and stays
     #: open while it holds above `threshold * low_ratio`, so a dip mid-play does

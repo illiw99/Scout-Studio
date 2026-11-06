@@ -103,6 +103,8 @@ def make_classifier(cfg: Config):
         from sklearn.ensemble import HistGradientBoostingClassifier
     except ModuleNotFoundError as exc:
         raise RuntimeError('Training requires the training extra: pip install "scout-flag[training]"') from exc
+    if cfg.model_class_weight not in (None, 'balanced'):
+        raise ValueError('model_class_weight must be null or balanced')
     # Deliberately small.  Ten files from two venues is not much variety, and a
     # big model would memorise this tournament rather than learn the game.
     return HistGradientBoostingClassifier(
@@ -111,6 +113,7 @@ def make_classifier(cfg: Config):
         learning_rate=cfg.model_learning_rate,
         min_samples_leaf=cfg.model_min_leaf,
         l2_regularization=cfg.model_l2,
+        class_weight=cfg.model_class_weight,
         early_stopping=False,
         random_state=0,
     )
