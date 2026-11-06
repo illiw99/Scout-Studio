@@ -76,6 +76,33 @@ class CalibrationTests(unittest.TestCase):
 
 
 class MotionFeatureTests(unittest.TestCase):
+    def test_fusion_uses_nearest_clock_and_rejects_misaligned_sources(self):
+        script=load_script('combine-video-features.py')
+        np.testing.assert_array_equal(script.align_nearest([0,.2,.5,.8,1.8],[0,1,2],1.001),[0,0,0,1,2])
+        with self.assertRaisesRegex(ValueError,'alignment limit'):
+            script.align_nearest([0,3.1],[0,1],1.001)
+        with self.assertRaises(ValueError):script.align_nearest([1,0],[0,1],1)
+
+    def test_fusion_preserves_split_and_rejects_changed_labels(self):
+        script=load_script('combine-video-features.py')
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            records=[dict(name='dev',partition='development',marks=[[1,2]]),dict(name='reserved',partition='holdout',marks=[[1,2]])]
+            for side,fps in [('left',5),('right',1)]:
+                folder=root/side;folder.mkdir();(folder/'dev').mkdir()
+                (folder/'dataset.json').write_text(json.dumps(records))
+                (folder/'features.json').write_text(json.dumps(dict(schema='fixture',names=['signal'],rates=[fps])))
+                t=np.arange(0,3,1/fps)
+                np.savez(folder/'dev'/f'features-{fps}.npz',t=t,X=np.ones((len(t),1)),names=np.asarray(['signal']))
+            arguments=['combine','--left',str(root/'left'),'--right',str(root/'right'),'--out',str(root/'out')]
+            with patch.object(script.sys,'argv',arguments):self.assertEqual(script.main(),0)
+            self.assertFalse((root/'out/reserved').exists())
+            self.assertEqual(json.loads((root/'out/dataset.json').read_text()),records)
+            records[0]['marks']=[[1,2.1]]
+            (root/'right/dataset.json').write_text(json.dumps(records));arguments[-1]=str(root/'forbidden')
+            with patch.object(script.sys,'argv',arguments),self.assertRaisesRegex(ValueError,'identical source identities'):
+                script.main()
+
     def test_motion_only_extraction_needs_no_torch_or_gpu_decoder(self):
         import builtins
         from types import SimpleNamespace

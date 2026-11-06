@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Experimental field-region unions from label-independent camera keyframes.
+"""Experimental camera-region unions or full-frame person features.
 
 Preserves every source polygon. Reads a frozen private snapshot, writes a new
 private feature dataset and does not process reserved games by default.
@@ -26,27 +26,35 @@ def main():
     parser.add_argument('--detections-from',type=Path,help='optional fresh-detector dataset')
     parser.add_argument('--masks-from',type=Path,help='reuse completed masks from this exact snapshot')
     parser.add_argument('--include-holdout',action='store_true')
+    parser.add_argument('--region-policy',choices=('camera-union','full-frame'),default='camera-union')
+    parser.add_argument('--min-person-height',type=float,help='experimental minimum height as fraction of frame height')
     args=parser.parse_args()
+    if args.min_person_height is not None and not 0<args.min_person_height<Config().max_person_h:raise ValueError('Invalid minimum person height')
+    if args.masks_from and args.region_policy!='camera-union':raise ValueError('Reused masks require camera-union policy')
     if args.out.exists():raise ValueError('Choose a new experiment directory')
     records=json.loads((args.snapshot/'dataset.json').read_text())
     for record in records:validate_name(record['name'])
     args.out.mkdir(parents=True)
     (args.out/'dataset.json').write_text(json.dumps(records,indent=2))
     (args.out/'features.json').write_text(json.dumps(dict(schema='scout-person-camera-union-v1',
-        names=features.FEATURE_NAMES,rates=[5.,2.5,1.],scope='experimental label-independent camera-region union; not a production feature schema'),indent=2))
+        names=features.FEATURE_NAMES,rates=[5.,2.5,1.],region_policy=args.region_policy,min_person_height=args.min_person_height,
+        scope='experimental label-independent person region/height variant; not a production feature schema'),indent=2))
     for record in records:
         if record['partition']!='development' and not args.include_holdout:continue
         game=record['name'];private=args.out/game;private.mkdir()
         clips=groundtruth.project_clips(args.snapshot/game/'review.mlt')
         if len(clips)!=len(record['clips']):raise ValueError('Snapshot source count changed')
         cfg=Config(fields_dir=str(args.snapshot/game/'fields'),out_dir=str(private/'output'),cache_dir=str(private/'unused'))
+        if args.min_person_height is not None:cfg.min_person_h=args.min_person_height
         parts={fps:[] for fps in (5.,2.5,1.)};quality=[]
         for clip,identity in zip(clips,record['clips']):
             before=clip.path.stat()
             if clip.path.name!=Path(identity['source']).name or (before.st_size,before.st_mtime_ns)!=(identity['bytes'],identity['mtime_ns']):raise ValueError('Source identity/order changed')
             start=time.perf_counter()
             legacy=np.load(args.snapshot/game/(clip.path.stem+'-mask.npy'),allow_pickle=False)
-            if args.masks_from:
+            if args.region_policy=='full-frame':
+                mask=np.ones_like(legacy);accepted=[]
+            elif args.masks_from:
                 original=json.loads((args.masks_from/game/'region-provenance.json').read_text())
                 if original['source_clips']!=record['clips']:raise ValueError('Region source identity differs')
                 mask=np.load(args.masks_from/game/(clip.path.stem+'-mask.npy'),allow_pickle=False)
@@ -80,8 +88,10 @@ def main():
             if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError('Source changed during extraction')
             quality.append(dict(source=identity['source'],keyframes=accepted,legacy_area=int(legacy.sum()),union_area=int(mask.sum()),seconds=time.perf_counter()-start))
         for fps,items in parts.items():np.savez_compressed(private/f'features-{fps:g}.npz',t=np.concatenate([f.t for f in items]),X=np.concatenate([f.X for f in items]),names=np.asarray(items[0].names))
-        (private/'region-provenance.json').write_text(json.dumps(dict(source_clips=record['clips'],quality=quality,algorithm='ORB/RANSAC reference projection at five fixed times; union with legacy region'),indent=2))
-        print(game,'camera-union features ready',flush=True)
+        (private/'region-provenance.json').write_text(json.dumps(dict(source_clips=record['clips'],quality=quality,
+            region_policy=args.region_policy,min_person_height=cfg.min_person_h,
+            algorithm='full-frame' if args.region_policy=='full-frame' else 'ORB/RANSAC reference projection at five fixed times; union with legacy region'),indent=2))
+        print(game,args.region_policy,'features ready',flush=True)
     return 0
 
 

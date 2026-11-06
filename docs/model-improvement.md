@@ -196,3 +196,45 @@ is required for honest CPU-only measurements. These modes avoid charging a
 candidate for work belonging to another model. Feature-extraction timings still
 exclude model loading and the final temporal head until an end-to-end benchmark
 includes those stages.
+
+An additional non-person candidate combines motion and S3D features: motion
+provides a 5 Hz clock for boundaries, while the nearest 1 Hz S3D sample supplies
+visual context. Fusion requires identical source identities, labels and splits;
+it rejects clocks farther apart than one right-hand sampling interval. Only
+development arrays are read. It is evaluated independently rather than assumed
+to outperform either component.
+
+HON/PAN downloads are now complete. Their labels and footage remain unused for
+selection; they are available for additional confirmation after candidate lock.
+They share the W3 match day with a development game, so GD4 remains the separate
+match-day holdout rather than claiming all confirmation games have unseen venues.
+
+### Development screening update
+
+Whole-day out-of-fold scores at the original default decision threshold:
+
+| Candidate | Event recall | Weakest-game recall | Precision |
+| --- | ---: | ---: | ---: |
+| Fresh YOLO11s 960, original regions, 5 Hz | 93.83% | 81.67% | 90.69% |
+| Fresh YOLO11s 960, camera-region union, 5 Hz | 94.57% | 85.00% | 91.63% |
+| Motion statistics, compact head, 5 Hz | 61.48% | 18.99% | 68.22% |
+| Broad-region motion, compact head, 5 Hz | 55.80% | 20.25% | 64.57% |
+| Motion + frozen S3D112 logits, compact head, 5 Hz | 46.17% | 23.23% | 71.10% |
+
+None meets the target. The costly balanced-head extension of the last row was
+stopped after its complete compact-head result; it has no validated result.
+All extracted features and complete candidate outputs were retained. These
+negative results reject these specific frozen-feature configurations, not video
+models in general. The direct S3D-only comparison continues separately.
+
+The next person-feature ablation jointly removes the field mask and lowers
+minimum player height from 3% to 1.5% of image height. It reuses existing private
+detections rather than decoding/detecting the footage again. If promising, the
+two changes must be separated before making a causal claim or choosing defaults.
+
+An initial CUDA-resize compatibility probe produced the expected 15 RGB frames
+from three seconds of footage without errors. This establishes compatibility
+only; throughput and equivalence to the current decoder remain unverified.
+[X3D's official model zoo](https://github.com/facebookresearch/pytorchvideo/blob/main/docs/source/model_zoo.md)
+also provides a smaller video-model candidate, including an optimized CPU model.
+Its published benchmarks are not Scout play accuracy or end-to-end speed evidence.
