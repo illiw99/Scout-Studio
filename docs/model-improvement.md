@@ -189,3 +189,10 @@ development games; YOLO26n 1280 px extraction continues. These known-weight
 datasets replace ambiguous legacy-cache provenance in subsequent comparisons.
 Each comparison now has its own probability directory so independent experiments
 cannot accidentally overwrite or mix calibration inputs.
+
+Extraction can now run motion-only without importing Torch, or S3D-only without
+computing optical flow. `--decoder cpu` explicitly disables GPU decoding; this
+is required for honest CPU-only measurements. These modes avoid charging a
+candidate for work belonging to another model. Feature-extraction timings still
+exclude model loading and the final temporal head until an end-to-end benchmark
+includes those stages.

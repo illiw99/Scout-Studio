@@ -76,6 +76,30 @@ class CalibrationTests(unittest.TestCase):
 
 
 class MotionFeatureTests(unittest.TestCase):
+    def test_motion_only_extraction_needs_no_torch_or_gpu_decoder(self):
+        import builtins
+        from types import SimpleNamespace
+        script=load_script('extract-video-features.py');original_import=builtins.__import__
+        def import_without_torch(name,*args,**kwargs):
+            if name.split('.')[0] in ('torch','torchvision'):raise AssertionError('Motion must not import Torch')
+            return original_import(name,*args,**kwargs)
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);(root/'dev').mkdir();source=root/'source.mp4';source.write_bytes(b'fixture')
+            state=source.stat()
+            record=dict(name='dev',partition='development',clips=[dict(source=str(source),bytes=state.st_size,mtime_ns=state.st_mtime_ns)])
+            (root/'dataset.json').write_text(json.dumps([record]))
+            np.save(root/'dev/source-mask.npy',np.ones((180,320),bool))
+            clip=SimpleNamespace(path=source,start=0.,info=SimpleNamespace(duration=.4))
+            with patch.object(script.sys,'argv',['extract','--snapshot',str(root),'--out',str(root/'out'),'--mode','motion','--decoder','cpu']), \
+                 patch.object(script.groundtruth,'project_clips',return_value=[clip]), \
+                 patch.object(script.media,'iter_frames',return_value=iter([np.zeros((180,320,3),np.uint8)]*2)) as decode, \
+                 patch('builtins.__import__',side_effect=import_without_torch),contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(script.main(),0)
+            self.assertFalse(decode.call_args.kwargs['hwaccel'])
+            self.assertFalse((root/'out/s3d').exists())
+            with np.load(root/'out/motion/dev/features-5.npz') as data:
+                self.assertEqual(data['X'].shape,(2,len(script.MOTION_NAMES)))
+
     def test_camera_translation_is_separate_from_local_motion(self):
         script=load_script('extract-video-features.py')
         rgb=np.zeros((16,16,3),np.uint8);mask=np.zeros((16,16),bool);mask[6:10,6:10]=True

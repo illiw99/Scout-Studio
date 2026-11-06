@@ -59,6 +59,8 @@ def main():
     parser.add_argument('--device',choices=('cpu','cuda'),default='cuda')
     parser.add_argument('--size',type=int,choices=(112,224),default=112)
     parser.add_argument('--batch',type=int,default=8)
+    parser.add_argument('--mode',choices=('both','motion','s3d'),default='both')
+    parser.add_argument('--decoder',choices=('auto','cpu'),default='auto',help='force CPU to measure systems without GPU decoding')
     args=parser.parse_args()
     if args.out.exists():raise ValueError('Choose a new experiment directory')
     if args.batch<=0:raise ValueError('Batch must be positive')
@@ -68,17 +70,21 @@ def main():
         validate_name(record['name'])
         if record['partition'] not in ('development','holdout'):raise ValueError('Unknown data split')
     args.out.mkdir(parents=True)
-    import torch
-    from torchvision.models.video import s3d,S3D_Weights
-    torch.set_num_threads(8);torch.hub.set_dir(str(args.snapshot/'torch-hub'))
-    network=s3d(weights=S3D_Weights.DEFAULT).eval()
-    encoder=torch.nn.Sequential(network.features,torch.nn.AdaptiveAvgPool3d(1),network.classifier,torch.nn.Flatten(1)).to(args.device).eval()
-    if args.device=='cuda':encoder=encoder.half()
-    mean=torch.tensor([.43216,.394666,.37645],device=args.device).view(1,3,1,1,1)
-    std=torch.tensor([.22803,.22145,.216989],device=args.device).view(1,3,1,1,1)
+    use_motion=args.mode in ('both','motion');use_video=args.mode in ('both','s3d')
+    if use_video:
+        import torch
+        from torchvision.models.video import s3d,S3D_Weights
+        torch.set_num_threads(8);torch.hub.set_dir(str(args.snapshot/'torch-hub'))
+        network=s3d(weights=S3D_Weights.DEFAULT).eval()
+        encoder=torch.nn.Sequential(network.features,torch.nn.AdaptiveAvgPool3d(1),network.classifier,torch.nn.Flatten(1)).to(args.device).eval()
+        if args.device=='cuda':encoder=encoder.half()
+        mean=torch.tensor([.43216,.394666,.37645],device=args.device).view(1,3,1,1,1)
+        std=torch.tensor([.22803,.22145,.216989],device=args.device).view(1,3,1,1,1)
     for name,specification in (
         ('motion',dict(schema='scout-motion-v1',names=MOTION_NAMES,rates=[5.],exclude=[])),
         ('s3d',dict(schema='scout-s3d-logits-v1',names=[f'kinetics_logit_{i:03d}' for i in range(400)],rates=[1.],exclude=[]))):
+        if (name=='motion' and not use_motion) or (name=='s3d' and not use_video):continue
+        specification['scope']=f'{name} development features; device={args.device}; decoder={args.decoder}'
         folder=args.out/name;folder.mkdir();(folder/'dataset.json').write_text(json.dumps(records,indent=2))
         (folder/'features.json').write_text(json.dumps(specification,indent=2))
     progress=[]
@@ -91,37 +97,45 @@ def main():
             if clip.path.name!=Path(identity['source']).name:raise ValueError('Snapshot source ordering changed')
             before=clip.path.stat()
             if (before.st_size,before.st_mtime_ns)!=(identity['bytes'],identity['mtime_ns']):raise ValueError('Source changed since snapshot')
-            original_mask=np.load(args.snapshot/game/(clip.path.stem+'-mask.npy'),allow_pickle=False)
-            mask=cv2.resize(original_mask.astype(np.uint8),(320,180),interpolation=cv2.INTER_NEAREST).astype(bool)
-            previous=None;motion=[];frames=[];start=time.perf_counter()
-            for rgb in media.iter_frames(clip.path,5,320,180):
-                row,previous=motion_vector(rgb,mask,previous,.2);motion.append(row)
-                frames.append(cv2.resize(rgb,(args.size,args.size),interpolation=cv2.INTER_AREA))
+            if use_motion:
+                original_mask=np.load(args.snapshot/game/(clip.path.stem+'-mask.npy'),allow_pickle=False)
+                mask=cv2.resize(original_mask.astype(np.uint8),(320,180),interpolation=cv2.INTER_NEAREST).astype(bool)
+            previous=None;motion=[];frames=[];count=0;start=time.perf_counter()
+            for rgb in media.iter_frames(clip.path,5,320,180,hwaccel=args.decoder!='cpu'):
+                if use_motion:
+                    row,previous=motion_vector(rgb,mask,previous,.2);motion.append(row)
+                if use_video:frames.append(cv2.resize(rgb,(args.size,args.size),interpolation=cv2.INTER_AREA))
+                count+=1
             decode_motion_seconds=time.perf_counter()-start
-            if not frames:raise ValueError('No decoded frames')
-            motion_parts.append(np.asarray(motion));motion_times.append(clip.start+np.arange(len(frames))/5)
-            centers=np.arange(0,len(frames),5);logits=[];start=time.perf_counter()
-            with torch.inference_mode():
-                for first in range(0,len(centers),args.batch):
-                    selected=centers[first:first+args.batch]
-                    batch=np.stack([np.stack([frames[i] for i in np.clip(np.arange(center-7,center+9),0,len(frames)-1)]) for center in selected])
-                    tensor=torch.from_numpy(batch).to(args.device).permute(0,4,1,2,3).float()/255
-                    tensor=(tensor-mean)/std
-                    if args.device=='cuda':tensor=tensor.half()
-                    logits.append(encoder(tensor).float().cpu().numpy())
+            if not count:raise ValueError('No decoded frames')
+            if use_motion:
+                motion_parts.append(np.asarray(motion));motion_times.append(clip.start+np.arange(count)/5)
+            centers=np.arange(0,count,5);logits=[];start=time.perf_counter()
+            if use_video:
+                with torch.inference_mode():
+                    for first in range(0,len(centers),args.batch):
+                        selected=centers[first:first+args.batch]
+                        batch=np.stack([np.stack([frames[i] for i in np.clip(np.arange(center-7,center+9),0,len(frames)-1)]) for center in selected])
+                        tensor=torch.from_numpy(batch).to(args.device).permute(0,4,1,2,3).float()/255
+                        tensor=(tensor-mean)/std
+                        if args.device=='cuda':tensor=tensor.half()
+                        logits.append(encoder(tensor).float().cpu().numpy())
             encoder_seconds=time.perf_counter()-start
-            video_parts.append(np.concatenate(logits));video_times.append(clip.start+centers/5)
+            if use_video:
+                video_parts.append(np.concatenate(logits));video_times.append(clip.start+centers/5)
             after=clip.path.stat()
             if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError('Source changed during extraction')
-            result=dict(game=game,clip=clip.path.name,video_seconds=clip.info.duration,decoded_frames=len(frames),
+            result=dict(game=game,clip=clip.path.name,video_seconds=clip.info.duration,decoded_frames=count,
                         decode_and_motion_seconds=decode_motion_seconds,s3d_encoder_seconds=encoder_seconds,
-                        device=args.device,size=args.size,scope='shared extraction run; not isolated throughput benchmark')
+                        device=args.device,size=args.size,mode=args.mode,decoder=args.decoder,scope='feature extraction only; excludes binary head and model loading')
             progress.append(result);(args.out/'progress.json').write_text(json.dumps(progress,indent=2));print(json.dumps(result),flush=True)
         for name,parts,times,fps,names in [('motion',motion_parts,motion_times,5,MOTION_NAMES),('s3d',video_parts,video_times,1,[f'kinetics_logit_{i:03d}' for i in range(400)])]:
+            if not parts:continue
             folder=args.out/name/game;folder.mkdir()
             np.savez_compressed(folder/f'features-{fps}.npz',t=np.concatenate(times),X=np.concatenate(parts),names=np.asarray(names))
-        print(game,'motion and direct-video features ready',flush=True)
-    metadata=dict(model='TorchVision S3D Kinetics400',weights_url=S3D_Weights.DEFAULT.url,
+        print(game,args.mode,'features ready',flush=True)
+    metadata=dict(mode=args.mode,decoder=args.decoder,frame_fps=5)
+    if use_video:metadata.update(model='TorchVision S3D Kinetics400',weights_url=S3D_Weights.DEFAULT.url,
         weights_sha256=hashlib.sha256((args.snapshot/'torch-hub/checkpoints/s3d-d76dad2f.pth').read_bytes()).hexdigest(),
         frame_fps=5,video_feature_fps=1,frames_per_clip=16,context='7 past and8 future frames; replicated at source edges',
         preprocessing=f'full-frame resize{args.size}; official RGB mean/std; adaptive pooling',torch=torch.__version__)
