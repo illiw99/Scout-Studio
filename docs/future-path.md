@@ -6,17 +6,20 @@ Status: roadmap recorded 4 November 2026, with local implementation progress
 updated 6 November. Implemented features below are not yet a published release. Follow the [installation guide](installation.md)
 and [development guide](development.md) for the current application.
 
-Model improvement is now the priority. The [reviewed-game study](model-improvement.md)
-uses five development games and game/day-separated reserved confirmation. A fixed
-YOLO26n1280, 2.5 Hz adaptive-field profile meets the local Linux prototype aims:
-97.69% event recall at 17.26x on GPU and 97.11% at 7.59x on CPU. Motion/S3D
-alternatives and lower-resolution detectors were measured before selection.
-Version-two model packs integrate the profile into the native worker with
-verified automatic GPU selection and CPU fallback; original settings and Scout
-game data are preserved. Additional HON/PAN native-worker confirmation exposes a CPU quality gap
-(92.26% recall on those games); the candidate is not accepted as final. The user
-now prioritizes maximum precision subject to recall of at least 95%. The model remains a private evaluation artifact; production
-model distribution and Windows hardware validation are separate outstanding work.
+Model improvement now has a locally accepted precision-constrained profile.
+The [reviewed-game study](model-improvement.md) separates five development games
+from four validation games. The selected YOLO26n1280 at 2.5 Hz profile adds adaptive
+fields, time-scaled tracking, derived player/formation features and wider temporal
+context. Repeated validation reaches 92.53% precision / 98.17% recall on CPU and
+92.05% / 98.78% on GPU; every validation game has at least 96.15% recall. Native
+processing of a complete game reaches 6.59x CPU and 15.86x GPU, including startup,
+decode and review writing. Clip encoding is excluded. Original Scout data and the
+previous PKL remain unchanged; a separate private app/model pack is available.
+Motion/S3D alternatives, detector sizes and context/head variants were measured
+before selection. Windows GPU hardware, broader independent games and public
+model/release distribution remain separate outstanding work. Models remain
+private evaluation artifacts; no new release or private weight publication is
+implied by the local acceptance.
 
 Progress on 5 November 2026: the [isolated detector benchmark](detector-benchmark-2026-11-05.md)
 records a partial phase0 CPU/GPU baseline. Phase1 now has candidate manifests,

@@ -246,7 +246,7 @@ Its published benchmarks are not Scout play accuracy or end-to-end speed evidenc
 
 On the fixed development folds, camera-union YOLO11s with a compact head,
 threshold 0.1, 0.6 s smoothing and a 4 s minimum proposal duration reaches
-**395/405 event hits (97.53%), minimum game 95%, precision 78.69%**. Refining
+**395/ 405 event hits (97.53%), minimum game 95%, precision 78.69%**. Refining
 proposal boundaries using their own peak improves boundary p90 to about 1.25 s
 and mean IoU to 0.838, while preserving those event counts. This is a development
 selection score, not a final confirmation result. The extra 107 clips are still
@@ -284,7 +284,7 @@ The next candidate is locked before its reserved-game run: **YOLO26n 1280,
 2.5 Hz, dynamic field regions, time-scaled tracking, reference HGB head**.
 Its development selection uses threshold 0.2, minimum proposal duration 3 s,
 0.2 s smoothing, and half-peak boundary refinement with 0.2 s padding.
-Development overlap recall is **395/405 (97.53%)**, weakest game **95%**,
+Development overlap recall is **395/ 405 (97.53%)**, weakest game **95%**,
 precision **88.37%**, boundary p90 **1.287 s**, and mean IoU **0.825**.
 
 The head is exported once as numeric trees inside a research-specific wrapper.
@@ -416,9 +416,9 @@ tracker features; this is a quality comparison, not a new throughput measurement
 | CUDA features | 319 / 328 | 97.26% | 93.27% | 23 | 1.396 s |
 | CPU features | 318 / 328 | 96.95% | 93.81% | 21 | 1.356 s |
 
-CPU false clips fell from 58 to21 while missed plays fell from17 to10, across
+CPU false clips fell from 58 to 21 while missed plays fell from 17 to 10, across
 the same four untrained games. PAN remains weak: 93.59% GPU / 92.31% CPU recall;
-all other games reach at least97.40% GPU /97.67% CPU except HON at97.40% CPU.
+all other games reach at least 97.40% GPU / 97.67% CPU except HON at97.40% CPU.
 Thus aggregate recall meets the floor, but the improvement is not uniform and
 new-profile application timing is not yet established. Native extraction of the
 original five development games continues; these features can test whether
@@ -429,7 +429,7 @@ matching the application's input path improves transfer without fitting on PAN.
 A fair comparison evaluated the original-trained head, a native-trained head and
 an equal-logit pool on the same native development inputs, holding out whole days.
 Development selected the original-trained head with threshold .1, smoothing .2 s,
-minimum proposal4 s, peak filter .6, relative refinement .5 and padding .2 s.
+minimum proposal 4 s, peak filter .6, relative refinement .5 and padding .2 s.
 The final head is not an ensemble. The private provenance receipt distinguishes
 fitting features from the native development features used for calibration.
 Both PKL and numeric JSON contain the same classifier; a new private pack carries
@@ -440,10 +440,10 @@ its complete feature and postprocessing configuration.
 | GPU features | 324 / 328 | 98.78% | 92.05% | 28 | 1.400 s |
 | CPU features | 322 / 328 | 98.17% | 92.53% | 26 | 1.395 s |
 
-Every validation game reaches at least96.15% recall on both backends. The higher
+Every validation game reaches at least 96.15% recall on both backends. The higher
 aggregate-precision candidate0.3 failed the per-game recall floor on PAN, so it is
 not the selected profile. Compared with the first integrated candidate, CPU false
-clips fell from58 to26 and missed plays from17 to6. All four games remain outside
+clips fell from 58 to 26 and missed plays from 17 to 6. All four games remain outside
 fitting/calibration, but repeated model acceptance checks mean this is not an
 unbiased new final test. HON/PAN share a match day with development DUC.
 
@@ -457,6 +457,55 @@ selection is exercised with CUDA disabled; video encoding is outside timing.
 The first selected-pack live run correctly rejected an obsolete CLI feature-name
 check after detection. Its elapsed time is discarded. The CLI check now uses the
 model's expanded feature names and stored offsets; the PKL/JSON regression test
-also exercises the actual CLI segmentation entry. The full suite again passes306
+also exercises the actual CLI segmentation entry. The full suite again passes 306
 tests (two platform skips), package checks pass, and the cached real-worker smoke
 finishes successfully. Fresh-cache timing is restarted after those checks.
+
+### Completed local acceptance
+
+Fresh-cache native-worker confirmation on the full 64.27-minute PAN game now
+passes, including automatic runtime selection, source probing, decoding,
+detection, adaptive fields, derived features, numeric classification and review
+creation. CPU selection is automatic with CUDA disabled; a live decoder snapshot
+also confirms that no CUDA decode flags are present.
+
+| Selected profile / native worker | Full-game elapsed | Realtime | Hits / GT | Recall | Precision |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPU, automatic CUDA | 243.16 s | 15.86x | 75 / 78 | 96.15% | 85.23% |
+| CPU, automatic OpenVINO fallback | 584.86 s | 6.59x | 75 / 78 | 96.15% | 85.23% |
+
+These are successful fresh-cache runs after the CLI compatibility fix. Failed
+attempts and cached smoke runs are excluded from timing. Progress-only detector
+rates around 7.4x exclude later stages; 6.59x is the actual complete CPU result.
+MP4 export encoding and one-time model-pack installation are outside this timing.
+The earlier four-game table measures quality using fixed previously extracted
+observations; the PAN native run independently reproduces its expected play hits.
+
+Final split: five development games / 405 GT intervals, four validation games /
+328 intervals, nine games /733 intervals total. The selected profile clears the
+95% recall floor in every measured validation game while prioritizing precision.
+The local Linux speed targets are also met on the i7-11700F / RTX 3060 Ti. These
+results establish the tested hardware/data scope, not a guarantee for every CPU
+or future game. Actual Windows GPU hardware remains unverified.
+
+Original integrity checks pass again for all nine games: 109 snapshotted state
+file hashes and 41 video size/mtime identities. All generated reviews, caches,
+weights, model packs and application settings remain in private experiment
+workspaces. The final persistent evaluation app contains its own source snapshot,
+model store, library, copied fields and video links; a fresh PAN copy can be
+processed without replacing a saved review. Both PKL and JSON are supplied, and
+`--cpu` selects CPU-only processing in the private launcher.
+
+The full local suite passes 306 tests with two platform-specific skips; package
+checks pass. Native Linux Qt/X11 initialization, the private source/model-store
+selection and an OpenVINO CPU pack probe pass. This GUI smoke does not establish
+real Qt playback/audio or Windows/macOS hardware behavior. No private trained
+models or GT have been published, and no release has been tagged.
+
+Focused implementation history for this work:
+`6f6dd2a` metrics/splits; `c05d023` camera comparison; `ecaaf27` CPU-only video
+experiments; `66925dd` alternative/fused feature screening; `abf2d57` temporal
+regions/tracking; `d0cc1ed` frozen-head confirmation; `e950e59` reserved GPU result;
+`7a7291b` native automatic GPU/CPU profiles; `fdc70ba` native shortfall and revised
+objective; `0c5a871` derived features/context; `c046712` protected PKL export;
+`0262d94` CLI profile compatibility. Validation and limitations are recorded above.
