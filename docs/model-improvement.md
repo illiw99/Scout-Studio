@@ -423,3 +423,40 @@ Thus aggregate recall meets the floor, but the improvement is not uniform and
 new-profile application timing is not yet established. Native extraction of the
 original five development games continues; these features can test whether
 matching the application's input path improves transfer without fitting on PAN.
+
+### Selected precision-constrained operating point
+
+A fair comparison evaluated the original-trained head, a native-trained head and
+an equal-logit pool on the same native development inputs, holding out whole days.
+Development selected the original-trained head with threshold .1, smoothing .2 s,
+minimum proposal4 s, peak filter .6, relative refinement .5 and padding .2 s.
+The final head is not an ensemble. The private provenance receipt distinguishes
+fitting features from the native development features used for calibration.
+Both PKL and numeric JSON contain the same classifier; a new private pack carries
+its complete feature and postprocessing configuration.
+
+| Repeated four-game validation | Hits / GT | Recall | Precision | False clips | Boundary p90 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| GPU features | 324 / 328 | 98.78% | 92.05% | 28 | 1.400 s |
+| CPU features | 322 / 328 | 98.17% | 92.53% | 26 | 1.395 s |
+
+Every validation game reaches at least96.15% recall on both backends. The higher
+aggregate-precision candidate0.3 failed the per-game recall floor on PAN, so it is
+not the selected profile. Compared with the first integrated candidate, CPU false
+clips fell from58 to26 and missed plays from17 to6. All four games remain outside
+fitting/calibration, but repeated model acceptance checks mean this is not an
+unbiased new final test. HON/PAN share a match day with development DUC.
+
+GPU native development extraction completed all five games. CPU extraction was
+stopped cleanly after two completed development games to free resources; it was
+not used to fit the selected classifier and is not reported as a complete CPU
+training dataset. Live native-worker timing/quality confirmation of the selected
+pack is now running on PAN, with fresh private detection caches. CPU automatic
+selection is exercised with CUDA disabled; video encoding is outside timing.
+
+The first selected-pack live run correctly rejected an obsolete CLI feature-name
+check after detection. Its elapsed time is discarded. The CLI check now uses the
+model's expanded feature names and stored offsets; the PKL/JSON regression test
+also exercises the actual CLI segmentation entry. The full suite again passes306
+tests (two platform skips), package checks pass, and the cached real-worker smoke
+finishes successfully. Fresh-cache timing is restarted after those checks.

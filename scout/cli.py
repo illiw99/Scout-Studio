@@ -343,7 +343,9 @@ def _segment(cfg: Config, f, t_end, clf=None):
             if not path.exists():
                 raise SystemExit(f"no model at {path} - run 'scout train' first")
             clf, names = model.load(path, cfg)
-            expected = model.window_names([n for n in f.names if n not in set(cfg.model_exclude or ())])
+            from .model_features import names as feature_names
+            expected = model.window_names([n for n in feature_names(f.names,cfg.model_feature_set)
+                                           if n not in set(cfg.model_exclude or ())],cfg.model_offsets)
             if names != expected:
                 raise ValueError("model feature schema changed; retrain from corrected reviews")
         return _plays_from_model(cfg, clf, f, t_end)

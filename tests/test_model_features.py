@@ -86,6 +86,10 @@ class DerivedPlayFeaturesTests(unittest.TestCase):
                 loaded, names = model.load(path, cfg)
                 self.assertEqual(names, ds.names)
                 np.testing.assert_allclose(model.predict(loaded, f, cfg), expected, rtol=0, atol=1e-12)
+                from scout import cli
+                cfg.model_path = str(path)
+                self.assertEqual(cli._segment(cfg, f, f.t[-1]),
+                                 cli._plays_from_model(cfg, clf, f, f.t[-1]))
                 wrong = copy.copy(cfg); wrong.model_feature_set = model_features.BASE
                 with self.assertRaisesRegex(ValueError, 'feature set differs'): model.load(path, wrong)
                 wrong = copy.copy(cfg); wrong.model_offsets = model_features.DEFAULT_OFFSETS
