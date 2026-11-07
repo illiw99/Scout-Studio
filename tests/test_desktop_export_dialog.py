@@ -80,6 +80,21 @@ class ExportDialogTests(unittest.TestCase):
             dialog.style.hidePopup()
             dialog.close()
 
+    def test_editable_dropdown_keeps_text_entry_with_themed_indicator(self):
+        from PySide6.QtTest import QTest
+        from scout.desktop.form_controls import ChevronComboBox
+        from scout.desktop.theme import stylesheet
+        combo = ChevronComboBox()
+        combo.setEditable(True)
+        combo.setStyleSheet(stylesheet('dark'))
+        combo.resize(220, 36)
+        combo.show()
+        self.app.processEvents()
+        QTest.keyClicks(combo.lineEdit(), 'New game')
+        self.assertEqual(combo.currentText(), 'New game')
+        self.assertGreater(combo.lineEdit().width(), 100)
+        combo.close()
+
     def test_empty_review_cannot_queue_export(self):
         from PySide6.QtCore import QSettings
         from scout.desktop.export_dialog import ExportDialog

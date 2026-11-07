@@ -341,7 +341,7 @@ class MarkerTimeline(QWidget):
         colors = active_colors()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(), QColor(colors['input']))
+        p.fillRect(self.rect(), QColor(colors['surface']))
         if not self.duration:
             p.setPen(QColor(colors['muted']))
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, 'Find plays to open the full-match review timeline')

@@ -1,6 +1,6 @@
 """Native form behavior with Studio's vector indicators instead of platform chrome."""
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QAbstractSpinBox, QComboBox, QDoubleSpinBox, QLabel, QListView, QToolButton
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout, QAbstractSpinBox, QComboBox, QDoubleSpinBox, QLabel, QListView, QToolButton
 from .icons import icon
 from .theme import active_colors
 
@@ -22,6 +22,14 @@ class ChevronComboBox(QComboBox):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.indicator.setGeometry(self.width()-25, 1, 22, self.height()-2)
+        if self.isEditable():
+            self.lineEdit().setGeometry(7, 2, max(1, self.width()-34), self.height()-4)
+
+    def setEditable(self, editable):
+        super().setEditable(editable)
+        if editable:
+            self.lineEdit().setObjectName('comboEditor')
+            self.lineEdit().setTextMargins(0, 0, 0, 0)
 
     def changeEvent(self, event):
         super().changeEvent(event)
@@ -36,8 +44,8 @@ class ChevronSpinBox(QDoubleSpinBox):
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
         self.lineEdit().setObjectName('spinEditor')
         self.lineEdit().setTextMargins(0, 0, 0, 0)
-        self.up_button = self._button('chevron_up', 'Increase time', self.stepUp)
-        self.down_button = self._button('chevron_down', 'Decrease time', self.stepDown)
+        self.up_button = self._button('chevron_up', 'Increase value', self.stepUp)
+        self.down_button = self._button('chevron_down', 'Decrease value', self.stepDown)
         self.valueChanged.connect(self.refresh_buttons)
         self.refresh_buttons()
 
@@ -71,3 +79,24 @@ class ChevronSpinBox(QDoubleSpinBox):
         super().changeEvent(event)
         if hasattr(self, 'down_button') and event.type() in (QEvent.Type.StyleChange, QEvent.Type.PaletteChange, QEvent.Type.EnabledChange):
             self.refresh_buttons()
+
+
+def choose_item(parent, title, prompt, items):
+    """A themed equivalent of the noneditable single-choice input dialog."""
+    dialog = QDialog(parent)
+    dialog.setWindowTitle(title)
+    dialog.setMinimumWidth(360)
+    layout = QVBoxLayout(dialog)
+    caption = QLabel(prompt)
+    choice = ChevronComboBox()
+    choice.addItems(items)
+    choice.setAccessibleName(prompt)
+    caption.setBuddy(choice)
+    layout.addWidget(caption)
+    layout.addWidget(choice)
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    layout.addWidget(buttons)
+    accepted = dialog.exec() == QDialog.DialogCode.Accepted
+    return choice.currentText(), accepted

@@ -24,6 +24,7 @@ from scout.media import grab_frame
 from scout.groundtruth import Marked
 from . import library
 from .jobs import JobQueue
+from .form_controls import ChevronComboBox, ChevronSpinBox, choose_item
 from .theme import STYLE, stylesheet
 from .widgets import FieldCanvas, Task, SeekSlider
 from .review import MatchPlayer, MarkerTimeline, timecode
@@ -82,7 +83,7 @@ class ImportDialog(QDialog):
         hint = label('Choose a match or type a new name. Original files stay where they are.', 'muted')
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        self.name = QComboBox()
+        self.name = ChevronComboBox()
         self.name.setEditable(True)
         self.name.addItems(names)
         self.name.setCurrentText(selected or '')
@@ -244,7 +245,7 @@ class Studio(QMainWindow):
         self.subtitle.setWordWrap(True)
         titles.addWidget(self.subtitle)
         header.addLayout(titles, 1)
-        self.detection_profile = QComboBox()
+        self.detection_profile = ChevronComboBox()
         self.detection_profile.addItem('Current detection settings', '')
         self.detection_profile.addItem('Default model · automatic GPU / CPU', 'active-pack')
         self.detection_profile.addItem('Faster CPU · experimental', 'cpu-fast')
@@ -381,7 +382,7 @@ class Studio(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 18, 0, 0)
         top = QHBoxLayout()
-        self.videos = QComboBox()
+        self.videos = ChevronComboBox()
         self.videos.currentIndexChanged.connect(self.video_changed)
         top.addWidget(self.videos, 1)
         self.field_state = label('Select a match', 'muted')
@@ -422,19 +423,19 @@ class Studio(QMainWindow):
         self.review_page = page
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 6, 0, 0)
-        layout.setSpacing(5)
+        layout.setSpacing(6)
         self.review_hint = label('', 'muted')
         self.review_hint.setWordWrap(True)
         self.review_hint.hide()
         layout.addWidget(self.review_hint)
         self.review_split = QSplitter(Qt.Orientation.Horizontal)
         self.review_split.setObjectName('reviewWorkspace')
-        self.review_split.setHandleWidth(1)
+        self.review_split.setHandleWidth(6)
         player_panel = QWidget()
         player_panel.setObjectName('playerPanel')
         pv = QVBoxLayout(player_panel)
         pv.setContentsMargins(0, 0, 0, 0)
-        pv.setSpacing(4)
+        pv.setSpacing(6)
         self.video_surface = QFrame()
         self.video_surface.setObjectName('videoSurface')
         self.player_layout = QVBoxLayout(self.video_surface)
@@ -466,12 +467,16 @@ class Studio(QMainWindow):
         self.transport.sourceChanged.connect(self.review_source_changed)
         self.player.errorOccurred.connect(self.show_video_error)
         self.play_slider = SeekSlider(Qt.Orientation.Horizontal)
+        self.play_slider.setObjectName('playSeek')
         self.play_slider.setRange(0, 0)
         self.play_slider.sliderPressed.connect(self.transport.begin_scrub)
         self.play_slider.sliderMoved.connect(lambda value: self.transport.scrub(value/1000))
         self.play_slider.sliderReleased.connect(self.seek_play)
         self.play_time = label('00:00:00 / 00:00:00', 'transportTime')
-        controls = QHBoxLayout()
+        self.transport_bar = QFrame()
+        self.transport_bar.setObjectName('transportBar')
+        controls = QHBoxLayout(self.transport_bar)
+        controls.setContentsMargins(4, 4, 4, 4)
         controls.setSpacing(2)
         controls.addWidget(IconButton('previous', 'Previous play', lambda: self.adjacent_play(-1)))
         controls.addWidget(IconButton('back', 'Back 5 seconds', lambda: self.transport.seek(self.transport.position-5)))
@@ -490,7 +495,6 @@ class Studio(QMainWindow):
         self.mute_button = IconButton('sound', 'Mute / unmute', self.toggle_mute)
         self.mute_button.setCheckable(True)
         controls.addWidget(self.mute_button)
-        from .form_controls import ChevronComboBox
         self.speed = ChevronComboBox()
         self.speed.setObjectName('transportSpeed')
         self.speed.setFixedSize(52, 26)
@@ -514,7 +518,7 @@ class Studio(QMainWindow):
                 control.setProperty('compact', True)
                 control.setFixedSize(26, 26)
                 control.setIconSize(QSize(14, 14))
-        pv.addLayout(controls)
+        pv.addWidget(self.transport_bar)
         self.review_split.addWidget(player_panel)
         self.inspector_panel = QFrame()
         self.inspector_panel.setObjectName('inspector')
@@ -548,8 +552,8 @@ class Studio(QMainWindow):
         editor_layout.addWidget(self.play_name)
         bounds = QGridLayout()
         bounds.setContentsMargins(0, 0, 0, 0)
-        self.play_in = QDoubleSpinBox()
-        self.play_out = QDoubleSpinBox()
+        self.play_in = ChevronSpinBox()
+        self.play_out = ChevronSpinBox()
         for row, (title, widget) in enumerate([('In', self.play_in), ('Out', self.play_out)]):
             widget.setDecimals(3)
             widget.setRange(0, 999999)
@@ -616,7 +620,7 @@ class Studio(QMainWindow):
         zoom.addWidget(IconButton('zoom_in', 'Zoom in', lambda: self.timeline.zoom(2)))
         zoom.addWidget(IconButton('fit', 'Fit whole match', self.timeline.fit))
         zoom.addWidget(IconButton('center', 'Center on cursor', self.center_cursor))
-        self.window_size = QComboBox()
+        self.window_size = ChevronComboBox()
         for text, size in [('15s window', 15), ('30s window', 30), ('60s window', 60), ('2 min window', 120), ('5 min window', 300)]:
             self.window_size.addItem(text, size)
         self.window_size.setCurrentIndex(1)
@@ -812,7 +816,7 @@ class Studio(QMainWindow):
             if not packs:
                 self.show_error('Import a model pack first.')
                 return
-            selected, ok = QInputDialog.getItem(self, 'Activate model pack', 'Pack:', packs, 0, False)
+            selected, ok = choose_item(self, 'Activate model pack', 'Pack:', packs)
             if ok:
                 self.task(lambda _: store.activate(selected), self.model_pack_changed)
         self.task(lambda _: store.list(), choose)
@@ -2219,7 +2223,7 @@ class Studio(QMainWindow):
         self.fullscreen_mute_button.setCheckable(True)
         self.fullscreen_mute_button.setChecked(self.audio.isMuted())
         controls.addWidget(self.fullscreen_mute_button)
-        self.fullscreen_speed = QComboBox()
+        self.fullscreen_speed = ChevronComboBox()
         for rate in PLAYBACK_RATES:
             self.fullscreen_speed.addItem(f'{rate:g}×', rate)
         self.fullscreen_speed.setCurrentIndex(self.speed.currentIndex())
