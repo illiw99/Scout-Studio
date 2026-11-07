@@ -45,6 +45,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Registry-only index backup/import, writer locking and standard user-data defaults | `scout/storage.py`, `scout/desktop/app.py`, `tests/test_library_index_import.py` |
 | Background command queue and cancellation | `scout/desktop/jobs.py` |
 | Versioned local worker jobs, progress events and verified results | `scout/worker.py`, `tests/test_worker.py`, `tests/test_runtime_boundary.py` |
+| Themed numeric step buttons and dropdown indicators | `scout/desktop/form_controls.py`, `scout/desktop/export_dialog.py` |
 | Native theme, application identity and app icons | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/identity.py`, `scout/desktop/scout.svg`, `scout/desktop/scout.ico`, `scripts/build-icons.py` |
 | Frozen runtime profile and reduced-bundle validation | `scout/runtime.py`, `tests/test_runtime_profile.py`, `docs/runtime-validation-2026-11-05.md` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |

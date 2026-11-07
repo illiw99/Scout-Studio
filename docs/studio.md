@@ -109,8 +109,7 @@ editor and unsaved changes stay intact. Offline game paths remain registered.
   second, with **Shift** for two, **Ctrl** for five, or **Ctrl+Shift** for ten.
   **< / >** navigate plays; **\** repeats and **Ctrl+M** mutes. The speed menu
   supports **0.1×–10×**; Scout's **Alt+− / Alt+=** slow down / speed up.
-- **Ctrl+`** opens a normal, resizable video window (or brings it back).
-  **F11**, **Ctrl+Shift+F**, or **F** toggle video fullscreen; **Esc** returns to
+- **F11**, **Ctrl+Shift+F**, or **F** toggle video fullscreen; **Esc** returns to
   the normal window. Double-click the video for fullscreen. Speed and the current
   match stay synchronized between windows. **Ctrl+0** opens Jobs; **Ctrl+Q** quits.
   Shortcuts keep normal text-field behavior; **Ctrl+S** works while editing.

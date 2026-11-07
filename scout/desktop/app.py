@@ -8,7 +8,7 @@ import re
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QLibraryInfo, QSettings, QStandardPaths, QThreadPool, QTimer, Qt, QUrl, QEvent
+from PySide6.QtCore import QSize, QLibraryInfo, QSettings, QStandardPaths, QThreadPool, QTimer, Qt, QUrl, QEvent
 from PySide6.QtGui import QDesktopServices, QIcon, QTextCursor, QShortcut, QKeySequence, QCursor
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtMultimediaWidgets import QVideoWidget
@@ -465,18 +465,14 @@ class Studio(QMainWindow):
         self.transport.positionChanged.connect(self.play_position)
         self.transport.sourceChanged.connect(self.review_source_changed)
         self.player.errorOccurred.connect(self.show_video_error)
-        seek = QHBoxLayout()
         self.play_slider = SeekSlider(Qt.Orientation.Horizontal)
         self.play_slider.setRange(0, 0)
         self.play_slider.sliderPressed.connect(self.transport.begin_scrub)
         self.play_slider.sliderMoved.connect(lambda value: self.transport.scrub(value/1000))
         self.play_slider.sliderReleased.connect(self.seek_play)
-        seek.addWidget(self.play_slider, 1)
-        self.play_time = label('00:00:00 / 00:00:00', 'muted')
-        seek.addWidget(self.play_time)
-        pv.addLayout(seek)
+        self.play_time = label('00:00:00 / 00:00:00', 'transportTime')
         controls = QHBoxLayout()
-        controls.setSpacing(3)
+        controls.setSpacing(2)
         controls.addWidget(IconButton('previous', 'Previous play', lambda: self.adjacent_play(-1)))
         controls.addWidget(IconButton('back', 'Back 5 seconds', lambda: self.transport.seek(self.transport.position-5)))
         self.play_button = IconButton('play', 'Play / pause', self.toggle_play)
@@ -494,7 +490,10 @@ class Studio(QMainWindow):
         self.mute_button = IconButton('sound', 'Mute / unmute', self.toggle_mute)
         self.mute_button.setCheckable(True)
         controls.addWidget(self.mute_button)
-        self.speed = QComboBox()
+        from .form_controls import ChevronComboBox
+        self.speed = ChevronComboBox()
+        self.speed.setObjectName('transportSpeed')
+        self.speed.setFixedSize(52, 26)
         for rate in PLAYBACK_RATES:
             self.speed.addItem(f'{rate:g}×', rate)
         self.speed.setCurrentIndex(PLAYBACK_RATES.index(1.))
@@ -502,13 +501,19 @@ class Studio(QMainWindow):
         self.speed.setAccessibleName('Playback speed')
         self.speed.setToolTip('Playback speed: 0.1× to 10×')
         controls.addWidget(self.speed)
-        controls.addStretch()
-        controls.addWidget(IconButton('popout', 'Resizable video window', self.toggle_popout))
+        controls.addWidget(self.play_slider, 1)
+        controls.addWidget(self.play_time)
         controls.addWidget(IconButton('fullscreen', 'Full screen', self.toggle_fullscreen))
         self.focus_button = IconButton('inspector', 'Show / hide plays and export settings', self.toggle_focus)
         self.focus_button.setCheckable(True)
         controls.addWidget(self.focus_button)
         controls.addWidget(IconButton('help', 'Keyboard shortcuts', self.show_shortcuts))
+        for index in range(controls.count()):
+            control = controls.itemAt(index).widget()
+            if isinstance(control, IconButton):
+                control.setProperty('compact', True)
+                control.setFixedSize(26, 26)
+                control.setIconSize(QSize(14, 14))
         pv.addLayout(controls)
         self.review_split.addWidget(player_panel)
         self.inspector_panel = QFrame()
@@ -2065,7 +2070,7 @@ class Studio(QMainWindow):
                     ('-', lambda: self.timeline.zoom(.5)), ('0', self.timeline.fit),
                     ('Ctrl+Shift+P', self.center_cursor), ('F11', self.toggle_fullscreen),
                     ('Ctrl+Shift+F', self.toggle_fullscreen), ('F', self.toggle_fullscreen),
-                    ('Ctrl+`', self.toggle_popout), ('Alt+6', self.toggle_focus),
+                    ('Alt+6', self.toggle_focus),
                     ('Ctrl+Shift+6', self.toggle_focus),
                     ('Ctrl+E', self.export_clips), ('N', self.add_play),
                     ('Alt+-', lambda: self.change_speed(-1)), ('Alt+=', lambda: self.change_speed(1)),
@@ -2128,7 +2133,6 @@ class Studio(QMainWindow):
                 ('Scroll', 'Slide the timeline through time'), ('Ctrl+scroll', 'Zoom around the pointer'),
                 ('= / − / 0', 'Zoom in / out / fit whole match'), ('Ctrl+Shift+P', 'Center timeline on cursor'),
                 ('Ctrl+0 / Ctrl+Q', 'Global processing queue / quit'),
-                ('Ctrl+`', 'Open video window / bring video back'),
                 ('Alt+6 / Ctrl+Shift+6', 'Show / hide play inspector'),
                 ('Shift + drag / N', 'Scout: draw a variable-length play / new play'),
                 ('Drag play / drag edge', 'Move the whole play / resize its start or end'),
@@ -2201,7 +2205,7 @@ class Studio(QMainWindow):
         seek.addWidget(self.fullscreen_time)
         layout.addLayout(seek)
         controls = QHBoxLayout()
-        controls.setSpacing(3)
+        controls.setSpacing(2)
         controls.addWidget(IconButton('previous', 'Previous play', lambda: self.adjacent_play(-1)))
         controls.addWidget(IconButton('back', 'Back 5 seconds', lambda: self.transport.seek(self.transport.position-5)))
         self.fullscreen_play_button = IconButton('play', 'Play / pause', self.toggle_play)

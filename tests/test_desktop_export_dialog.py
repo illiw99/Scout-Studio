@@ -52,6 +52,34 @@ class ExportDialogTests(unittest.TestCase):
             self.assertEqual(restored.names, dialog.names)
             self.assertFalse((root/'clips').exists())
 
+    def test_vector_controls_keep_mouse_keyboard_and_popup_behavior(self):
+        from PySide6.QtCore import QSettings, Qt, QPoint
+        from PySide6.QtTest import QTest
+        from scout.desktop.export_dialog import ExportDialog
+        from scout.groundtruth import Marked, to_plays
+        with tempfile.TemporaryDirectory() as folder:
+            dialog = ExportDialog('Demo', to_plays([Marked(1, 1., 2.)]), Path(folder)/'clips',
+                                  QSettings(str(Path(folder)/'prefs.ini'), QSettings.Format.IniFormat))
+            dialog.show()
+            self.app.processEvents()
+            self.assertGreater(dialog.pre_play.lineEdit().width(), 40)
+            self.assertFalse(dialog.pre_play.down_button.isEnabled())
+            QTest.mouseClick(dialog.pre_play.up_button, Qt.MouseButton.LeftButton)
+            self.assertEqual(dialog.pre_play.value(), .5)
+            self.assertTrue(dialog.pre_play.down_button.isEnabled())
+            dialog.pre_play.setFocus()
+            QTest.keyClick(dialog.pre_play, Qt.Key.Key_Up)
+            self.assertEqual(dialog.pre_play.value(), 1.)
+            QTest.mouseClick(dialog.pre_play.down_button, Qt.MouseButton.LeftButton)
+            self.assertEqual(dialog.pre_play.value(), .5)
+            self.assertIn('0.50', dialog.pre_play.lineEdit().text())
+            QTest.mouseClick(dialog.style, Qt.MouseButton.LeftButton,
+                             pos=QPoint(dialog.style.width()-12, dialog.style.height()//2))
+            self.app.processEvents()
+            self.assertTrue(dialog.style.view().isVisible())
+            dialog.style.hidePopup()
+            dialog.close()
+
     def test_empty_review_cannot_queue_export(self):
         from PySide6.QtCore import QSettings
         from scout.desktop.export_dialog import ExportDialog

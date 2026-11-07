@@ -2,12 +2,13 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit,
-    QDoubleSpinBox, QVBoxLayout, QHBoxLayout, QSizePolicy, QWidget,
+    QVBoxLayout, QHBoxLayout, QSizePolicy, QWidget,
 )
 
 from scout.clip_names import pattern_names
 from scout.cut import name_for
 from .icons import SymbolLabel
+from .form_controls import ChevronComboBox, ChevronSpinBox
 
 
 class ExportOptions(QWidget):
@@ -38,8 +39,8 @@ class ExportOptions(QWidget):
         form.setVerticalSpacing(6)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        self.pre_play = QDoubleSpinBox()
-        self.post_play = QDoubleSpinBox()
+        self.pre_play = ChevronSpinBox()
+        self.post_play = ChevronSpinBox()
         for key, widget, default, title in [('pre_play', self.pre_play, pre_play, 'Pre-play'),
                                              ('post_play', self.post_play, post_play, 'Post-play')]:
             widget.setRange(0, 3600)
@@ -68,7 +69,7 @@ class ExportOptions(QWidget):
         padding_hint.setObjectName('muted')
         if not compact:
             form.addRow(padding_hint)
-        self.style = QComboBox()
+        self.style = ChevronComboBox()
         self.style.addItems(['Numbered filename pattern', 'Original play number and time'])
         if compact:
             self.style.setItemText(0, 'Filename pattern')

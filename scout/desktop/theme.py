@@ -54,6 +54,18 @@ QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox { background: $input; border: 1px
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus { border-color: $focus; }
 QWidget#clipExport, QWidget#exportPadding, QScrollArea#exportScroll, QWidget#exportViewport { background: transparent; border: none; }
 QFrame#inspector QLineEdit, QFrame#inspector QComboBox, QFrame#inspector QDoubleSpinBox { padding: 4px 6px; min-height: 20px; }
+QComboBox[studioChevron="true"], QWidget#clipExport QComboBox[studioChevron="true"] { padding-right: 26px; }
+QComboBox[studioChevron="true"]::drop-down { border: none; width: 0; }
+QComboBox[studioChevron="true"]::down-arrow { image: none; width: 0; height: 0; }
+QComboBox[studioChevron="true"] QAbstractItemView { background: $surface; color: $text; border: 1px solid $border; padding: 4px; outline: none; selection-background-color: $selected; selection-color: $accent; }
+QComboBox[studioChevron="true"] QAbstractItemView::item { min-height: 26px; padding: 4px 8px; }
+QLabel#formIndicator, QDoubleSpinBox QLineEdit#spinEditor, QFrame#inspector QLineEdit#spinEditor { background: transparent; border: none; padding: 0; min-height: 0; }
+QToolButton#formStep { background: transparent; border: none; border-radius: 3px; padding: 0; }
+QToolButton#formStep:hover { background: $selected; }
+QToolButton#formStep:pressed { background: $raised; }
+QPushButton#transportPlay[compact="true"] { border-radius: 13px; }
+QLabel#transportTime { font-size: 11px; }
+QComboBox#transportSpeed { padding: 1px 22px 1px 4px; min-height: 20px; font-size: 11px; }
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { padding: 12px; margin: 3px 0; border-radius: 8px; color: $text; }
 QListWidget::item:selected { background: $selected; color: $accent; }
