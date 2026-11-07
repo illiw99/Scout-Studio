@@ -28,6 +28,21 @@ model/release distribution remain separate outstanding work. Models remain
 private evaluation artifacts; no new release or private weight publication is
 implied by the local acceptance.
 
+The 7 November [three-approach comparison](play-approach-comparison-2026-11-07.md)
+adds a complete interchangeable pipeline boundary, recipe import/selection in
+Studio, internal box-level detector adapters and isolated end-to-end benchmarks.
+Person transformers, S3D and MobileNet temporal models were trained/tuned with
+whole-day development folds and scored on the held-out games. The person
+transformer passes the recall floor but has worse precision than the accepted
+model; both person-free recipes fail the quality floor. They remain experimental.
+All three now run in the updated local standalone, with CPU/CUDA worker checks;
+installing them preserves the accepted default. The architecture work is delivered;
+quality promotion still requires evidence, rather than changing models by novelty.
+A newly identified, untrained NT17-SAI game independently checks the frozen
+choices: the approved model reaches 95.68% precision / 98.52% recall (133/135),
+ahead of the transformer; both person-free alternatives fail the recall floor.
+These new-game quality results use GPU-derived observations.
+
 Progress on 5 November 2026: the [isolated detector benchmark](detector-benchmark-2026-11-05.md)
 records a partial phase0 CPU/GPU baseline. Phase1 now has candidate manifests,
 post-uninstall test evidence and a separate tag-promotion workflow that verifies
@@ -113,10 +128,10 @@ evidence that a specific requirement cannot reasonably be met with this stack.
 | --- | --- | --- |
 | Interface | Python/PySide6 native desktop | Retain native Qt; separate presentation from processing |
 | Processing | Version1 local job/event/result interface adapting existing CLI commands | Validate installed worker and preserve compatibility |
-| Detection | Reference PyTorch plus explicit ONNX/OpenVINO CPU inference | Evaluate an inference-only runtime with equivalent results |
-| Play classifier | Reference HGB pickle plus validated numeric JSON inference | Evaluate an exported inference model; retain Python training tools |
+| Detection | Approved automatic GPU/CPU profile plus selectable complete experimental pipelines | Validate alternatives on independent games before promotion |
+| Play classifier | Accepted numeric HGB inference plus experimental ONNX temporal heads | Improve precision subject to the per-game recall floor |
 | Dependencies | Base media/review runtime, optional reference/training/inference extras | Reduce standalone contents after model-pack validation |
-| Models | Allowlisted versioned inference packs; no approved baseline yet | Deliberately publish approved, versioned model packs with an offline baseline |
+| Models | Local approved offline baseline; immutable inference packs and complete pipeline recipes | Broader validation and deliberately authorized public distribution |
 | Library | Standard user-data index with portable overrides; game data in `Scout/` | Store the installed app's index in standard user data; preserve portable game folders |
 | Releases | Main/PR candidate builds; tags verify and promote tested installers | Sign final candidates before tests; complete hosted promotion and upgrade validation |
 | Updates | Manual release check and verified installer staging | A clear download page and an in-app update flow |

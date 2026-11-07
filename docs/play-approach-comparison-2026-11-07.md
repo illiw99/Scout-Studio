@@ -186,3 +186,37 @@ No push, public model upload or release publication was performed.
 
 Offscreen tests and Linux execution do not verify Windows installers, Windows GPU
 hardware, macOS execution or full CPU-derived visual-model quality on the games.
+
+## New held-out game: NT17-SAI
+
+After the three recipes were frozen and installed, the user identified another
+completed GT game. NT17-SAI was kept out of fitting and calibration. Its seven
+sources cover 108.58 minutes and contain 135 annotated plays. Recipe identities
+were recorded before evaluating the labels; no thresholds or models were changed
+after viewing these results.
+
+| Fixed pipeline | Precision | Recall | Hits / 135 | Extra clips | IoU≥0.5 recall | Boundary p90 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| approved | 95.68% | 98.52% | 133 | 6 | 92.59% | 1.561 s |
+| person | 92.81% | 95.56% | 129 | 10 | 90.37% | 2.669 s |
+| s3d | 43.53% | 82.22% | 111 | 144 | 29.63% | 10.588 s |
+| mobilenet-v3-small | 38.42% | 54.07% | 73 | 117 | 5.93% | 67.285 s |
+
+The accepted model detects 133/135 plays with six extra clips, outperforming the
+transformer in precision, recall and timestamp quality. Both visual alternatives
+again fail the 95% recall requirement. This additional game supports retaining
+the approved default. It is a new held-out game for this comparison; one additional
+game does not establish generalization to every venue or camera.
+
+The approved pipeline ran on the actual source sequence with fresh private CUDA
+detections. The transformer reused those same private detections. S3D and MobileNet
+shared a fresh source-local visual decode pass, then their already-frozen CPU ONNX
+heads generated intervals. These are **GPU-derived quality results**, not full
+CPU-derived new-game validation. Deployment smoke work overlapped part of this
+run; its elapsed times are deliberately excluded from the standalone speed table.
+
+Private evidence is under `nt17-new-holdout/`: frozen selection, source/GT identity
+snapshot, driver, portable feature arrays, predictions and report. Final checks
+confirmed all seven original video size/mtime identities and all 21 snapshotted Scout
+state-file hashes unchanged, with all three recipe identities unchanged. The
+original nine-game integrity check also passed (41 videos / 109 state files).

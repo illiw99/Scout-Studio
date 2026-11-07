@@ -509,3 +509,14 @@ regions/tracking; `d0cc1ed` frozen-head confirmation; `e950e59` reserved GPU res
 `7a7291b` native automatic GPU/CPU profiles; `fdc70ba` native shortfall and revised
 objective; `0c5a871` derived features/context; `c046712` protected PKL export;
 `0262d94` CLI profile compatibility. Validation and limitations are recorded above.
+
+### Additional frozen-model validation, 7 November
+
+The [complete-pipeline comparison](play-approach-comparison-2026-11-07.md) tests
+three interchangeable model families and a newly identified NT17-SAI GT game.
+NT17-SAI remains outside training/calibration: the accepted unchanged profile
+reaches **133/135 hits, 98.52% recall, 95.68% precision, six extra clips and
+1.561-second boundary p90** on GPU-derived inputs. The temporal transformer is
+worse, and S3D/MobileNet alternatives fail the recall requirement. The default
+pack is retained. New-game CPU quality and native Windows hardware remain
+unverified; the report separates these limits from successful local runtime tests.

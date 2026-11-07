@@ -263,5 +263,179 @@
         "minimum_game_recall": 0.47674418604651164
       }
     }
-  ]
+  ],
+  "new_holdout": {
+    "game": "NT17-SAI",
+    "gt": 135,
+    "video_seconds": 6514.7122,
+    "scope": "new held-out game after candidate freezing; no fitting or threshold tuning; GPU observations, CPU ONNX heads; quality only, concurrent deployment checks make elapsed times unsuitable as standalone speed",
+    "results": {
+      "approved": {
+        "event": {
+          "hits": 133,
+          "missed": 2,
+          "false_positives": 6,
+          "recall": 0.9851851851851852,
+          "precision": 0.9568345323741008,
+          "f1": 0.9708029197080292,
+          "start_mae": 0.26604285714297554,
+          "end_mae": 0.6522388471177122,
+          "boundary_p90": 1.5609166666667988,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.556390977443609,
+            "1.0": 0.706766917293233,
+            "2.0": 0.8872180451127819
+          },
+          "mean_iou": 0.882840487972718,
+          "extra_seconds_per_detected_play": 0.39093684210515633,
+          "truncated_seconds_per_detected_play": 0.5273448621555314
+        },
+        "iou50": {
+          "hits": 125,
+          "missed": 10,
+          "false_positives": 14,
+          "recall": 0.9259259259259259,
+          "precision": 0.8992805755395683,
+          "f1": 0.9124087591240876,
+          "start_mae": 0.17538240000011843,
+          "end_mae": 0.4463242666665857,
+          "boundary_p90": 1.1899966666669344,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.592,
+            "1.0": 0.752,
+            "2.0": 0.936
+          },
+          "mean_iou": 0.9147651822711556,
+          "extra_seconds_per_detected_play": 0.26100426666656507,
+          "truncated_seconds_per_detected_play": 0.36070240000013903
+        }
+      },
+      "person": {
+        "event": {
+          "hits": 129,
+          "missed": 6,
+          "false_positives": 10,
+          "recall": 0.9555555555555556,
+          "precision": 0.9280575539568345,
+          "f1": 0.9416058394160584,
+          "start_mae": 0.9923012919895892,
+          "end_mae": 1.3523343669250327,
+          "boundary_p90": 2.669336666666824,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.13953488372093023,
+            "1.0": 0.37209302325581395,
+            "2.0": 0.7054263565891473
+          },
+          "mean_iou": 0.7437648939980404,
+          "extra_seconds_per_detected_play": 1.896847803617404,
+          "truncated_seconds_per_detected_play": 0.447787855297218
+        },
+        "iou50": {
+          "hits": 122,
+          "missed": 13,
+          "false_positives": 17,
+          "recall": 0.9037037037037037,
+          "precision": 0.8776978417266187,
+          "f1": 0.8905109489051095,
+          "start_mae": 0.9250079234971899,
+          "end_mae": 1.1562338797813836,
+          "boundary_p90": 2.262703333333094,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.14754098360655737,
+            "1.0": 0.39344262295081966,
+            "2.0": 0.7459016393442623
+          },
+          "mean_iou": 0.7625943681205204,
+          "extra_seconds_per_detected_play": 1.679675683059942,
+          "truncated_seconds_per_detected_play": 0.4015661202186313
+        }
+      },
+      "s3d": {
+        "event": {
+          "hits": 111,
+          "missed": 24,
+          "false_positives": 144,
+          "recall": 0.8222222222222222,
+          "precision": 0.43529411764705883,
+          "f1": 0.5692307692307692,
+          "start_mae": 4.066117417417451,
+          "end_mae": 5.3374558558558824,
+          "boundary_p90": 10.587896666666621,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.018018018018018018,
+            "1.0": 0.05405405405405406,
+            "2.0": 0.15315315315315314
+          },
+          "mean_iou": 0.40065875795133254,
+          "extra_seconds_per_detected_play": 6.689355855855881,
+          "truncated_seconds_per_detected_play": 2.7142174174174536
+        },
+        "iou50": {
+          "hits": 40,
+          "missed": 95,
+          "false_positives": 215,
+          "recall": 0.2962962962962963,
+          "precision": 0.1568627450980392,
+          "f1": 0.20512820512820512,
+          "start_mae": 0.8263750000000016,
+          "end_mae": 2.1918149999999903,
+          "boundary_p90": 3.597910000000411,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.05,
+            "1.0": 0.15,
+            "2.0": 0.4
+          },
+          "mean_iou": 0.6420938980216123,
+          "extra_seconds_per_detected_play": 1.2229699999999895,
+          "truncated_seconds_per_detected_play": 1.7952200000000027
+        }
+      },
+      "mobilenet-v3-small": {
+        "event": {
+          "hits": 73,
+          "missed": 62,
+          "false_positives": 117,
+          "recall": 0.5407407407407407,
+          "precision": 0.38421052631578945,
+          "f1": 0.4492307692307692,
+          "start_mae": 25.246795890410944,
+          "end_mae": 18.669885388127888,
+          "boundary_p90": 67.2852666666667,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.0,
+            "1.0": 0.0136986301369863,
+            "2.0": 0.0684931506849315
+          },
+          "mean_iou": 0.26897224520469476,
+          "extra_seconds_per_detected_play": 42.808638356164394,
+          "truncated_seconds_per_detected_play": 1.1080429223744308
+        },
+        "iou50": {
+          "hits": 8,
+          "missed": 127,
+          "false_positives": 182,
+          "recall": 0.05925925925925926,
+          "precision": 0.042105263157894736,
+          "f1": 0.04923076923076923,
+          "start_mae": 1.4382999999998844,
+          "end_mae": 2.0040500000000634,
+          "boundary_p90": 3.7686333333329003,
+          "both_boundaries_within_seconds": {
+            "0.5": 0.0,
+            "1.0": 0.125,
+            "2.0": 0.625
+          },
+          "mean_iou": 0.6460543283603091,
+          "extra_seconds_per_detected_play": 2.9166124999999568,
+          "truncated_seconds_per_detected_play": 0.5257374999999911
+        }
+      }
+    },
+    "originals_unchanged": {
+      "videos": 7,
+      "state_files": 21
+    },
+    "frozen_recipes_unchanged": true,
+    "private_report_sha256": "632c119fe99bede3145c336f3a24e173da07cf79203799ef0bf0ec888ce93d83"
+  }
 }
