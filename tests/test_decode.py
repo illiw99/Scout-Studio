@@ -26,7 +26,10 @@ class DecodeTests(unittest.TestCase):
         import io
         from types import SimpleNamespace
         proc=SimpleNamespace(stdout=io.BytesIO(bytes(12)),stderr=io.BytesIO(),wait=lambda:0)
-        with patch.object(media.subprocess,'Popen',return_value=proc) as start:
+        # Test command construction without probing the host's FFmpeg. The
+        # imageio fallback also invokes Popen when no system binary exists.
+        with patch.object(media,'ffmpeg_exe',return_value='ffmpeg'), \
+             patch.object(media.subprocess,'Popen',return_value=proc) as start:
             self.assertEqual(len(list(media._iter_frames('video',5,2,2,cuda=True,gpu_resize=True))),1)
         cmd=start.call_args.args[0];filters=cmd[cmd.index('-vf')+1]
         self.assertIn('-hwaccel_output_format',cmd)
