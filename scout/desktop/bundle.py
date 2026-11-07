@@ -238,16 +238,30 @@ def _exercise(root, checks):
     from scout.model_packs import ModelStore
     from scout.model_defaults import bundled_directory
     smoke_store = ModelStore(root / 'model-packs')
+    smoke_errors = []
     class SmokeStudio(Studio):
         def model_store(self):
             return smoke_store
-    window = SmokeStudio(root / 'empty-library', settings=QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat))
+
+        def show_error(self, message):
+            # Installer checks have no user to dismiss a modal error dialog.
+            smoke_errors.append(str(message))
+
+    window = SmokeStudio(root, settings=QSettings(str(root / 'settings.ini'), QSettings.Format.IniFormat))
     try:
         window.show()
+        deadline = time.monotonic() + 30
+        while (window.loading or not window.data) and not smoke_errors and time.monotonic() < deadline:
+            app.processEvents()
+            QTest.qWait(25)
+        assert not smoke_errors, '\n'.join(smoke_errors)
+        assert window.data and not window.loading, 'Synthetic match did not load'
+        window.tabs.setCurrentIndex(1)
         app.processEvents()
         assert window.isVisible() and not window.windowIcon().isNull()
+        assert window.workspace_stack.currentWidget() is window.tabs
+        assert window.video_widget.isVisible(), 'Playback check needs a visible review player'
         checks['gui'] = True
-        window.transport.set_clips([clip])
         window.transport.seek(0, play=True)
         deadline = time.monotonic() + 25
         while not window.video_widget.videoSink().videoFrame().isValid() and time.monotonic() < deadline:
@@ -260,6 +274,7 @@ def _exercise(root, checks):
             app.processEvents()
             QTest.qWait(25)
         assert not window.tasks, 'Default model preparation did not finish'
+        assert not smoke_errors, '\n'.join(smoke_errors)
         if bundled_directory() is not None:
             assert window.detection_profile.currentData() == 'active-pack'
             checks['bundled_default'] = smoke_store.active()
