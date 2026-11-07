@@ -24,13 +24,13 @@ class ExportDialogTests(unittest.TestCase):
             root = Path(folder)
             settings = QSettings(str(root/'settings.ini'), QSettings.Format.IniFormat)
             plays = to_plays([Marked(1, 1., 3.), Marked(2, 5., 8.)])
+            settings.setValue('exports/Demo/start', 7)
+            settings.setValue('exports/Demo/pad', 3)
             dialog = ExportDialog('Demo', plays, root/'clips', settings)
             dialog.pattern.setText('Saints_<N>_offense')
-            dialog.start.setValue(7)
-            dialog.pad.setValue(3)
             self.assertEqual(dialog.names,
-                             ['Saints_007_offense.mp4', 'Saints_008_offense.mp4'])
-            self.assertEqual(dialog.options(), dict(name_pattern='Saints_<N>_offense', start_number=7, number_width=3,
+                             ['Saints_1_offense.mp4', 'Saints_2_offense.mp4'])
+            self.assertEqual(dialog.options(), dict(name_pattern='Saints_<N>_offense', start_number=1,
                                                    pre_play=0., post_play=0.))
             dialog.pattern.setText('../<N>')
             self.assertFalse(dialog.export_button.isEnabled())
@@ -47,8 +47,8 @@ class ExportDialogTests(unittest.TestCase):
             dialog.accept()
             restored = ExportDialog('Demo', plays, root/'clips', settings)
             self.assertEqual(restored.pattern.text(), 'Saints_<N>_offense')
-            self.assertEqual(restored.start.value(), 7)
-            self.assertEqual(restored.pad.value(), 3)
+            self.assertFalse(hasattr(restored, 'start'))
+            self.assertFalse(hasattr(restored, 'pad'))
             self.assertEqual(restored.names, dialog.names)
             self.assertFalse((root/'clips').exists())
 
@@ -106,7 +106,7 @@ class ExportDialogTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             queue = JobQueue(Path(folder))
             queue.timer.stop()
-            first = dict(name_pattern='A_<N>', start_number=7, number_width=3)
+            first = dict(name_pattern='A_<N>', start_number=1, number_width=None)
             second = dict(name_pattern='B_<N>', start_number=42, number_width=None)
             with patch.object(queue, 'start_next'):
                 queue.add('A', 'cut', first)

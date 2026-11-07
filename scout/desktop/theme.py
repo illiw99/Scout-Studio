@@ -27,7 +27,10 @@ QFrame#sidebar { background: $surface; border-right: 1px solid $border; }
 QFrame#card { background: $surface; border: 1px solid $border; border-radius: 14px; }
 QFrame#summary { background: $surface; border: 1px solid $border; border-radius: 8px; }
 QLabel#summaryValue { font-size: 18px; font-weight: 700; color: $accent; }
-QFrame#inspector { background: $surface; border: 1px solid $border; border-radius: 10px; }
+QSplitter#reviewWorkspace { background: $surface; border: 1px solid $border; border-radius: 8px; }
+QSplitter#reviewWorkspace::handle { background: $border; width: 1px; }
+QSplitter#reviewWorkspace::handle:hover { background: $focus; }
+QWidget#playerPanel, QFrame#inspector { background: $surface; border: none; }
 QFrame#videoSurface, QFrame#videoPlaceholder { background: #000000; border-radius: 8px; }
 QLabel#videoMessage { color: #cbd2dc; font-size: 16px; }
 QSplitter::handle { background: transparent; width: 6px; }
@@ -49,8 +52,8 @@ QPushButton#transportPlay { background: $accent; color: $bg; border: none; borde
 QPushButton[iconOnly="true"] { padding: 0; border-radius: 7px; }
 QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox { background: $input; border: 1px solid $border; border-radius: 7px; padding: 8px; selection-background-color: $selected; }
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus { border-color: $focus; }
-QWidget#clipExport { background: $surface; }
-QWidget#clipExport QLineEdit, QWidget#clipExport QComboBox, QWidget#clipExport QDoubleSpinBox, QWidget#clipExport QSpinBox { padding: 4px; }
+QWidget#clipExport, QWidget#exportPadding, QScrollArea#exportScroll, QWidget#exportViewport { background: transparent; border: none; }
+QFrame#inspector QLineEdit, QFrame#inspector QComboBox, QFrame#inspector QDoubleSpinBox { padding: 4px 6px; min-height: 20px; }
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { padding: 12px; margin: 3px 0; border-radius: 8px; color: $text; }
 QListWidget::item:selected { background: $selected; color: $accent; }

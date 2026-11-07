@@ -428,7 +428,10 @@ class Studio(QMainWindow):
         self.review_hint.hide()
         layout.addWidget(self.review_hint)
         self.review_split = QSplitter(Qt.Orientation.Horizontal)
+        self.review_split.setObjectName('reviewWorkspace')
+        self.review_split.setHandleWidth(1)
         player_panel = QWidget()
+        player_panel.setObjectName('playerPanel')
         pv = QVBoxLayout(player_panel)
         pv.setContentsMargins(0, 0, 0, 0)
         pv.setSpacing(4)
@@ -570,9 +573,11 @@ class Studio(QMainWindow):
         from .export_dialog import ExportOptions
         self.export_options = ExportOptions('', [], Path(), self.settings, compact=True)
         self.export_scroll = QScrollArea()
+        self.export_scroll.setObjectName('exportScroll')
+        self.export_scroll.viewport().setObjectName('exportViewport')
         self.export_scroll.setWidgetResizable(True)
         self.export_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.export_scroll.setFixedHeight(172)
+        self.export_scroll.setFixedHeight(138)
         self.export_scroll.setWidget(self.export_options)
         inspector.addWidget(self.export_scroll)
         self.pre_play = self.export_options.pre_play

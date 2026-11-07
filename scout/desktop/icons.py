@@ -3,7 +3,7 @@ from functools import lru_cache
 
 from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QLabel, QPushButton
 
 from .theme import active_colors
 
@@ -30,6 +30,8 @@ PATHS = {
     'center': 'M12 2v4m0 12v4M2 12h4m12 0h4',
     'in': 'M6 3H3v18h3m3-9h12m-4-4 4 4-4 4',
     'out': 'M18 3h3v18h-3M3 12h12m-8-4-4 4 4 4',
+    'pre_play': 'M15 4v16M12 12H3m4-4-4 4 4 4M18 7h3v10h-3',
+    'post_play': 'M9 4v16M12 12h9m-4-4 4 4-4 4M6 7H3v10h3',
     'add': 'M12 4v16M4 12h16',
     'delete': 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',
     'save': 'M4 3h13l4 4v14H3V3Zm3 0v6h10V3M7 21v-8h10v8',
@@ -91,4 +93,24 @@ class IconButton(QPushButton):
     def changeEvent(self, event):
         super().changeEvent(event)
         if hasattr(self, 'symbol') and event.type() == QEvent.Type.EnabledChange:
+            self.refresh()
+
+
+class SymbolLabel(QLabel):
+    """Noninteractive, accessible form symbol using the shared theme palette."""
+    def __init__(self, symbol, title):
+        super().__init__()
+        self.symbol = symbol
+        self.setFixedSize(24, 28)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setToolTip(title)
+        self.setAccessibleName(title)
+        self.refresh()
+
+    def refresh(self):
+        self.setPixmap(icon(self.symbol, active_colors()['muted']).pixmap(18, 18))
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if hasattr(self, 'symbol') and event.type() in (QEvent.Type.StyleChange, QEvent.Type.PaletteChange):
             self.refresh()

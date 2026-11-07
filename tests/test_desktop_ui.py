@@ -784,8 +784,6 @@ class DesktopIntegrationTests(unittest.TestCase):
             def choose_export_names():
                 dialog = self.app.activeModalWidget()
                 dialog.pattern.setText('-Saints_<N>_reviewed')
-                dialog.start.setValue(7)
-                dialog.pad.setValue(3)
                 dialog.pre_play.setValue(.8)
                 dialog.post_play.setValue(.2)
                 dialog.accept()
@@ -796,7 +794,7 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertEqual(studio.jobs.history[-1][2], 'Finished')
             exports = list((root/'media/Demo/Scout/clips').glob('*.mp4'))
             self.assertEqual(len(exports), 1)
-            self.assertEqual(exports[0].name, '-Saints_007_reviewed.mp4')
+            self.assertEqual(exports[0].name, '-Saints_1_reviewed.mp4')
             self.assertAlmostEqual(probe(exports[0]).duration, 3., places=1)
             self.assertEqual((studio.pre_play.value(), studio.post_play.value()), (.8, .2))
             self.assertEqual(review.read_bytes(), original_review)

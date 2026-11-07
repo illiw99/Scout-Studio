@@ -129,21 +129,21 @@ editor and unsaved changes stay intact. Offline game paths remain registered.
   `0077a`. For an older saved review, **… → Order camera files by name** moves
   markers with their original source footage and saves an exact original backup.
   A play split across files that become separated is kept as separate ranges.
-- **Export clips** opens a naming preview before adding the job to the queue.
-  Set **Pre-play** and **Post-play** beneath the plays list to add a fixed
-  number of seconds to every clip. The hatched regions with dashed outlines
+- **Export clips** confirms clip settings before adding the job to the queue.
+  The **pre-play** (left extension) and **post-play** (right extension) symbols
+  beneath the plays list control extra seconds included in every clip. The hatched regions with dashed outlines
   show the extra footage around each solid play marker. Padding follows marker
   edits, stops at the first/last frame of available footage, and can cross camera
   file boundaries. Overlapping clips remain separate exports. These values are
   remembered per match and can also be adjusted in the export dialog; canceling
   restores the timeline preview. The saved play boundaries remain unchanged.
-  The compact sidebar also holds the filename pattern, first number and number
-  width. Play-list names and timeline labels follow the resulting export names
-  immediately, so there is no separate filename preview. Changes are remembered automatically per match;
+  The compact sidebar also holds the filename pattern. Numbering starts at 1,
+  with digit width chosen automatically from the clip count. Play-list names and
+  timeline labels follow the resulting export names immediately, so there is no
+  separate filename preview. Changes are remembered automatically per match;
   **Export clips** opens the final confirmation with those settings already filled.
-  Use **<N>** anywhere in the pattern, such as `Saints_<N>_offense`, choose the
-  first number and digit width (`007`), or keep automatic padding. Preferences
-  are remembered per match; original play-number/time names are also available.
+  Use **<N>** anywhere in the pattern, such as `Saints_<N>_offense`. Original
+  play-number/time names are also available.
   MP4s are created from the saved review. The review **…** menu also holds
   refresh, output-folder and optional Shotcut actions. The review workflow is built in.
 
