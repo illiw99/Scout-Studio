@@ -168,3 +168,7 @@ copied-video workflow also needs space for copies of the footage.
 The desktop dependency is optional; existing command-line usage is unchanged.
 The Linux menu launcher uses this checkout's installed environment. This is not
 a standalone installer for other computers; those need the one-time setup too.
+
+Complete experimental detection pipelines are available through **Models → Import
+complete play pipeline…** and the detection profile chooser. Importing preserves
+the current selection. See [pipeline choices and their evaluation](play-pipelines.md).

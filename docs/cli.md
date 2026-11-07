@@ -204,3 +204,7 @@ python -m unittest discover -s tests -v
 Tests cover the MLT workflow, field setup, cache identity, retraining inputs,
 export failures, and real FFmpeg cuts across source boundaries. Detection quality
 still needs validation on your own camera position and reviewed matches.
+
+Complete experimental pipelines can be imported, selected and benchmarked through
+the [shared pipeline interface](play-pipelines.md). The approved model remains the
+default.

@@ -55,7 +55,15 @@ class JobQueue(QObject):
         job = (match, command)
         if job == self.current or job in self.pending:
             return
-        self.options[job] = dict(options or {})
+        snapshot = dict(options or {})
+        selected = snapshot.get('detection_profile', '')
+        if isinstance(selected,str) and selected.startswith('pipeline:'):
+            import hashlib
+            from scout.play_approaches import read_manifest
+            path=Path(selected[len('pipeline:'):])
+            snapshot['pipeline_sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+            read_manifest(path,expected_sha256=snapshot['pipeline_sha256'])
+        self.options[job] = snapshot
         self.pending.append(job)
         self.changed.emit()
         self.start_next()
@@ -76,10 +84,23 @@ class JobQueue(QObject):
         cfg = configuration(self.root, match)
         options = dict(self.options.get(self.current) or {})
         profile = options.pop('detection_profile', None)
+        pipeline_sha = options.pop('pipeline_sha256', None)
         if profile:
-            if command != 'run' or profile not in ('cpu-fast', 'active-pack'):
+            pipeline_profile=isinstance(profile,str) and profile.startswith('pipeline:')
+            if command != 'run' or (profile not in ('cpu-fast', 'active-pack') and not pipeline_profile):
                 raise ValueError('Unknown detection profile')
             cfg.model_pack = None
+            cfg.play_pipeline = None
+            cfg.play_pipeline_sha256 = None
+            if pipeline_profile:
+                import hashlib
+                from scout.play_approaches import read_manifest
+                cfg.play_pipeline=profile[len('pipeline:'):]
+                cfg.play_pipeline_sha256=pipeline_sha or hashlib.sha256(Path(cfg.play_pipeline).read_bytes()).hexdigest()
+                spec=read_manifest(cfg.play_pipeline,expected_sha256=cfg.play_pipeline_sha256)
+                cfg.model_pack=spec.get('requires_model_pack')
+                from PySide6.QtCore import QStandardPaths
+                cfg.model_packs_dir=str(Path(QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation))/'model-packs')
             if profile == 'active-pack':
                 from PySide6.QtCore import QStandardPaths
                 cfg.model_pack = 'active'

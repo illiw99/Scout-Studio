@@ -18,6 +18,45 @@ from .media import grab_frame
 CONFIG_FILE = "scout.json"
 
 
+def cmd_benchmark_pipeline(args):
+    from .pipeline_benchmark import benchmark
+    import json
+    import time
+    started=time.perf_counter()
+    if Path(args.output).exists():raise ValueError('Choose a new benchmark output directory')
+    if args.threads<1:raise ValueError('Benchmark threads must be positive')
+    original=args.cmd
+    try:
+        args.cmd='run'
+        cfg=_load(args)
+    finally:args.cmd=original
+    cfg.inference_threads=args.threads
+    clips=_clips(cfg,args)
+    result=benchmark(cfg,clips,args.output,index=args.source_index,offset=args.offset,seconds=args.seconds,requested_device=args.device,
+                     setup_seconds=time.perf_counter()-started)
+    print(json.dumps(result,indent=2))
+    return 0
+
+
+def cmd_detectors(args):
+    from .detector_adapters import list_adapters
+    for adapter in list_adapters():
+        print(f'{adapter.name} · revision {adapter.revision} · {adapter.label} · {adapter.input_color}')
+    return 0
+
+
+def cmd_play_pipeline(args):
+    from .play_approaches import available_pipelines,default_pipeline_store,install_pipeline,list_approaches
+    store=Path(args.store) if args.store else default_pipeline_store()
+    if args.action=='import':
+        if not args.file:raise ValueError('Import requires --file pipeline.json')
+        print(install_pipeline(args.file,store))
+    else:
+        for approach in list_approaches():print(f'{approach.id}: {approach.label} ({approach.input_kind})')
+        for path,spec in available_pipelines(store):print(f"{spec['id']} · {spec.get('label',spec['id'])} · {path}")
+    return 0
+
+
 def cmd_model_pack(args):
     from .model_packs import ModelStore, build
     store = ModelStore(args.store)
@@ -75,6 +114,8 @@ def cmd_export_detector(args):
 
 def _load(args) -> Config:
     cfg = Config.load(args.config)
+    if getattr(args,'play_pipeline',None) is not None:
+        cfg.play_pipeline_sha256=None
     saved_match = cfg.match
     if saved_match is not None:
         validate_name(saved_match)
@@ -95,7 +136,7 @@ def _load(args) -> Config:
             if candidate.is_file():
                 models[key] = str(candidate.resolve())
                 break
-    for key in ("media_dir", "source_dir", "out_dir", "sample_fps", "model", "cut_mode",
+    for key in ("media_dir", "source_dir", "out_dir", "sample_fps", "model", "cut_mode", "play_pipeline", "detector_adapter",
                 "imgsz", "segmenter", "detector_backend", "device"):
         v = getattr(args, key, None)
         if v is not None:
@@ -141,15 +182,39 @@ def _load(args) -> Config:
             candidate = bundled / "models" / "play.pkl"
             if candidate.is_file():
                 cfg.model_path = str(candidate)
+    pipeline_spec = None
+    if cfg.play_pipeline and args.cmd in ('run','segment'):
+        if getattr(args,'detector_adapter',None) is not None:
+            raise ValueError('A complete play pipeline owns its visual adapter; choose one selection')
+        import hashlib
+        from .play_approaches import read_manifest,pipeline_info
+        expected=cfg.play_pipeline_sha256 or hashlib.sha256(Path(cfg.play_pipeline).read_bytes()).hexdigest()
+        pipeline_spec=read_manifest(cfg.play_pipeline,expected_sha256=expected)
+        cfg.play_pipeline_sha256=expected
+        cfg.model_pack=pipeline_spec.get('requires_model_pack')
+        args.model_pack=cfg.model_pack
+        cfg.detector_adapter=None
+        if pipeline_info(pipeline_spec).input_kind!='person-features':
+            from .model_features import BASE,DEFAULT_OFFSETS
+            cfg.detector_backend='torch'
+            cfg.feature_pipeline='legacy'
+            cfg.model_feature_set=BASE
+            cfg.model_offsets=DEFAULT_OFFSETS
     selection = getattr(args, 'model_pack', None) or cfg.model_pack
     if selection and args.cmd in ('run', 'detect', 'segment', 'preview'):
         from .model_packs import ModelStore
         store = ModelStore(getattr(args, 'model_packs_dir', None) or cfg.model_packs_dir)
+        cfg.model_packs_dir = str(store.root)
         if selection == 'active':
             from .model_defaults import ensure_default
             ensure_default(store)
         store.apply(cfg, selection)
         args.model_pack = cfg.model_pack  # pin active selection across run's repeated loads
+    if pipeline_spec is not None:
+        if pipeline_info(pipeline_spec).input_kind=='person-features' and cfg.sample_fps!=pipeline_spec['sample_fps']:
+            raise ValueError('Pipeline sampling differs from required detector pack')
+        cfg.sample_fps=pipeline_spec['sample_fps']
+        for key,value in pipeline_spec['postprocessing'].items():setattr(cfg,key,value)
     for name in ("sample_fps", "imgsz", "batch", "clip_workers"):
         if getattr(cfg, name) <= 0:
             raise ValueError(f"{name} must be positive")
@@ -674,6 +739,12 @@ def _features_for(cfg: Config, clips) -> features.Features:
 def cmd_segment(args) -> int:
     cfg = _load(args)
     clips = _clips(cfg, args)
+    if cfg.play_pipeline:
+        from .play_approaches import create_pipeline
+        result=create_pipeline(cfg.play_pipeline).predict(clips,cfg)
+        report.write_tables(result.plays,cfg.path(cfg.out_dir))
+        print(f'  {len(result.plays)} plays from selected pipeline -> {cfg.path(cfg.out_dir)/"plays.csv"}')
+        return 0
     missing = [c.path.name for c in clips if _region_for(cfg, clips, c) is None]
     if missing:
         print(f"  WARNING: no field picked for {', '.join(missing)}; "
@@ -746,7 +817,9 @@ def cmd_run(args) -> int:
     """Everything for a file: detect, find the plays, write the projects."""
     cfg = _load(args)
     clips = _clips(cfg, args)
-    missing = [c for c in clips if _region_for(cfg, clips, c) is None]
+    from .play_approaches import create_pipeline,read_manifest,pipeline_info
+    needs_fields=not cfg.play_pipeline or pipeline_info(read_manifest(cfg.play_pipeline)).input_kind=='person-features'
+    missing = [c for c in clips if _region_for(cfg, clips, c) is None] if needs_fields else []
     if missing:
         names = ", ".join(c.path.name for c in missing)
         print(f"  no field drawn for {names}.\n"
@@ -757,9 +830,8 @@ def cmd_run(args) -> int:
     dst = cfg.path(cfg.out_dir) / "review.mlt"
     if dst.exists() and not args.force:
         raise ValueError(f"{dst} exists; use --force only to replace the review")
-    _detect_for(cfg,clips)
-    f = _features_for(cfg, clips)
-    plays = _segment(cfg, f, clips[-1].end)
+    result=create_pipeline(cfg.play_pipeline).predict(clips,cfg)
+    plays=result.plays
     shotcut.write_review(cfg, clips, plays, dst)
     out = cfg.path(cfg.out_dir)
     print(f"\n  done.  Open {out / 'review.mlt'} in Shotcut to check the plays.")
@@ -771,6 +843,8 @@ def main(argv=None) -> int:
                                  description="Cut flag football footage play by play")
     ap.add_argument('--model-pack', help='explicit installed pack: active or id@version')
     ap.add_argument('--model-packs-dir', help='model-pack store (default: application user data)')
+    ap.add_argument('--play-pipeline', help='explicit complete experimental pipeline manifest')
+    ap.add_argument('--detector-adapter', help='explicit registered visual adapter family')
     ap.add_argument("--match", help="imported game name or match subdirectory under media")
     ap.add_argument("--config", default=CONFIG_FILE, help="config JSON")
     ap.add_argument("--media-dir", dest="media_dir")
@@ -782,6 +856,23 @@ def main(argv=None) -> int:
     ap.add_argument("--files", help="only files whose name contains any of these "
                                     "(comma separated), e.g. --files DJI_0039")
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser('benchmark-pipeline', help='time a complete pipeline in a new isolated output directory')
+    s.add_argument('--output',required=True)
+    s.add_argument('--device',choices=('cpu','auto','cuda:0'),default='cpu')
+    s.add_argument('--threads',type=int,default=4)
+    s.add_argument('--source-index',type=int,default=0)
+    s.add_argument('--offset',type=float,default=0.)
+    s.add_argument('--seconds',type=float,default=180.)
+    s.set_defaults(fn=cmd_benchmark_pipeline)
+
+    s = sub.add_parser('detectors', help='list registered visual detector adapters')
+    s.set_defaults(fn=cmd_detectors)
+    s = sub.add_parser('play-pipeline', help='list or import complete experimental play pipelines')
+    s.add_argument('action',choices=('list','import'))
+    s.add_argument('--store')
+    s.add_argument('--file')
+    s.set_defaults(fn=cmd_play_pipeline)
 
     s = sub.add_parser('model-pack', help='build, import, activate or roll back inference packs')
     s.add_argument('action', choices=['build', 'import', 'list', 'activate', 'rollback'])

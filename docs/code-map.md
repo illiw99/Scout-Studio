@@ -18,6 +18,8 @@ when moving responsibilities; read only paths relevant to the task.
 | Windows GPU availability and faster detector candidates | `docs/detection-performance.md` |
 | Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `scripts/prepare-scaled-detector-features.py`, `docs/detector-benchmark-2026-11-05.md` |
 | Offline Studio defaults and approved standalone model/media inputs | `scout/model_defaults.py`, `docs/default-model.md`, `tests/test_model_defaults.py`, `tests/test_default_profile.py` |
+| Complete exchangeable play pipelines, visual encoders and bounded runtime benchmark | `scout/play_approaches.py`, `scout/video_encoders.py`, `scout/pipeline_benchmark.py`, `docs/play-pipelines.md` |
+| Game-grouped temporal training and alternative-approach comparison | `scout/temporal_training.py`, `scripts/compare-play-approaches.py`, `scripts/build-play-pipelines.py`, `docs/play-approach-comparison-2026-11-07.md` |
 | Immutable inference packs, compatibility checks and activation rollback | `scout/model_packs.py`, `tests/test_model_packs.py`, `docs/model-packs.md` |
 | Manual release checks and verified installer staging | `scout/updates.py`, `tests/test_updates.py`, `docs/updates.md` |
 | Field masks, camera movement and polygon setup | `scout/field.py`, `scout/camera.py`, `scout/pick.py`; isolated experiments: `scripts/prepare-camera-region-features.py` |

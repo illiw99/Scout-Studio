@@ -187,6 +187,7 @@ class Studio(QMainWindow):
         models_menu.addAction('Import model pack…', self.import_model_pack)
         models_menu.addAction('Activate installed pack…', self.activate_model_pack)
         models_menu.addAction('Roll back model pack', self.rollback_model_pack)
+        models_menu.addAction('Import complete play pipeline…', self.import_play_pipeline)
         shell = QWidget()
         self.setCentralWidget(shell)
         outer = QHBoxLayout(shell)
@@ -247,6 +248,7 @@ class Studio(QMainWindow):
         self.detection_profile.addItem('Current detection settings', '')
         self.detection_profile.addItem('Default model · automatic GPU / CPU', 'active-pack')
         self.detection_profile.addItem('Faster CPU · experimental', 'cpu-fast')
+        self.refresh_pipeline_choices()
         from scout.runtime import profile
         if profile() == 'inference':
             cpu_item = self.detection_profile.model().item(self.detection_profile.findData('cpu-fast'))
@@ -258,9 +260,10 @@ class Studio(QMainWindow):
             'active-pack' if profile() == 'inference' or available(self.model_store()) else '')
         if profile() == 'inference' and selected_profile == 'cpu-fast':
             selected_profile = 'active-pack'
+        if isinstance(selected_profile,str) and selected_profile.startswith('pipeline:') and self.detection_profile.findData(selected_profile)<0:
+            self.detection_profile.addItem('Unavailable experimental pipeline',selected_profile)
         self.detection_profile.setCurrentIndex(max(0, self.detection_profile.findData(selected_profile)))
-        self.detection_profile.currentIndexChanged.connect(
-            lambda _:self.settings.setValue('detectionProfile',self.detection_profile.currentData()))
+        self.detection_profile.currentIndexChanged.connect(self.detection_profile_changed)
         self.detection_settings = QDialog(self)
         self.detection_settings.setWindowTitle('Detection settings')
         self.detection_settings.setMinimumWidth(420)
@@ -741,6 +744,42 @@ class Studio(QMainWindow):
         base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)
         return ModelStore(Path(base) / 'model-packs')
 
+    def refresh_pipeline_choices(self):
+        from scout.play_approaches import available_pipelines
+        current=self.detection_profile.currentData()
+        self.detection_profile.blockSignals(True)
+        try:
+            for i in range(self.detection_profile.count()-1,-1,-1):
+                value=self.detection_profile.itemData(i)
+                if isinstance(value,str) and value.startswith('pipeline:'):self.detection_profile.removeItem(i)
+            for path,spec in available_pipelines(self.model_store().root.parent/'play-pipelines'):
+                self.detection_profile.addItem('Experimental · '+spec.get('label',spec['id']),'pipeline:'+str(path))
+                self.detection_profile.setItemData(self.detection_profile.count()-1,
+                    spec.get('evaluation_note','Experimental complete pipeline; quality and runtime depend on the model.'),Qt.ItemDataRole.ToolTipRole)
+            if self.detection_profile.findData(current)>=0:self.detection_profile.setCurrentIndex(self.detection_profile.findData(current))
+        finally:self.detection_profile.blockSignals(False)
+
+    def import_play_pipeline(self):
+        from scout.play_approaches import install_pipeline
+        path,_=QFileDialog.getOpenFileName(self,'Import complete play pipeline','','Pipeline manifest (pipeline.json);;JSON files (*.json)')
+        if not path:return
+        store=self.model_store().root.parent/'play-pipelines'
+        def done(_):
+            self.refresh_pipeline_choices()
+            self.statusBar().showMessage('Pipeline installed. Choose it in Detection settings.',8000)
+        self.task(lambda _:install_pipeline(Path(path),store),done)
+
+    def detection_profile_changed(self, *_):
+        self.settings.setValue('detectionProfile',self.detection_profile.currentData())
+        self.update_actions()
+
+    def selected_pipeline_spec(self):
+        from scout.play_approaches import read_manifest
+        value=self.detection_profile.currentData()
+        if not isinstance(value,str) or not value.startswith('pipeline:'):return None,None
+        try:return read_manifest(value[len('pipeline:'):]),None
+        except (OSError,ValueError,TypeError,KeyError) as exc:return None,str(exc)
+
     def prepare_default_model(self):
         from scout.model_defaults import bundled_directory, ensure_default
         directory = bundled_directory()
@@ -1143,12 +1182,16 @@ class Studio(QMainWindow):
         data = self.data
         busy = bool(self.match_busy())
         self.import_game_button.setEnabled(not self.importing)
-        ready = bool(data and data['clips'] and all(data['regions']))
+        pipeline_spec,pipeline_error=self.selected_pipeline_spec()
+        from scout.play_approaches import pipeline_info
+        needs_fields=pipeline_spec is None or pipeline_info(pipeline_spec).input_kind=='person-features'
+        ready = bool(data and data['clips'] and not pipeline_error and (not needs_fields or all(data['regions'])))
         review = bool(data and data['review'].exists())
         self.run_button.setEnabled(ready and not review and not busy and not self.importing and not self.dirty)
         for widget in (self.pre_play, self.post_play):
             widget.setEnabled(bool(data and data['clips'] and not self.loading))
-        self.run_button.setToolTip('Processing is already scheduled for this match' if busy else
+        self.run_button.setToolTip('Selected pipeline unavailable: '+pipeline_error if pipeline_error else
+                                  'Processing is already scheduled for this match' if busy else
                                   'This match already has a review' if review else
                                   'Save your field changes first' if self.dirty else
                                   'Save a field for every camera file first' if data and data['clips'] and not ready else
@@ -1181,7 +1224,8 @@ class Studio(QMainWindow):
         elif review:
             self.banner.setText('Review ready  ·  Preview and refine your plays, then export clips to share with your team.')
         elif ready:
-            self.banner.setText('All fields are saved. Find plays will prepare your review automatically.')
+            self.banner.setText('Selected video pipeline is ready. Find plays will prepare your review.' if not needs_fields else
+                                'All fields are saved. Find plays will prepare your review automatically.')
         else:
             self.banner.setText('Draw and save a field for every camera file to get started.')
 
@@ -1441,7 +1485,8 @@ class Studio(QMainWindow):
         self.statusBar().showMessage(f'{name} removed from the library. Files kept on disk.', 10000)
 
     def enqueue_run(self):
-        if self.data and self.data['clips'] and all(self.data['regions']) and not self.data['review'].exists() and self.resolve_dirty():
+        self.update_actions()
+        if self.run_button.isEnabled() and self.resolve_dirty():
             profile = self.detection_profile.currentData()
             self.enqueue('run', {'detection_profile':profile} if profile else None)
 
@@ -1510,7 +1555,10 @@ class Studio(QMainWindow):
         if command == 'cut' and not self.resolve_marker_dirty():
             return
         if self.match and not self.importing and not self.match_busy():
-            self.jobs.add(self.match, command, options)
+            try:self.jobs.add(self.match, command, options)
+            except (OSError,ValueError) as exc:
+                self.show_error(str(exc))
+                return
             self.statusBar().showMessage(f'{self.match} added to the global processing queue.', 6000)
             self.update_actions()
 

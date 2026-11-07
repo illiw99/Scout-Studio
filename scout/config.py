@@ -72,6 +72,8 @@ class Config:
     model_pack: str | None = None  # explicit id@version or active
     model_packs_dir: str | None = None
     detector_adapter: str | None = None  # explicit registered family; backend remains the runtime
+    play_pipeline: str | None = None  # explicitly selected complete experimental pipeline
+    play_pipeline_sha256: str | None = None  # queued immutable selection
 
     # --- field region ------------------------------------------------------
     #: Polygon of the playing surface in normalised (0-1) frame coordinates.
@@ -300,6 +302,10 @@ class Config:
         if self.detector_adapter is not None:
             from .detector_adapters import get_adapter_metadata
             get_adapter_metadata(self.detector_adapter)
+        if self.play_pipeline is not None and (not isinstance(self.play_pipeline,str) or not self.play_pipeline.strip()):
+            raise ValueError('Invalid play pipeline selection')
+        if self.play_pipeline_sha256 is not None and (not isinstance(self.play_pipeline_sha256,str) or not re.fullmatch('[0-9a-f]{64}',self.play_pipeline_sha256)):
+            raise ValueError('Invalid play pipeline checksum')
         if self.feature_pipeline not in ('legacy','dynamic-field-v1'):
             raise ValueError('Unsupported feature pipeline')
         offsets = validate_offsets(self.model_offsets)
