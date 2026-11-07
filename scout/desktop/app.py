@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMainWindow, QMessageBox, QPlainTextEdit,
     QProgressBar, QPushButton, QSlider, QSplitter, QTabWidget, QVBoxLayout, QWidget,
-    QScrollBar, QAbstractSpinBox, QGridLayout, QDockWidget, QMenu, QSizePolicy, QScrollArea,
+    QScrollBar, QAbstractSpinBox, QGridLayout, QDockWidget, QMenu, QSizePolicy, QScrollArea, QStackedWidget,
 )
 
 from scout.media import grab_frame
@@ -199,21 +199,27 @@ class Studio(QMainWindow):
         side.setContentsMargins(14, 18, 14, 14)
         side.setSpacing(10)
         side.addWidget(label('SCOUT', 'brand'))
-        side.addWidget(label('YOUR GAME. EVERY PLAY.', 'eyebrow'))
-        side.addSpacing(20)
+        side.addSpacing(12)
         self.import_game_button = button('+  Import game', self.import_game, True)
         side.addWidget(self.import_game_button)
         self.search = QLineEdit()
         self.search.setPlaceholderText('Search matches…')
+        self.search.setClearButtonEnabled(True)
+        self.search.setAccessibleName('Search matches')
         self.search.textChanged.connect(self.filter_library)
         side.addWidget(self.search)
-        side.addWidget(label('MATCH LIBRARY', 'eyebrow'))
+        self.library_heading = label('MATCH LIBRARY', 'eyebrow')
+        side.addWidget(self.library_heading)
         self.match_list = QListWidget()
         self.match_list.currentItemChanged.connect(self.match_changed)
         self.match_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.match_list.customContextMenuRequested.connect(self.match_context_menu)
         self.match_list.setToolTip('Right-click a match for actions')
         side.addWidget(self.match_list, 1)
+        self.search_empty = label('No matches found.\nTry another name or clear the search.', 'muted')
+        self.search_empty.setWordWrap(True)
+        self.search_empty.hide()
+        side.insertWidget(side.indexOf(self.match_list), self.search_empty)
         outer.addWidget(sidebar)
         body = QVBoxLayout()
         body.setContentsMargins(14, 10, 14, 8)
@@ -229,8 +235,11 @@ class Studio(QMainWindow):
         self.workspace_label = label('MATCH WORKSPACE', 'eyebrow')
         titles.addWidget(self.workspace_label)
         self.title = label('Welcome to Scout Studio', 'title')
+        self.title.setMinimumWidth(0)
+        self.title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         titles.addWidget(self.title)
         self.subtitle = label('Import a game folder, draw the field, and find every play.', 'muted')
+        self.subtitle.setWordWrap(True)
         titles.addWidget(self.subtitle)
         header.addLayout(titles, 1)
         self.detection_profile = QComboBox()
@@ -251,8 +260,31 @@ class Studio(QMainWindow):
         self.detection_profile.setCurrentIndex(max(0, self.detection_profile.findData(selected_profile)))
         self.detection_profile.currentIndexChanged.connect(
             lambda _:self.settings.setValue('detectionProfile',self.detection_profile.currentData()))
-        header.addWidget(self.detection_profile)
-        self.run_button = button('Find plays  →', self.enqueue_run, True)
+        self.detection_settings = QDialog(self)
+        self.detection_settings.setWindowTitle('Detection settings')
+        self.detection_settings.setMinimumWidth(420)
+        detection_layout = QVBoxLayout(self.detection_settings)
+        detection_layout.setContentsMargins(24, 24, 24, 24)
+        detection_layout.setSpacing(16)
+        detection_layout.addWidget(label('Find plays your way', 'title'))
+        detection_hint = label('The default model chooses GPU acceleration when available and falls back to CPU automatically.', 'muted')
+        detection_hint.setWordWrap(True)
+        detection_layout.addWidget(detection_hint)
+        detection_layout.addWidget(label('DETECTION PROFILE', 'eyebrow'))
+        self.detection_profile.setAccessibleName('Detection profile')
+        self.detection_profile.setMinimumHeight(38)
+        detection_layout.addWidget(self.detection_profile)
+        detection_note = label('Your selection is saved automatically and applies to new jobs. Existing reviews stay as they are.', 'muted')
+        detection_note.setWordWrap(True)
+        detection_layout.addWidget(detection_note)
+        detection_close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        detection_close.button(QDialogButtonBox.StandardButton.Close).setText('Done')
+        detection_close.button(QDialogButtonBox.StandardButton.Close).setIcon(QIcon())
+        detection_close.rejected.connect(self.detection_settings.hide)
+        detection_layout.addWidget(detection_close)
+        self.detection_settings_button = IconButton('settings', 'Detection settings', self.show_detection_settings)
+        header.addWidget(self.detection_settings_button)
+        self.run_button = button('Find plays', self.enqueue_run, True)
         self.run_button.setEnabled(False)
         header.addWidget(self.run_button)
         self.queue_button = button('Queue', self.show_queue)
@@ -263,14 +295,14 @@ class Studio(QMainWindow):
         body.addLayout(header)
         metrics = QHBoxLayout()
         self.metrics = []
-        for title in ['CAMERA FILES', 'FOOTAGE', 'FIELDS READY', 'PLAYS FOUND']:
+        for title in ['Camera files', 'Footage', 'Fields ready', 'Plays found']:
             card = QFrame()
-            card.setObjectName('card')
-            layout = QVBoxLayout(card)
-            layout.setContentsMargins(18, 14, 18, 14)
-            value = label('—', 'metric')
+            card.setObjectName('summary')
+            layout = QHBoxLayout(card)
+            layout.setContentsMargins(12, 9, 12, 9)
+            value = label('—', 'summaryValue')
             layout.addWidget(value)
-            layout.addWidget(label(title, 'muted'))
+            layout.addWidget(label(title, 'muted'), 1)
             self.metrics.append(value)
             metrics.addWidget(card)
         self.metrics_container = QWidget()
@@ -281,10 +313,27 @@ class Studio(QMainWindow):
         self.banner.setWordWrap(True)
         body.addWidget(self.banner)
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.field_tab(), '01   Field setup')
-        self.tabs.addTab(self.review_tab(), '02   Review && export')
+        self.tabs.addTab(self.field_tab(), 'Field setup')
+        self.tabs.addTab(self.review_tab(), 'Review && export')
         self.tabs.currentChanged.connect(self.tab_changed)
-        body.addWidget(self.tabs, 1)
+        self.workspace_stack = QStackedWidget()
+        self.workspace_stack.addWidget(self.tabs)
+        self.empty_workspace = QWidget()
+        empty_layout = QVBoxLayout(self.empty_workspace)
+        empty_layout.addStretch()
+        self.empty_title = label('Your next game starts here.', 'title')
+        self.empty_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(self.empty_title)
+        self.empty_hint = label('Import a game folder to begin. Your videos stay where they are.', 'muted')
+        self.empty_hint.setWordWrap(True)
+        self.empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addWidget(self.empty_hint)
+        empty_layout.addSpacing(14)
+        self.empty_action = button('Import game', self.empty_workspace_action, True)
+        empty_layout.addWidget(self.empty_action, alignment=Qt.AlignmentFlag.AlignCenter)
+        empty_layout.addStretch()
+        self.workspace_stack.addWidget(self.empty_workspace)
+        body.addWidget(self.workspace_stack, 1)
         self.import_progress = QProgressBar()
         self.import_progress.setVisible(False)
         body.addWidget(self.import_progress)
@@ -762,6 +811,7 @@ class Studio(QMainWindow):
                     self.match_list.addItem(item)
             finally:
                 self.match_list.blockSignals(False)
+            self.filter_library(self.search.text())
             self.statusBar().showMessage(f'{count} library entries imported. Game files kept in place.', 10000)
         except (OSError, ValueError) as exc:
             self.show_error(str(exc))
@@ -792,9 +842,49 @@ class Studio(QMainWindow):
             self.select_match(chosen.data(Qt.ItemDataRole.UserRole))
 
     def filter_library(self, text):
+        visible = 0
         for i in range(self.match_list.count()):
             item = self.match_list.item(i)
             item.setHidden(text.casefold() not in item.text().casefold())
+            visible += not item.isHidden()
+        total = self.match_list.count()
+        self.library_heading.setText(f'MATCH LIBRARY · {visible} / {total}' if text else f'MATCH LIBRARY · {total}')
+        self.search_empty.setVisible(bool(text and not visible))
+
+    def show_detection_settings(self):
+        self.detection_settings.show()
+        self.detection_settings.raise_()
+        self.detection_settings.activateWindow()
+
+    def empty_workspace_action(self):
+        if self.match:
+            self.reload_match()
+        else:
+            self.import_game()
+
+    def update_workspace(self):
+        """Keep empty/loading states useful without exposing inactive editors."""
+        has_footage = bool(self.data and self.data['clips'])
+        self.workspace_stack.setCurrentWidget(self.tabs if has_footage else self.empty_workspace)
+        self.metrics_container.setVisible(has_footage and self.tabs.currentIndex() != 1)
+        self.banner.setVisible(has_footage and self.tabs.currentIndex() != 1)
+        self.run_button.setVisible(has_footage and self.tabs.currentIndex() != 1)
+        self.empty_action.setEnabled(not self.loading and not self.importing)
+        if self.loading:
+            self.empty_title.setText('Opening your match…')
+            self.empty_hint.setText('Checking footage and saved work.')
+            self.empty_action.hide()
+        elif self.match:
+            self.empty_title.setText('No footage yet' if self.data else 'Match unavailable')
+            self.empty_hint.setText('Add videos to the game folder, then refresh to pick them up.' if self.data else
+                                    'Check that the game folder is connected, then try again.')
+            self.empty_action.setText('Refresh match')
+            self.empty_action.show()
+        else:
+            self.empty_title.setText('Your next game starts here.')
+            self.empty_hint.setText('Import a game folder, draw the field, and find your plays. Your videos stay where they are.')
+            self.empty_action.setText('Import game')
+            self.empty_action.show()
 
     def match_changed(self, item, previous):
         if not item:
@@ -822,6 +912,7 @@ class Studio(QMainWindow):
         self.frame_token += 1
         token = self.load_token
         self.title.setText(name.replace('_', ' '))
+        self.title.setToolTip(name.replace('_', ' '))
         self.subtitle.setText('Loading your match…')
         self.loading = True
         self.videos.blockSignals(True)
@@ -908,12 +999,10 @@ class Studio(QMainWindow):
         self.task(lambda _: order_by_filename(review, digest), complete, failed)
 
     def tab_changed(self, index):
-        self.metrics_container.setVisible(index != 1)
-        self.banner.setVisible(index != 1)
+        self.update_workspace()
         review = index == 1
         self.workspace_label.setVisible(not review)
         self.subtitle.setVisible(not review)
-        self.run_button.setVisible(not review)
         self.sidebar.setVisible(not review or (self.review_library_visible and not self.focus_mode))
         self.library_toggle.setChecked(not self.sidebar.isHidden())
         self.inspector_panel.setVisible(not self.focus_mode)
@@ -1007,12 +1096,19 @@ class Studio(QMainWindow):
                 any(job[0] == name for job in self.jobs.pending))
 
     def update_actions(self):
+        self.update_workspace()
         data = self.data
         busy = bool(self.match_busy())
         self.import_game_button.setEnabled(not self.importing)
         ready = bool(data and data['clips'] and all(data['regions']))
         review = bool(data and data['review'].exists())
         self.run_button.setEnabled(ready and not review and not busy and not self.importing and not self.dirty)
+        self.run_button.setToolTip('Processing is already scheduled for this match' if busy else
+                                  'This match already has a review' if review else
+                                  'Save your field changes first' if self.dirty else
+                                  'Save a field for every camera file first' if data and data['clips'] and not ready else
+                                  'Import a game with footage first' if not ready else
+                                  'Find plays using the selected detection profile')
         self.review_button.setEnabled(review)
         self.order_sources_action.setEnabled(review and not busy and not self.importing)
         self.export_button.setEnabled(review and not busy and not self.importing)
@@ -1292,6 +1388,7 @@ class Studio(QMainWindow):
         for metric in self.metrics:
             metric.setText('—')
         self.title.setText('Your next game starts here.')
+        self.title.setToolTip('')
         self.subtitle.setText('Import a game folder to get started.')
         self.refresh_library()
         self.update_actions()
@@ -2130,6 +2227,7 @@ class Studio(QMainWindow):
             return
         if self.fullscreen_dialog is not None:
             self.fullscreen_dialog.close()
+        self.detection_settings.close()
         self.transport.pause()
         self.player.stop()
         self.settings.setValue('library', str(self.root))

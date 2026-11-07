@@ -41,6 +41,7 @@ PATHS = {
     'inspector': 'M3 3h18v18H3ZM15 3v18',
     'more': 'M5 12h.01M12 12h.01M19 12h.01',
     'queue': 'M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1',
+    'settings': 'M4 7h16M4 17h16M9 4v6M15 14v6',
 }
 
 

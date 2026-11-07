@@ -28,6 +28,49 @@ class DesktopIntegrationTests(unittest.TestCase):
             QTest.qWait(20)
         self.assertTrue(condition(), 'Timed out waiting for desktop operation')
 
+    def test_welcome_search_and_detection_settings_preserve_selection(self):
+        from PySide6.QtCore import QSettings
+        from scout.desktop.app import Studio
+        from scout.storage import write_library
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            settings = QSettings(str(root/'preferences.ini'), QSettings.Format.IniFormat)
+            settings.setValue('detectionProfile', '')
+            with patch.object(Studio, 'prepare_default_model'):
+                studio = Studio(root, settings=settings)
+            try:
+                studio.show()
+                self.app.processEvents()
+                self.assertIs(studio.workspace_stack.currentWidget(), studio.empty_workspace)
+                with patch.object(studio, 'import_game') as import_game:
+                    studio.empty_action.click()
+                    import_game.assert_called_once()
+                studio.detection_settings_button.click()
+                self.assertTrue(studio.detection_settings.isVisible())
+                studio.detection_profile.setCurrentIndex(studio.detection_profile.findData('active-pack'))
+                studio.detection_settings.close()
+                self.assertEqual(settings.value('detectionProfile'), 'active-pack')
+                studio.detection_settings_button.click()
+                self.assertEqual(studio.detection_profile.currentData(), 'active-pack')
+                studio.detection_settings.close()
+                # Registry placeholders avoid touching or loading real media.
+                write_library(root, {'Saints': str(root/'offline')})
+                studio.match = 'Keep current editor'
+                studio.refresh_library()
+                selected = studio.match_list.currentItem()
+                studio.search.setText('not present')
+                self.assertTrue(studio.search_empty.isVisible())
+                self.assertTrue(selected.isHidden())
+                self.assertIn('0 / 1', studio.library_heading.text())
+                studio.search.clear()
+                self.assertFalse(studio.search_empty.isVisible())
+                self.assertFalse(selected.isHidden())
+                self.assertIs(studio.match_list.currentItem(), selected)
+                self.assertEqual(studio.match, 'Keep current editor')
+            finally:
+                studio.close()
+                studio.pool.waitForDone()
+
     def test_index_import_preserves_dirty_editor_without_scanning_games(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -47,6 +90,7 @@ class DesktopIntegrationTests(unittest.TestCase):
                 jobs=SimpleNamespace(current=None, pending=[]),
                 rows=[dict(name='Current', linked=True)], match_list=listing,
                 dirty=True, marker_dirty=True, data={'sentinel': 'unsaved editor'},
+                search=SimpleNamespace(text=lambda: ''), filter_library=Mock(),
                 show_error=Mock(), resolve_dirty=Mock(), refresh_library=Mock(), statusBar=Mock())
             with patch('scout.desktop.app.QFileDialog.getOpenFileName',
                        return_value=(str(source/'.scout-library.json'), '')), \
@@ -241,6 +285,8 @@ class DesktopIntegrationTests(unittest.TestCase):
                 self.assertIn('No videos in this folder', studio.subtitle.text())
                 self.assertFalse(studio.run_button.isEnabled())
                 self.assertFalse(studio.export_button.isEnabled())
+                self.assertIs(studio.workspace_stack.currentWidget(), studio.empty_workspace)
+                self.assertEqual(studio.empty_action.text(), 'Refresh match')
                 studio.enqueue_run()
                 studio.export_clips()
                 self.assertIsNone(studio.jobs.current)
@@ -251,9 +297,10 @@ class DesktopIntegrationTests(unittest.TestCase):
                 # Polling can rebuild the library while loading on slower CI
                 # runners. Force that replacement instead of relying on timing.
                 studio.refresh_library()
-                studio.reload_match()
+                studio.empty_action.click()
                 self.wait_for(lambda: not studio.loading and studio.frame_ready)
                 self.assertEqual(len(studio.data['clips']), 1)
+                self.assertIs(studio.workspace_stack.currentWidget(), studio.tabs)
                 item = studio.match_list.currentItem()
                 self.assertIsNotNone(item)
                 self.assertIn('1 videos', item.text())

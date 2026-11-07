@@ -3,8 +3,15 @@
 [README](../README.md) · [Development](development.md) · [Code map](code-map.md)
 
 Status: roadmap recorded 4 November 2026, with local implementation progress
-updated 6 November. Implemented features below are not yet a published release. Follow the [installation guide](installation.md)
+updated 7 November. Implemented features below are not yet a published release. Follow the [installation guide](installation.md)
 and [development guide](development.md) for the current application.
+
+The native workspace now has a focused welcome screen, actionable empty-folder
+states, compact match summaries and a separate detection-settings dialog. Library
+search shows matching counts and preserves the selected editor when cleared.
+The [approved model and complete pipeline](default-model.md) are the local Studio
+default, with automatic GPU/CPU selection. Historical phase notes below describe
+the checkpoints that led to that deployment.
 
 Model improvement now has a locally accepted precision-constrained profile.
 The [reviewed-game study](model-improvement.md) separates five development games

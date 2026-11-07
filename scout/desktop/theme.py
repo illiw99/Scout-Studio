@@ -25,6 +25,8 @@ _SHEET = Template('''
 QWidget { background: $bg; color: $text; font-family: "Inter", "DejaVu Sans"; font-size: 13px; }
 QFrame#sidebar { background: $surface; border-right: 1px solid $border; }
 QFrame#card { background: $surface; border: 1px solid $border; border-radius: 14px; }
+QFrame#summary { background: $surface; border: 1px solid $border; border-radius: 8px; }
+QLabel#summaryValue { font-size: 18px; font-weight: 700; color: $accent; }
 QFrame#inspector { background: $surface; border: 1px solid $border; border-radius: 10px; }
 QFrame#videoSurface, QFrame#videoPlaceholder { background: #000000; border-radius: 8px; }
 QLabel#videoMessage { color: #cbd2dc; font-size: 16px; }

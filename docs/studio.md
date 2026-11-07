@@ -6,6 +6,17 @@ Scout Studio provides a native desktop window for the complete match workflow.
 Open **Scout Studio** from the Linux Applications menu after the one-time setup
 below. Day-to-day use needs no terminal or Python knowledge.
 
+The welcome screen opens with **Import game**. An empty or unavailable game
+offers **Refresh match**; inactive editors stay hidden until footage is ready.
+The compact summaries leave more room for the field canvas. Search shows the
+number of matching games and a clear message when nothing matches; clearing it
+keeps your current match selected.
+
+Use the sliders icon in the header for **Detection settings**. The profile is
+saved automatically and applies to new processing jobs. The default model uses
+GPU acceleration when available and CPU otherwise. **Find plays** explains any
+prerequisite in its tooltip, such as saving a field for every camera file.
+
 The default library index lives in standard application user data. Launching
 from another directory does not select another library. Remembered workspaces
 and explicit `--workspace` arguments are preserved. Use **Library → Reveal library
