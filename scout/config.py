@@ -71,6 +71,7 @@ class Config:
 
     model_pack: str | None = None  # explicit id@version or active
     model_packs_dir: str | None = None
+    detector_adapter: str | None = None  # explicit registered family; backend remains the runtime
 
     # --- field region ------------------------------------------------------
     #: Polygon of the playing surface in normalised (0-1) frame coordinates.
@@ -296,6 +297,9 @@ class Config:
     def validate_pipeline(self) -> None:
         import math
         import re
+        if self.detector_adapter is not None:
+            from .detector_adapters import get_adapter_metadata
+            get_adapter_metadata(self.detector_adapter)
         if self.feature_pipeline not in ('legacy','dynamic-field-v1'):
             raise ValueError('Unsupported feature pipeline')
         offsets = validate_offsets(self.model_offsets)

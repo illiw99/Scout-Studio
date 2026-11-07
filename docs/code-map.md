@@ -13,6 +13,7 @@ when moving responsibilities; read only paths relevant to the task.
 | FFmpeg discovery, probing and frame decoding | `scout/media.py` |
 | Background helper launch options and Windows console suppression | `scout/processes.py`, `tests/test_processes.py` |
 | YOLO detection, device choice and persistent caches | `scout/detect.py` |
+| Exchangeable person-detector contract, named/revisioned adapter registry and normalized predictions | `scout/detector_adapters.py`, `tests/test_detector_adapters.py` |
 | Explicit CPU graph runtimes, preprocessing/NMS and managed detector exports | `scout/inference.py`, `tests/test_inference.py` |
 | Windows GPU availability and faster detector candidates | `docs/detection-performance.md` |
 | Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `scripts/prepare-scaled-detector-features.py`, `docs/detector-benchmark-2026-11-05.md` |

@@ -67,6 +67,11 @@ def _cache_key(cfg: Config, clip: Clip) -> str:
         "imgsz": cfg.imgsz, "conf": cfg.conf,
         "fps": cfg.sample_fps,
     }
+    adapter_name = getattr(cfg, 'detector_adapter', None)
+    if adapter_name is not None:
+        from .detector_adapters import get_adapter_metadata
+        adapter = get_adapter_metadata(adapter_name)
+        settings['detector_adapter'] = dict(name=adapter.name, revision=adapter.revision)
     if cfg.model_pack:
         settings['model_pack'] = cfg.model_pack
     if cfg.detector_sha256:settings['detector_sha256']=cfg.detector_sha256
@@ -172,7 +177,7 @@ def _precision_kwargs(cfg: Config, device) -> dict:
     return {"half": precision in ("fp16", 16)}
 
 
-def create_detector(cfg):
+def _create_detector_engine(cfg):
     from .inference import signature, CpuDetector, CheckedReferenceDetector
     cfg.validate_pipeline()
     signature(cfg)
@@ -195,6 +200,12 @@ def create_detector(cfg):
         fallback_to_cpu(cfg)
         print(f'  model pack: using CPU; GPU reference initialization failed: {exc}',flush=True)
         return CpuDetector(cfg)
+
+
+def create_detector(cfg):
+    """Create a canonical adapter after reference/fallback initialization."""
+    from .detector_adapters import create_adapter
+    return create_adapter(cfg)
 
 
 def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detections:
@@ -272,13 +283,9 @@ def run(cfg: Config, clip: Clip, model=None, progress: bool = True) -> Detection
             return
         res = model.predict(batch, imgsz=cfg.imgsz, conf=cfg.conf, classes=[0],
                             device=device, verbose=False, **kw)
-        for r in res:
-            from .inference import Prediction
-            if isinstance(r, Prediction):
-                b,c = r.boxes.astype(np.float32),r.conf.astype(np.float32)
-            else:
-                b = r.boxes.xyxy.cpu().numpy().astype(np.float32)
-                c = r.boxes.conf.cpu().numpy().astype(np.float32)
+        from .detector_adapters import normalize_predictions
+        for r in normalize_predictions(res, len(batch)):
+            b, c = r.boxes, r.conf
             if (dw,dh)!=(w,h):
                 b=b*np.array([w/dw,h/dh,w/dw,h/dh],np.float32)
             boxes.append(b)
