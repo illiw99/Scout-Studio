@@ -158,3 +158,31 @@ visual encoders and small trained temporal heads, not TimeSformer itself.
 
 The [implementation and usage guide](play-pipelines.md) describes the complete
 pipeline contract, model import, Studio selection and repeatable benchmark CLI.
+
+## Implementation and local deployment validation
+
+The full private CPU/OpenVINO environment check passed **365 tests**, with two
+native-platform skips. Source/wheel packaging checks and wheel CLI smoke passed.
+An independent pipeline review checked source safety, immutable queued selection,
+clock handling, bounded video memory and CPU fallback. Its benchmark relative-path
+finding was fixed with a differing-CWD/config-root regression test. Automatic GPU
+failure retries the complete game on CPU; all interval parameters are recipe-bound.
+
+The installed Linux reference standalone was rebuilt from `76d5225`. Native X11
+smoke passed: GUI, real synthetic playback, export, CLI, worker, OpenVINO, verified
+bundled default and runtime dependencies. Every new recipe completed synthetic
+CPU and CUDA processing in the **actual frozen worker** (six checks). A native
+chooser check shows all three recipes, with the accepted default selected.
+The normal project launcher and Applications entry now point to that build.
+Restart Studio to load it; existing open sessions are not terminated.
+
+Only inference assets were imported into the user's pipeline store. The active
+pack remains `scout-reviewed-precision@0.3.0` and the saved detection profile remains
+`active-pack`. The new executable shares immutable dependency/media/model payload
+with the previous installation; no dependency version changed. The previous
+launcher/desktop entry and deployment receipt remain in the private build evidence.
+Unused intermediate build archives were removed after validation (another 183 MiB).
+No push, public model upload or release publication was performed.
+
+Offscreen tests and Linux execution do not verify Windows installers, Windows GPU
+hardware, macOS execution or full CPU-derived visual-model quality on the games.
