@@ -36,6 +36,15 @@ class MatchPlayer(QObject):
         self.reverse_timer.setInterval(50)
         self.reverse_timer.timeout.connect(self.tick_reverse)
         self.scrub_target = None
+        self.last_scrub_seek = None
+        self.scrub_inflight = False
+        self.video_sink = player.videoSink() if hasattr(player, 'videoSink') else None
+        self.scrub_watchdog = QTimer(self)
+        self.scrub_watchdog.setSingleShot(True)
+        self.scrub_watchdog.setInterval(150)
+        self.scrub_watchdog.timeout.connect(self.release_scrub_seek)
+        if self.video_sink is not None:
+            self.video_sink.videoFrameChanged.connect(self.scrub_frame_ready)
         self.scrub_timer = QTimer(self)
         self.scrub_timer.setSingleShot(True)
         self.scrub_timer.setInterval(45)
@@ -47,6 +56,9 @@ class MatchPlayer(QObject):
         self.stop_reverse()
         self.loop_range = None
         self.scrub_timer.stop()
+        self.scrub_watchdog.stop()
+        self.scrub_inflight = False
+        self.last_scrub_seek = None
         self.scrubbing = False
         self.scrub_target = None
         self.resume_after_scrub = False
@@ -63,6 +75,7 @@ class MatchPlayer(QObject):
         self.positionChanged.emit(0.)
 
     def seek(self, seconds, play=None):
+        self.last_scrub_seek = None
         if not self.clips:
             return
         if play is None:
@@ -131,7 +144,7 @@ class MatchPlayer(QObject):
                 self.positionChanged.emit(self.position)
 
     def on_position(self, millis):
-        if self.reverse_rate or self.changing or self.pending is not None or not 0 <= self.index < len(self.clips):
+        if self.scrubbing or self.reverse_rate or self.changing or self.pending is not None or not 0 <= self.index < len(self.clips):
             return
         clip = self.clips[self.index]
         self.position = min(clip.end, clip.start + millis/1000)
@@ -188,22 +201,51 @@ class MatchPlayer(QObject):
     def begin_scrub(self):
         if not self.scrubbing:
             self.resume_after_scrub = self.want_play
+            self.last_scrub_seek = None
             self.scrubbing = True
             self.pause()
 
     def scrub(self, seconds):
+        if not self.clips:
+            return
+        seconds = max(0., min(float(seconds), max(0., self.duration-.001)))
+        # The pointer owns the cursor while scrubbing; late decoder callbacks
+        # must not move it back to a previously requested frame.
+        self.position = seconds
+        self.positionChanged.emit(seconds)
         self.scrub_target = seconds
         if not self.scrub_timer.isActive():
             self.scrub_timer.start()
 
-    def flush_scrub(self):
-        if self.scrub_target is not None:
-            seconds, self.scrub_target = self.scrub_target, None
-            self.seek(seconds, play=False)
+    def flush_scrub(self, *, force=False):
+        if self.scrub_target is None or (self.scrub_inflight and not force):
+            return
+        seconds, self.scrub_target = self.scrub_target, None
+        index = min(bisect.bisect_right([c.end for c in self.clips], seconds), len(self.clips)-1)
+        key = (index, round((seconds-self.clips[index].start)*1000))
+        if key == self.last_scrub_seek:
+            return
+        self.scrub_inflight = self.video_sink is not None and not force
+        if self.scrub_inflight:
+            self.scrub_watchdog.start()
+        self.seek(seconds, play=False)
+        self.last_scrub_seek = key
+
+    def scrub_frame_ready(self, frame):
+        if frame.isValid():
+            self.release_scrub_seek()
+
+    def release_scrub_seek(self):
+        self.scrub_watchdog.stop()
+        self.scrub_inflight = False
+        if self.scrubbing and self.scrub_target is not None and not self.scrub_timer.isActive():
+            self.scrub_timer.start()
 
     def finish_scrub(self):
         self.scrub_timer.stop()
-        self.flush_scrub()
+        self.scrub_watchdog.stop()
+        self.scrub_inflight = False
+        self.flush_scrub(force=True)
         self.scrubbing = False
         resume, self.resume_after_scrub = self.resume_after_scrub, False
         self.want_play = resume

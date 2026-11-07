@@ -169,6 +169,92 @@ class MatchPlayerTests(unittest.TestCase):
         self.assertEqual(self.raw.local, 2000)
         self.assertFalse(self.raw.playing)
 
+    def test_scrub_deduplicates_frames_and_ignores_late_decoder_positions(self):
+        from unittest.mock import Mock
+        self.transport.seek(2., play=False)
+        self.raw.loaded()
+        self.raw.setPosition = Mock(wraps=self.raw.setPosition)
+        self.transport.begin_scrub()
+        for _ in range(6):
+            self.transport.scrub(4.)
+            self.transport.flush_scrub()
+        self.assertEqual(self.raw.setPosition.call_count, 1)
+        self.transport.scrub(7.)
+        self.raw.positionChanged.emit(4000)
+        self.assertEqual(self.transport.position, 7.)
+        self.transport.finish_scrub()
+        self.assertEqual(self.raw.local, 7000)
+        self.assertEqual(self.raw.setPosition.call_count, 2)
+        # Starting another gesture after an ordinary seek must not suppress it.
+        self.transport.seek(1.)
+        self.transport.begin_scrub()
+        self.transport.scrub(7.)
+        self.transport.finish_scrub()
+        self.assertEqual(self.raw.local, 7000)
+
+    def test_slow_decoder_coalesces_until_frame_and_release_flushes_latest(self):
+        from unittest.mock import Mock
+        from types import SimpleNamespace
+        from PySide6.QtCore import QObject, Signal
+        from scout.desktop.review import MatchPlayer
+        class Sink(QObject):
+            videoFrameChanged = Signal(object)
+        raw = type(self.raw)()
+        sink = Sink()
+        raw.videoSink = lambda: sink
+        transport = MatchPlayer(raw)
+        transport.set_clips(self.clips)
+        transport.seek(2., play=True)
+        raw.loaded()
+        raw.setPosition = Mock(wraps=raw.setPosition)
+        transport.begin_scrub()
+        transport.scrub(3.)
+        transport.flush_scrub()
+        for value in (4., 5., 6.):
+            transport.scrub(value)
+            transport.flush_scrub()
+        self.assertEqual(raw.setPosition.call_count, 1)
+        self.assertEqual(transport.position, 6.)
+        sink.videoFrameChanged.emit(SimpleNamespace(isValid=lambda: True))
+        transport.flush_scrub()
+        self.assertEqual(raw.local, 6000)
+        transport.scrub(8.)
+        transport.finish_scrub()
+        self.assertEqual(raw.local, 8000)
+        self.assertTrue(raw.playing)
+        self.assertEqual(raw.setPosition.call_count, 3)
+        self.assertFalse(transport.scrub_watchdog.isActive())
+        self.assertIsNone(transport.scrub_target)
+        transport.pause()
+
+    def test_scrub_watchdog_and_source_change_keep_newest_request(self):
+        from unittest.mock import Mock
+        self.transport.video_sink = object()  # Exercise timeout when no frame arrives.
+        self.transport.seek(2., play=False)
+        self.raw.loaded()
+        self.raw.setPosition = Mock(wraps=self.raw.setPosition)
+        self.transport.begin_scrub()
+        self.transport.scrub(3.)
+        self.transport.flush_scrub()
+        self.transport.scrub(6.)
+        self.transport.flush_scrub()
+        self.assertEqual(self.raw.setPosition.call_count, 1)
+        self.transport.scrub_watchdog.timeout.emit()
+        self.transport.flush_scrub()
+        self.assertEqual(self.raw.local, 6000)
+        self.transport.scrub(11.)
+        self.transport.finish_scrub()
+        self.transport.begin_scrub()
+        self.transport.scrub(12.)
+        self.transport.scrub(17.)
+        self.transport.finish_scrub()
+        self.raw.loaded()
+        self.assertEqual(self.transport.index, 1)
+        self.assertEqual(self.raw.local, 7000)
+        self.assertFalse(self.raw.playing)
+        self.transport.set_clips([])
+        self.assertFalse(self.transport.scrub_watchdog.isActive())
+
     def test_repeat_range_crosses_files_without_ending_full_match_review(self):
         from PySide6.QtMultimedia import QMediaPlayer
         self.transport.loop_range = (8., 12.)
