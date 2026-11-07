@@ -137,6 +137,7 @@ class Studio(QMainWindow):
         self.marker_dirty = False
         self.editing_index = -1
         self.loading_editor = False
+        self.loading_export_options = False
         self.undo_stack = []
         self.redo_stack = []
         self.new_play_duration = 5.
@@ -498,7 +499,7 @@ class Studio(QMainWindow):
         controls.addStretch()
         controls.addWidget(IconButton('popout', 'Resizable video window', self.toggle_popout))
         controls.addWidget(IconButton('fullscreen', 'Full screen', self.toggle_fullscreen))
-        self.focus_button = IconButton('inspector', 'Show / hide play inspector', self.toggle_focus)
+        self.focus_button = IconButton('inspector', 'Show / hide plays and export settings', self.toggle_focus)
         self.focus_button.setCheckable(True)
         controls.addWidget(self.focus_button)
         controls.addWidget(IconButton('help', 'Keyboard shortcuts', self.show_shortcuts))
@@ -506,8 +507,8 @@ class Studio(QMainWindow):
         self.review_split.addWidget(player_panel)
         self.inspector_panel = QFrame()
         self.inspector_panel.setObjectName('inspector')
-        self.inspector_panel.setMinimumWidth(220)
-        self.inspector_panel.setMaximumWidth(340)
+        self.inspector_panel.setMinimumWidth(280)
+        self.inspector_panel.setMaximumWidth(360)
         inspector = QVBoxLayout(self.inspector_panel)
         inspector.setContentsMargins(10, 10, 10, 10)
         inspector.setSpacing(6)
@@ -519,15 +520,21 @@ class Studio(QMainWindow):
         inspector.addLayout(heading)
         self.plays = QListWidget()
         self.plays.setObjectName('playList')
+        self.plays.setMinimumHeight(96)
         self.plays.currentRowChanged.connect(self.preview_play)
         inspector.addWidget(self.plays, 1)
+        self.play_editor = QDialog(self)
+        self.play_editor.setWindowTitle('Edit play')
+        self.play_editor.setMinimumWidth(340)
+        editor_layout = QVBoxLayout(self.play_editor)
+        self.plays.itemDoubleClicked.connect(lambda _: self.show_play_editor())
         self.edit_state = label('Select a play to edit, or add a new play.', 'muted')
         self.edit_state.setWordWrap(True)
-        inspector.addWidget(self.edit_state)
+        editor_layout.addWidget(self.edit_state)
         self.play_name = QLineEdit()
         self.play_name.setPlaceholderText('Automatic time label or custom name')
         self.play_name.setAccessibleName('Play label')
-        inspector.addWidget(self.play_name)
+        editor_layout.addWidget(self.play_name)
         bounds = QGridLayout()
         bounds.setContentsMargins(0, 0, 0, 0)
         self.play_in = QDoubleSpinBox()
@@ -543,16 +550,31 @@ class Studio(QMainWindow):
         self.mark_out_button = IconButton('out', 'Set end at cursor', lambda: self.set_boundary('out'))
         bounds.addWidget(self.mark_in_button, 0, 2)
         bounds.addWidget(self.mark_out_button, 1, 2)
-        inspector.addLayout(bounds)
+        editor_layout.addLayout(bounds)
         self.range_summary = label('Choose a range on the timeline', 'muted')
-        inspector.addWidget(self.range_summary)
+        editor_layout.addWidget(self.range_summary)
         edits = QHBoxLayout()
         self.delete_play_button = IconButton('delete', 'Delete selected play', self.delete_play)
         self.save_play_button = IconButton('save', 'Save play changes', self.save_play)
         edits.addWidget(self.delete_play_button)
         edits.addStretch()
         edits.addWidget(self.save_play_button)
-        inspector.addLayout(edits)
+        editor_layout.addLayout(edits)
+        editor_close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        editor_close.rejected.connect(self.play_editor.hide)
+        editor_layout.addWidget(editor_close)
+        QShortcut(QKeySequence('Ctrl+S'), self.play_editor).activated.connect(self.save_play)
+        from .export_dialog import ExportOptions
+        self.export_options = ExportOptions('', [], Path(), self.settings, compact=True)
+        self.export_scroll = QScrollArea()
+        self.export_scroll.setWidgetResizable(True)
+        self.export_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.export_scroll.setMinimumHeight(230)
+        self.export_scroll.setWidget(self.export_options)
+        inspector.addWidget(self.export_scroll, 4)
+        self.pre_play = self.export_options.pre_play
+        self.post_play = self.export_options.post_play
+        self.export_options.optionsChanged.connect(self.export_padding_changed)
         self.review_source = label('No footage loaded', 'muted')
         self.review_source.setWordWrap(True)
         self.review_source.hide()
@@ -562,7 +584,7 @@ class Studio(QMainWindow):
         self.review_split.addWidget(self.inspector_panel)
         self.review_split.setStretchFactor(0, 1)
         self.review_split.setStretchFactor(1, 0)
-        self.review_split.setSizes([1100, 250])
+        self.review_split.setSizes([1100, 300])
         layout.addWidget(self.review_split, 1)
         self.timeline = MarkerTimeline()
         self.timeline.scrubStarted.connect(self.transport.begin_scrub)
@@ -574,24 +596,6 @@ class Studio(QMainWindow):
         self.timeline.rangeMoved.connect(self.move_marker)
         self.timeline.rangeCreated.connect(self.create_range)
         self.timeline.viewChanged.connect(self.timeline_view_changed)
-        padding = QHBoxLayout()
-        padding.setSpacing(8)
-        padding.addWidget(label('Clip padding', 'muted'))
-        self.pre_play = QDoubleSpinBox()
-        self.post_play = QDoubleSpinBox()
-        for title, widget in [('Pre-play', self.pre_play), ('Post-play', self.post_play)]:
-            padding.addWidget(label(title, 'muted'))
-            widget.setRange(0, 3600)
-            widget.setDecimals(2)
-            widget.setSingleStep(.5)
-            widget.setSuffix(' s')
-            widget.setAccessibleName(f'{title} export time in seconds')
-            widget.setToolTip('Fixed extra time for every exported clip, limited by the available footage')
-            widget.valueChanged.connect(self.export_padding_changed)
-            padding.addWidget(widget)
-        padding.addStretch()
-        padding.addWidget(label('Dashed regions = extra footage', 'muted'))
-        layout.addLayout(padding)
         layout.addWidget(self.timeline)
         zoom = QHBoxLayout()
         zoom.setSpacing(3)
@@ -1096,6 +1100,9 @@ class Studio(QMainWindow):
         for widget, value in zip(self.metrics, values):
             widget.setText(value)
         self.plays_heading.setText(f'PLAYS · {len(self.data["plays"])}')
+        from scout.groundtruth import to_plays
+        self.export_options.plays = to_plays(self.data['plays'])
+        self.export_options.refresh(notify=False)
 
     def populate_plays(self, selected=-1):
         self.plays.blockSignals(True)
@@ -1132,7 +1139,8 @@ class Studio(QMainWindow):
                                   'Find plays using the selected detection profile')
         self.review_button.setEnabled(review)
         self.order_sources_action.setEnabled(review and not busy and not self.importing)
-        self.export_button.setEnabled(review and not busy and not self.importing)
+        self.export_button.setEnabled(review and not busy and not self.importing and self.export_options.valid)
+        self.export_options.setEnabled(bool(review and not self.loading))
         for action in (self.add_play_button, self.delete_play_button, self.save_play_button):
             action.setEnabled(review and not busy and not self.importing)
         self.save_play_button.setEnabled(review and not busy and self.marker_dirty)
@@ -1455,19 +1463,29 @@ class Studio(QMainWindow):
     def load_export_padding(self):
         settings = self.export_preferences()
         cfg = self.data['cfg'] if self.data else None
-        for key, widget in [('pre_play', self.pre_play), ('post_play', self.post_play)]:
-            default = getattr(cfg, 'cut_'+key, 0.)
-            widget.blockSignals(True)
-            widget.setValue(settings.value(f'exports/{self.match}/{key}', default, type=float) if self.match else 0.)
-            widget.blockSignals(False)
+        from scout.groundtruth import to_plays
+        self.loading_export_options = True
+        try:
+            self.export_options.load_settings(self.match or '', to_plays(self.data['plays']) if self.data else [], settings,
+                                              pre_play=getattr(cfg, 'cut_pre_play', 0.),
+                                              post_play=getattr(cfg, 'cut_post_play', 0.))
+        finally:
+            self.loading_export_options = False
         self.timeline.set_padding(self.pre_play.value(), self.post_play.value())
 
     def export_padding_changed(self, *_):
+        if self.loading_export_options:
+            return
         self.timeline.set_padding(self.pre_play.value(), self.post_play.value())
         if self.match and self.data:
-            settings = self.export_preferences()
-            settings.setValue(f'exports/{self.match}/pre_play', self.pre_play.value())
-            settings.setValue(f'exports/{self.match}/post_play', self.post_play.value())
+            self.export_options.save(allow_empty=True)
+        self.update_actions()
+
+    def show_play_editor(self):
+        self.play_editor.show()
+        self.play_editor.raise_()
+        self.play_editor.activateWindow()
+        self.play_name.setFocus()
 
     def enqueue(self, command, options=None):
         if command == 'cut' and not self.resolve_marker_dirty():
@@ -1730,6 +1748,7 @@ class Studio(QMainWindow):
         self.play_out.setValue(min(self.transport.duration, self.play_in.value()+self.new_play_duration))
         self.marker_edited()
         self.timeline.focus_range(self.play_in.value(), self.play_out.value())
+        self.show_play_editor()
 
     def create_range(self, start, end):
         if not self.data or not self.data['review'].exists() or self.match_busy() or not self.resolve_marker_dirty():
@@ -1823,7 +1842,7 @@ class Studio(QMainWindow):
         def edit():
             if self.focus_mode:
                 self.toggle_focus()
-            self.play_name.setFocus()
+            self.show_play_editor()
             self.play_name.selectAll()
 
         menu.addAction('Edit play', lambda: act(edit))
@@ -1990,7 +2009,7 @@ class Studio(QMainWindow):
             for index, marker in enumerate(self.data['plays']):
                 if marker.start <= self.transport.position < marker.end:
                     self.select_timeline_marker(index)
-                    self.play_name.setFocus()
+                    self.show_play_editor()
                     return
         self.add_play()
 
@@ -2273,6 +2292,7 @@ class Studio(QMainWindow):
         if self.fullscreen_dialog is not None:
             self.fullscreen_dialog.close()
         self.detection_settings.close()
+        self.play_editor.close()
         self.transport.pause()
         self.player.stop()
         self.settings.setValue('library', str(self.root))

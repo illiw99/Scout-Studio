@@ -49,6 +49,8 @@ QPushButton#transportPlay { background: $accent; color: $bg; border: none; borde
 QPushButton[iconOnly="true"] { padding: 0; border-radius: 7px; }
 QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox { background: $input; border: 1px solid $border; border-radius: 7px; padding: 8px; selection-background-color: $selected; }
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus { border-color: $focus; }
+QWidget#clipExport { background: $surface; }
+QWidget#clipExport QLineEdit, QWidget#clipExport QComboBox, QWidget#clipExport QDoubleSpinBox, QWidget#clipExport QSpinBox { padding: 4px; }
 QListWidget { background: transparent; border: none; outline: none; }
 QListWidget::item { padding: 12px; margin: 3px 0; border-radius: 8px; color: $text; }
 QListWidget::item:selected { background: $selected; color: $accent; }

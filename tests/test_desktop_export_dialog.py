@@ -62,6 +62,23 @@ class ExportDialogTests(unittest.TestCase):
             self.assertFalse(dialog.export_button.isEnabled())
             self.assertIn('Add a play', dialog.error.text())
 
+    def test_sidebar_preferences_load_without_writing_and_allow_empty_review_setup(self):
+        from PySide6.QtCore import QSettings
+        from scout.desktop.export_dialog import ExportOptions
+        with tempfile.TemporaryDirectory() as folder:
+            settings = QSettings(str(Path(folder)/'preferences.ini'), QSettings.Format.IniFormat)
+            options = ExportOptions('Demo', [], Path(folder)/'clips', settings, compact=True)
+            changes = []
+            options.optionsChanged.connect(lambda: changes.append(True))
+            options.load_settings('New game', [], settings, pre_play=2.)
+            self.assertEqual(changes, [])
+            self.assertEqual(settings.allKeys(), [])
+            options.pattern.setText('Game_<N>')
+            self.assertTrue(options.save(allow_empty=True))
+            self.assertEqual(settings.value('exports/New game/pre_play', type=float), 2.)
+            self.assertEqual(settings.value('exports/New game/pattern'), 'Game_<N>')
+            self.assertFalse(options.valid)
+
     def test_padding_is_previewed_and_only_remembered_on_accept(self):
         from PySide6.QtCore import QSettings
         from scout.desktop.export_dialog import ExportDialog

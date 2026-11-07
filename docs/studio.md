@@ -79,8 +79,8 @@ editor and unsaved changes stay intact. Offline game paths remain registered.
   with context so the handles stay easy to grab. **Scroll** slides through time;
   **Ctrl+scroll** zooms around the pointer. Choose 15s/30s/60s/2min/5min windows,
   drag the scrollbar, or use **Fit match** for the overview.
-- Review puts the video first, with a compact play inspector at the side.
-  **Alt+6** hides the inspector for more viewing space; **Ctrl+B** toggles the match
+- Review puts the video first, with plays and clip export settings at the side.
+  **Alt+6** hides the sidebar for more viewing space; **Ctrl+B** toggles the match
   library. The video retains its aspect ratio as the workspace resizes.
 - **Shift + drag** on the timeline creates and saves a play at the length you
   select, in either direction and across camera-file boundaries. A live preview
@@ -89,7 +89,8 @@ editor and unsaved changes stay intact. Offline game paths remain registered.
   are kept. Drag the middle of a play to move the whole block without changing
   its length, or drag either edge handle to resize it. Undo restores either edit.
 - Click the first or second half of a marker to seek to its start or end.
-  Adjust start/end times and labels, drag the
+  Double-click a play or choose **Edit play** on the timeline to open its exact
+  start/end times and label in a separate editor. You can also drag the
   selected marker's timeline edges (snapped to source frames), add missing plays,
   or delete proposals. Playback previews a dragged boundary, pauses during a
   scrub, and resumes afterward only if it was playing beforehand.
@@ -129,13 +130,16 @@ editor and unsaved changes stay intact. Offline game paths remain registered.
   markers with their original source footage and saves an exact original backup.
   A play split across files that become separated is kept as separate ranges.
 - **Export clips** opens a naming preview before adding the job to the queue.
-  Set **Pre-play** and **Post-play** above the review timeline to add a fixed
+  Set **Pre-play** and **Post-play** beneath the plays list to add a fixed
   number of seconds to every clip. The hatched regions with dashed outlines
   show the extra footage around each solid play marker. Padding follows marker
   edits, stops at the first/last frame of available footage, and can cross camera
   file boundaries. Overlapping clips remain separate exports. These values are
   remembered per match and can also be adjusted in the export dialog; canceling
   restores the timeline preview. The saved play boundaries remain unchanged.
+  The same sidebar also holds the filename pattern, first number, number width
+  and live filename preview. Changes are remembered automatically per match;
+  **Export clips** opens the final confirmation with those settings already filled.
   Use **<N>** anywhere in the pattern, such as `Saints_<N>_offense`, choose the
   first number and digit width (`007`), or keep automatic padding. Preferences
   are remembered per match; original play-number/time names are also available.

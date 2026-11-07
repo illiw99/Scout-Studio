@@ -747,7 +747,17 @@ class DesktopIntegrationTests(unittest.TestCase):
             current_tab = studio.tabs.currentIndex()
             # An external save while the naming dialog is open invalidates it.
             original_review = review.read_bytes()
+            self.assertTrue(studio.export_scroll.isVisible())
+            studio.play_editor.hide()
+            studio.export_options.pattern.setText('Sidebar_<N>')
+            self.assertEqual(studio.export_preferences().value('exports/Demo/pattern'), 'Sidebar_<N>')
+            studio.export_options.pattern.setText('../<N>')
+            self.assertFalse(studio.export_button.isEnabled())
+            studio.export_options.pattern.setText('Sidebar_<N>')
+            self.assertTrue(studio.export_button.isEnabled())
+            self.assertFalse(studio.play_editor.isVisible())
             def external_edit(_dialog):
+                self.assertEqual(_dialog.pattern.text(), 'Sidebar_<N>')
                 review.write_bytes(original_review.replace(b'title="Scout"', b'title="External edit"'))
                 return 1
             with patch('scout.desktop.export_dialog.ExportDialog.exec', external_edit):
