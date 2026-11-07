@@ -250,7 +250,7 @@ class BaselineBuildTests(unittest.TestCase):
         staged_media = []
         staged = []
         def prepare(pack, digest, destination):
-            self.assertEqual(pack, archive)
+            self.assertEqual(pack, archive.resolve())
             self.assertEqual(digest, 'a' * 64)
             self.assertFalse(destination.exists())
             if failure:
@@ -265,8 +265,8 @@ class BaselineBuildTests(unittest.TestCase):
         def run(*args):
             commands.append(args)
             if args[1:3] == ('-m', 'PyInstaller'):
-                self.assertEqual(args[args.index('--distpath') + 1], work / 'dist')
-                self.assertEqual(args[args.index('--workpath') + 1], work / 'pyinstaller')
+                self.assertEqual(args[args.index('--distpath') + 1], work.resolve() / 'dist')
+                self.assertEqual(args[args.index('--workpath') + 1], work.resolve() / 'pyinstaller')
                 if ffmpeg:
                     media = Path(os.environ['SCOUT_FFMPEG_BINARY'])
                     staged_media.append(media)
@@ -313,6 +313,14 @@ class BaselineBuildTests(unittest.TestCase):
 
     def test_baseline_is_prepared_before_freezing_with_isolated_paths(self):
         self.build_isolated()
+
+    @unittest.skipIf(sys.platform == 'win32', 'symlink creation requires Windows privileges')
+    def test_build_paths_through_symlink_are_resolved(self):
+        # macOS temporary paths use /var, a symlink to /private/var.
+        alias = self.root / 'alias'
+        alias.symlink_to(self.root, target_is_directory=True)
+        self.root = alias
+        self.build_isolated(ffmpeg=True)
 
     def test_explicit_ffmpeg_is_staged_with_normalized_name(self):
         self.build_isolated(ffmpeg=True)
