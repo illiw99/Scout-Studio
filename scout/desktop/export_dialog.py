@@ -2,7 +2,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QSpinBox, QDoubleSpinBox, QVBoxLayout, QWidget,
+    QSpinBox, QDoubleSpinBox, QVBoxLayout, QHBoxLayout, QSizePolicy, QWidget,
 )
 
 from scout.clip_names import pattern_names
@@ -42,8 +42,22 @@ class ExportOptions(QWidget):
             widget.setSuffix(' s')
             widget.setAccessibleName(f'{title} export time in seconds')
             widget.setValue(settings.value(self.preference+key, default, type=float))
-            form.addRow(title, widget)
+            if not compact:
+                form.addRow(title, widget)
             widget.valueChanged.connect(self.padding_changed)
+        def paired_row(items):
+            row = QWidget()
+            pair = QHBoxLayout(row)
+            pair.setContentsMargins(0, 0, 0, 0)
+            pair.setSpacing(5)
+            for text, widget in items:
+                pair.addWidget(QLabel(text))
+                widget.setMinimumWidth(0)
+                widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+                pair.addWidget(widget, 1)
+            form.addRow(row)
+        if compact:
+            paired_row([('Pre', self.pre_play), ('Post', self.post_play)])
         padding_hint = QLabel('Added to every exported clip. Dashed timeline regions show the extension; original play markers stay unchanged.')
         padding_hint.setWordWrap(True)
         padding_hint.setObjectName('muted')
@@ -70,20 +84,20 @@ class ExportOptions(QWidget):
         self.start = QSpinBox()
         self.start.setRange(0, 99999999)
         self.start.setValue(settings.value(self.preference+'start', 1, type=int))
-        form.addRow('First number', self.start)
+        self.start.setAccessibleName('First export number')
+        if not compact:
+            form.addRow('First number', self.start)
         self.pad = QSpinBox()
         self.pad.setRange(0, 12)
         self.pad.setSpecialValueText('Automatic')
         self.pad.setValue(settings.value(self.preference+'pad', 0, type=int))
         self.pad.setToolTip('Minimum number of digits, such as 007. Automatic uses the clip count.')
-        form.addRow('Number width', self.pad)
+        self.pad.setAccessibleName('Export number width')
+        if compact:
+            paired_row([('First', self.start), ('Digits', self.pad)])
+        else:
+            form.addRow('Number width', self.pad)
         layout.addLayout(form)
-        layout.addWidget(QLabel('FILENAME PREVIEW'))
-        self.preview = QPlainTextEdit()
-        self.preview.setReadOnly(True)
-        self.preview.setFixedHeight(62 if compact else 145)
-        self.preview.setAccessibleName('Export filename preview')
-        layout.addWidget(self.preview)
         self.error = QLabel()
         self.error.setWordWrap(True)
         self.error.setObjectName('muted')
@@ -123,18 +137,14 @@ class ExportOptions(QWidget):
                      else [name_for(play) for play in self.plays])
             if not names:
                 raise ValueError('Add a play to the review before exporting clips.')
-            visible = names[:4]
-            if len(names) > 5:
-                visible += ['…', names[-1]]
-            elif len(names) == 5:
-                visible += names[4:]
-            self.preview.setPlainText('\n'.join(visible))
+            self.names = names
             self.error.clear()
             self.valid = True
         except ValueError as exc:
-            self.preview.clear()
+            self.names = []
             self.error.setText(str(exc))
             self.valid = False
+        self.error.setVisible(bool(self.error.text()))
         if notify:
             self.optionsChanged.emit()
 
@@ -185,7 +195,7 @@ class ExportDialog(QDialog):
         self.content = ExportOptions(match, plays, destination, settings, self,
                                      pre_play=pre_play, post_play=post_play)
         layout.addWidget(self.content)
-        for name in ('style', 'pattern', 'start', 'pad', 'pre_play', 'post_play', 'preview', 'error'):
+        for name in ('style', 'pattern', 'start', 'pad', 'pre_play', 'post_play', 'error'):
             setattr(self, name, getattr(self.content, name))
         self.paddingChanged = self.content.paddingChanged
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -197,6 +207,10 @@ class ExportDialog(QDialog):
         layout.addWidget(self.buttons)
         self.content.optionsChanged.connect(lambda: self.export_button.setEnabled(self.content.valid))
         self.export_button.setEnabled(self.content.valid)
+
+    @property
+    def names(self):
+        return self.content.names
 
     def options(self):
         return self.content.options()

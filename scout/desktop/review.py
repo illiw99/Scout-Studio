@@ -233,6 +233,7 @@ class MarkerTimeline(QWidget):
         self.span = 1.
         self.position = 0.
         self.markers = []
+        self.display_names = []
         self.clips = []
         self.selected = -1
         self.draft = None
@@ -259,6 +260,7 @@ class MarkerTimeline(QWidget):
         self.clips = clips
         self.duration = clips[-1].end if clips else 0.
         self.markers = list(markers)
+        self.display_names = []
         self.selected = -1
         self.position = 0.
         self.draft = None
@@ -299,6 +301,10 @@ class MarkerTimeline(QWidget):
 
     def set_position(self, seconds):
         self.position = seconds
+        self.update()
+
+    def set_display_names(self, names):
+        self.display_names = list(names)
         self.update()
 
     def set_padding(self, pre_play, post_play):
@@ -381,7 +387,9 @@ class MarkerTimeline(QWidget):
             visible = rect.intersected(self.track())
             if visible.width() > 30:
                 p.setPen(QColor(colors['text']))
-                text = f'{i+1} · {marker.end-marker.start:.1f}s' if visible.width() > 100 else str(i+1)
+                name = self.display_names[i] if i < len(self.display_names) else str(i+1)
+                text = f'{name} · {marker.end-marker.start:.1f}s' if visible.width() > 100 else name
+                text = p.fontMetrics().elidedText(text, Qt.TextElideMode.ElideRight, int(visible.width()-10))
                 p.drawText(visible.adjusted(6, 0, -4, 0), Qt.AlignmentFlag.AlignVCenter, text)
             if selected and marker.end > marker.start:
                 p.setPen(QPen(QColor(colors['accent']), 2))

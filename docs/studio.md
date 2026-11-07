@@ -137,8 +137,9 @@ editor and unsaved changes stay intact. Offline game paths remain registered.
   file boundaries. Overlapping clips remain separate exports. These values are
   remembered per match and can also be adjusted in the export dialog; canceling
   restores the timeline preview. The saved play boundaries remain unchanged.
-  The same sidebar also holds the filename pattern, first number, number width
-  and live filename preview. Changes are remembered automatically per match;
+  The compact sidebar also holds the filename pattern, first number and number
+  width. Play-list names and timeline labels follow the resulting export names
+  immediately, so there is no separate filename preview. Changes are remembered automatically per match;
   **Export clips** opens the final confirmation with those settings already filled.
   Use **<N>** anywhere in the pattern, such as `Saints_<N>_offense`, choose the
   first number and digit width (`007`), or keep automatic padding. Preferences

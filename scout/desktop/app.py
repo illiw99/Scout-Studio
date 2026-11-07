@@ -569,9 +569,9 @@ class Studio(QMainWindow):
         self.export_scroll = QScrollArea()
         self.export_scroll.setWidgetResizable(True)
         self.export_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.export_scroll.setMinimumHeight(230)
+        self.export_scroll.setFixedHeight(172)
         self.export_scroll.setWidget(self.export_options)
-        inspector.addWidget(self.export_scroll, 4)
+        inspector.addWidget(self.export_scroll)
         self.pre_play = self.export_options.pre_play
         self.post_play = self.export_options.post_play
         self.export_options.optionsChanged.connect(self.export_padding_changed)
@@ -1100,9 +1100,7 @@ class Studio(QMainWindow):
         for widget, value in zip(self.metrics, values):
             widget.setText(value)
         self.plays_heading.setText(f'PLAYS · {len(self.data["plays"])}')
-        from scout.groundtruth import to_plays
-        self.export_options.plays = to_plays(self.data['plays'])
-        self.export_options.refresh(notify=False)
+        self.refresh_play_names()
 
     def populate_plays(self, selected=-1):
         self.plays.blockSignals(True)
@@ -1113,6 +1111,25 @@ class Studio(QMainWindow):
             self.plays.addItem(item)
         self.plays.setCurrentRow(selected)
         self.plays.blockSignals(False)
+        self.refresh_play_names()
+
+    def refresh_play_names(self):
+        if not self.data:
+            return
+        from scout.groundtruth import to_plays
+        self.export_options.plays = to_plays(self.data['plays'])
+        self.export_options.refresh(notify=False)
+        names = self.export_options.names
+        display_names = []
+        for i, play in enumerate(self.data['plays']):
+            name = Path(names[i]).stem if i < len(names) else label_for(play.text, play.start)
+            display_names.append(name)
+            item = self.plays.item(i)
+            if item is not None:
+                item.setText(f'{name}\n{clock(play.start)} – {clock(play.end)} · {play.duration:.1f}s')
+                original = label_for(play.text, play.start)
+                item.setToolTip(f'{name}\n{original}\n{timecode(play.start)} – {timecode(play.end)}')
+        self.timeline.set_display_names(display_names)
 
     def match_busy(self, name=None):
         name = name or self.match
@@ -1472,6 +1489,7 @@ class Studio(QMainWindow):
         finally:
             self.loading_export_options = False
         self.timeline.set_padding(self.pre_play.value(), self.post_play.value())
+        self.refresh_play_names()
 
     def export_padding_changed(self, *_):
         if self.loading_export_options:
@@ -1479,6 +1497,7 @@ class Studio(QMainWindow):
         self.timeline.set_padding(self.pre_play.value(), self.post_play.value())
         if self.match and self.data:
             self.export_options.save(allow_empty=True)
+        self.refresh_play_names()
         self.update_actions()
 
     def show_play_editor(self):

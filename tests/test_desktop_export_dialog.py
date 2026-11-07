@@ -28,7 +28,7 @@ class ExportDialogTests(unittest.TestCase):
             dialog.pattern.setText('Saints_<N>_offense')
             dialog.start.setValue(7)
             dialog.pad.setValue(3)
-            self.assertEqual(dialog.preview.toPlainText().splitlines(),
+            self.assertEqual(dialog.names,
                              ['Saints_007_offense.mp4', 'Saints_008_offense.mp4'])
             self.assertEqual(dialog.options(), dict(name_pattern='Saints_<N>_offense', start_number=7, number_width=3,
                                                    pre_play=0., post_play=0.))
@@ -39,7 +39,7 @@ class ExportDialogTests(unittest.TestCase):
             self.assertEqual(dialog.result(), 0)
             dialog.style.setCurrentIndex(1)
             self.assertTrue(dialog.export_button.isEnabled())
-            self.assertEqual(dialog.preview.toPlainText().splitlines(),
+            self.assertEqual(dialog.names,
                              ['play_001_00m01s.mp4', 'play_002_00m05s.mp4'])
             self.assertEqual(dialog.options(), dict(pre_play=0., post_play=0.))
             dialog.style.setCurrentIndex(0)
@@ -49,7 +49,7 @@ class ExportDialogTests(unittest.TestCase):
             self.assertEqual(restored.pattern.text(), 'Saints_<N>_offense')
             self.assertEqual(restored.start.value(), 7)
             self.assertEqual(restored.pad.value(), 3)
-            self.assertEqual(restored.preview.toPlainText(), dialog.preview.toPlainText())
+            self.assertEqual(restored.names, dialog.names)
             self.assertFalse((root/'clips').exists())
 
     def test_empty_review_cannot_queue_export(self):
