@@ -53,14 +53,16 @@ class CustomExportTests(unittest.TestCase):
         self.cfg = Config(clip_workers=2, source_dir=self.directory.name)
         # Deliberately nonconsecutive play indices: selected plays are numbered
         # in their supplied chronological order, independently of marker IDs.
-        self.plays = [SimpleNamespace(index=4, snap=10), SimpleNamespace(index=9, snap=30)]
+        self.plays = [SimpleNamespace(index=4, snap=10, start=10, end=20),
+                      SimpleNamespace(index=9, snap=30, start=30, end=40)]
+        self.clips = [SimpleNamespace(end=60)]
 
-    def render(self, cfg, clips, play, target):
+    def render(self, cfg, clips, play, target, **kwargs):
         target.write_text(str(play.index))
         return target
 
     def export(self, plays=None, **kwargs):
-        return cut.cut_all(self.cfg, [], self.plays if plays is None else plays,
+        return cut.cut_all(self.cfg, self.clips, self.plays if plays is None else plays,
                            self.out, progress=False, **kwargs)
 
     def manifest(self):
@@ -106,7 +108,7 @@ class CustomExportTests(unittest.TestCase):
         old.write_text('old')
         (self.out / 'exports.json').write_text('["old.mp4"]')
 
-        def render(cfg, clips, play, target):
+        def render(cfg, clips, play, target, **kwargs):
             self.render(cfg, clips, play, target)
             if play.index == 9:
                 (self.out / 'game_2.mp4').write_text('arrived')
@@ -160,4 +162,5 @@ class CustomExportTests(unittest.TestCase):
                                       '--only', '9']), 0)
         self.assertEqual(export.call_args.args[2], [self.plays[1]])
         self.assertEqual(export.call_args.kwargs, dict(partial=True,
-                         name_pattern='<N>_game', start_number=7, number_width=3))
+                         name_pattern='<N>_game', start_number=7, number_width=3,
+                         pre_play=None, post_play=None))

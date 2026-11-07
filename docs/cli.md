@@ -86,6 +86,12 @@ review. Each range becomes an MP4 in `media/Match-01/Scout/clips/`, including ra
 camera-file boundaries. Re-encoding is the default; `--cut-mode copy` is faster
 but cuts at keyframes. `--only 1,3` exports a subset.
 
+Add fixed context around each reviewed play with `cut --pre-play 2 --post-play 1`
+(seconds). The configuration defaults are `cut_pre_play` and `cut_post_play`, both
+zero. CLI values override those defaults. Padding is clamped to available footage,
+crosses source-file boundaries, and never changes saved markers or original
+play-number/time filenames. Overlapping padded clips are exported independently.
+
 Full exports remove obsolete clips tracked by `clips/exports.json` after all new
 clips render successfully. Failed rendering returns a nonzero exit status and
 leaves the previous export intact. Untracked files are preserved. Partial exports

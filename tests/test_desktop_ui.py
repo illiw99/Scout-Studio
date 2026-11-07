@@ -755,12 +755,24 @@ class DesktopIntegrationTests(unittest.TestCase):
             self.assertIn('review changed', errors.pop())
             self.assertIsNone(studio.jobs.current)
             review.write_bytes(original_review)
+            studio.pre_play.setValue(.4)
+            studio.post_play.setValue(.6)
+            def cancel_padding(dialog):
+                dialog.pre_play.setValue(5.)
+                self.assertEqual(studio.timeline.pre_play, 5.)
+                return 0
+            with patch('scout.desktop.export_dialog.ExportDialog.exec', cancel_padding):
+                studio.export_clips()
+            self.assertEqual((studio.timeline.pre_play, studio.timeline.post_play), (.4, .6))
+            self.assertEqual(review.read_bytes(), original_review)
             from PySide6.QtCore import QTimer
             def choose_export_names():
                 dialog = self.app.activeModalWidget()
                 dialog.pattern.setText('-Saints_<N>_reviewed')
                 dialog.start.setValue(7)
                 dialog.pad.setValue(3)
+                dialog.pre_play.setValue(.8)
+                dialog.post_play.setValue(.2)
                 dialog.accept()
             QTimer.singleShot(0, choose_export_names)
             studio.export_button.click()
@@ -770,7 +782,9 @@ class DesktopIntegrationTests(unittest.TestCase):
             exports = list((root/'media/Demo/Scout/clips').glob('*.mp4'))
             self.assertEqual(len(exports), 1)
             self.assertEqual(exports[0].name, '-Saints_007_reviewed.mp4')
-            self.assertAlmostEqual(probe(exports[0]).duration, 2., places=1)
+            self.assertAlmostEqual(probe(exports[0]).duration, 3., places=1)
+            self.assertEqual((studio.pre_play.value(), studio.post_play.value()), (.8, .2))
+            self.assertEqual(review.read_bytes(), original_review)
             self.assertFalse((root / 'out').exists())
             self.wait_for(lambda: not studio.tasks)
             self.assertEqual(errors, [])

@@ -5,7 +5,7 @@ import bisect
 import math
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QUrl, Signal, QTimer, QElapsedTimer
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtGui import QBrush, QColor, QPainter, QPen
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtWidgets import QWidget
 from .theme import active_colors
@@ -246,6 +246,8 @@ class MarkerTimeline(QWidget):
         self.create_moved = False
         self.scrubbing = False
         self.editable = True
+        self.pre_play = 0.
+        self.post_play = 0.
         self.setMinimumHeight(115)
         self.setMaximumHeight(150)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -299,6 +301,24 @@ class MarkerTimeline(QWidget):
         self.position = seconds
         self.update()
 
+    def set_padding(self, pre_play, post_play):
+        from scout.cut import export_bounds
+        export_bounds(0., 1., 1., pre_play, post_play)
+        self.pre_play, self.post_play = float(pre_play), float(post_play)
+        self.update()
+
+    def padding_ranges(self, index):
+        """Export wings follow a dragged core; they never become edit targets."""
+        from scout.cut import export_bounds
+        marker = self.markers[index]
+        start, end = marker.start, marker.end
+        if self.drag and self.drag[0] == index and self.draft:
+            start, end = self.draft
+        if end <= start:
+            return []  # Point markers are annotations, not exported clips.
+        a, b = export_bounds(start, end, self.duration, self.pre_play, self.post_play)
+        return [(left, right) for left, right in ((a, start), (end, b)) if right > left]
+
     def track(self):
         return QRectF(12, 33, max(1, self.width()-24), 46)
 
@@ -337,6 +357,15 @@ class MarkerTimeline(QWidget):
         for clip in self.clips:
             p.setPen(QPen(QColor(colors['muted']), 1, Qt.PenStyle.DashLine))
             p.drawLine(QPointF(self.x(clip.start), 33), QPointF(self.x(clip.start), 79))
+        # Draw wings behind every solid play, including when exports overlap.
+        tint = QColor(colors['accent'])
+        tint.setAlpha(65)
+        p.setBrush(QBrush(tint, Qt.BrushStyle.BDiagPattern))
+        p.setPen(QPen(QColor(colors['focus']), 1, Qt.PenStyle.DashLine))
+        if self.pre_play or self.post_play:
+            for i in range(len(self.markers)):
+                for a, b in self.padding_ranges(i):
+                    p.drawRect(QRectF(self.x(a), 41, self.x(b)-self.x(a), 30))
         for i, marker in enumerate(self.markers):
             rect = self.marker_rect(marker)
             moving = self.drag is not None and self.drag[1] == 'move'

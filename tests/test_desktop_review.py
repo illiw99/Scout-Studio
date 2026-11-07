@@ -217,6 +217,22 @@ class TimelineWindowTests(unittest.TestCase):
         clips = [Clip(MediaInfo(Path('/match.mp4'), 3600., 160, 90, 25., None), 0., 0)]
         self.timeline.set_match(clips, [Marked(1, 1800., 1806., 'Play')])
 
+    def test_padding_wings_clamp_follow_drag_and_preserve_core_markers(self):
+        from scout.groundtruth import Marked
+        marker = self.timeline.markers[0]
+        self.timeline.set_padding(2., 3.)
+        self.assertEqual(self.timeline.padding_ranges(0), [(1798., 1800.), (1806., 1809.)])
+        self.timeline.drag = (0, 'move')
+        self.timeline.draft = (0., 6.)
+        self.assertEqual(self.timeline.padding_ranges(0), [(6., 9.)])
+        self.timeline.draft = (3594., 3600.)
+        self.assertEqual(self.timeline.padding_ranges(0), [(3592., 3594.)])
+        self.assertEqual((marker.start, marker.end), (1800., 1806.))
+        self.timeline.drag = None
+        self.timeline.markers = [Marked(2, 10., 10., 'Annotation')]
+        self.assertEqual(self.timeline.padding_ranges(0), [])
+        self.timeline.grab()  # Rendering point annotations with padding stays valid.
+
     def test_default_window_and_marker_focus_keep_handles_readable(self):
         self.assertEqual(self.timeline.span, 30.)
         self.timeline.focus_range(1800., 1806.)

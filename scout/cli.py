@@ -706,7 +706,8 @@ def cmd_cut(args) -> int:
         plays = [p for p in plays if p.index in wanted]
     paths = cut.cut_all(cfg, clips, plays, partial=bool(args.only),
                         name_pattern=args.name_pattern, start_number=args.start_number,
-                        number_width=args.number_width)
+                        number_width=args.number_width,
+                        pre_play=args.pre_play, post_play=args.post_play)
     print(f"  {len(paths)} clips -> {cfg.path(cfg.out_dir) / 'clips'}")
     return 0
 
@@ -896,6 +897,8 @@ def main(argv=None) -> int:
 
     s = sub.add_parser("cut", help="cut reviewed MLT markers into videos")
     s.add_argument("--cut-mode", dest="cut_mode", choices=["encode", "copy"])
+    s.add_argument("--pre-play", type=float, help="extra seconds before each reviewed play")
+    s.add_argument("--post-play", type=float, help="extra seconds after each reviewed play")
     s.add_argument("--only", help="comma separated play numbers")
     s.add_argument("--mlt", help="cut the plays marked in this Shotcut project "
                                  "instead of the detected ones")

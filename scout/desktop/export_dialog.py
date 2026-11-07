@@ -1,8 +1,8 @@
 """Choose clip names before rendering, with the exact filenames previewed."""
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QSpinBox, QVBoxLayout,
+    QPlainTextEdit, QSpinBox, QDoubleSpinBox, QVBoxLayout,
 )
 
 from scout.clip_names import pattern_names
@@ -10,7 +10,9 @@ from scout.cut import name_for
 
 
 class ExportDialog(QDialog):
-    def __init__(self, match, plays, destination, settings, parent=None):
+    paddingChanged = Signal(float, float)
+
+    def __init__(self, match, plays, destination, settings, parent=None, *, pre_play=0., post_play=0.):
         super().__init__(parent)
         self.setWindowTitle('Export clips')
         self.setMinimumWidth(520)
@@ -26,6 +28,22 @@ class ExportDialog(QDialog):
         summary.setObjectName('muted')
         layout.addWidget(summary)
         form = QFormLayout()
+        self.pre_play = QDoubleSpinBox()
+        self.post_play = QDoubleSpinBox()
+        for key, widget, default, title in [('pre_play', self.pre_play, pre_play, 'Pre-play'),
+                                             ('post_play', self.post_play, post_play, 'Post-play')]:
+            widget.setRange(0, 3600)
+            widget.setDecimals(2)
+            widget.setSingleStep(.5)
+            widget.setSuffix(' s')
+            widget.setAccessibleName(f'{title} export time in seconds')
+            widget.setValue(settings.value(self.preference+key, default, type=float))
+            form.addRow(title, widget)
+            widget.valueChanged.connect(self.padding_changed)
+        padding_hint = QLabel('Added to every exported clip. Dashed timeline regions show the extension; original play markers stay unchanged.')
+        padding_hint.setWordWrap(True)
+        padding_hint.setObjectName('muted')
+        form.addRow(padding_hint)
         self.style = QComboBox()
         self.style.addItems(['Numbered filename pattern', 'Original play number and time'])
         self.style.setCurrentIndex(settings.value(self.preference+'style', 0, type=int))
@@ -79,10 +97,14 @@ class ExportDialog(QDialog):
         self.refresh()
 
     def options(self):
+        padding = dict(pre_play=self.pre_play.value(), post_play=self.post_play.value())
         if self.style.currentIndex() == 1:
-            return {}
-        return dict(name_pattern=self.pattern.text().strip(), start_number=self.start.value(),
+            return padding
+        return dict(padding, name_pattern=self.pattern.text().strip(), start_number=self.start.value(),
                     number_width=self.pad.value() or None)
+
+    def padding_changed(self, *_):
+        self.paddingChanged.emit(self.pre_play.value(), self.post_play.value())
 
     def refresh(self, *_):
         custom = self.style.currentIndex() == 0
@@ -113,6 +135,7 @@ class ExportDialog(QDialog):
         if not self.valid:
             return
         for key, value in [('style', self.style.currentIndex()), ('pattern', self.pattern.text().strip()),
-                           ('start', self.start.value()), ('pad', self.pad.value())]:
+                           ('start', self.start.value()), ('pad', self.pad.value()),
+                           ('pre_play', self.pre_play.value()), ('post_play', self.post_play.value())]:
             self.settings.setValue(self.preference+key, value)
         super().accept()

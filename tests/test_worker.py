@@ -45,6 +45,18 @@ class WorkerTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 worker.validate_job(dict(valid,**changes))
 
+    def test_padding_options_accept_snapshot_numbers_and_dispatch_literals(self):
+        job = worker.new_job('cut', self.config, {'pre_play': 2.5, 'post_play': 0})
+        path = self.root / 'padding.json'
+        worker.write_job(path, job)
+        calls = []
+        self.assertEqual(worker.run(path, lambda args: calls.append(args), lambda event: None), 0)
+        self.assertEqual(calls, [['--config', str(self.config), 'cut', '--pre-play=2.5', '--post-play=0']])
+        for name in ('pre_play', 'post_play'):
+            for value in (-1, float('nan'), float('inf'), True, '2', None):
+                with self.subTest(name=name, value=value), self.assertRaises(ValueError):
+                    worker.new_job('cut', self.config, {name: value})
+
     def test_exception_and_interrupt_record_failure(self):
         for error, code in ((RuntimeError('broken decoder'),1),(KeyboardInterrupt(),130)):
             with self.subTest(error=type(error).__name__):

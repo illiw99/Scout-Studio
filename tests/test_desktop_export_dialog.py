@@ -30,7 +30,8 @@ class ExportDialogTests(unittest.TestCase):
             dialog.pad.setValue(3)
             self.assertEqual(dialog.preview.toPlainText().splitlines(),
                              ['Saints_007_offense.mp4', 'Saints_008_offense.mp4'])
-            self.assertEqual(dialog.options(), dict(name_pattern='Saints_<N>_offense', start_number=7, number_width=3))
+            self.assertEqual(dialog.options(), dict(name_pattern='Saints_<N>_offense', start_number=7, number_width=3,
+                                                   pre_play=0., post_play=0.))
             dialog.pattern.setText('../<N>')
             self.assertFalse(dialog.export_button.isEnabled())
             self.assertTrue(dialog.error.text())
@@ -40,7 +41,7 @@ class ExportDialogTests(unittest.TestCase):
             self.assertTrue(dialog.export_button.isEnabled())
             self.assertEqual(dialog.preview.toPlainText().splitlines(),
                              ['play_001_00m01s.mp4', 'play_002_00m05s.mp4'])
-            self.assertEqual(dialog.options(), {})
+            self.assertEqual(dialog.options(), dict(pre_play=0., post_play=0.))
             dialog.style.setCurrentIndex(0)
             dialog.pattern.setText('Saints_<N>_offense')
             dialog.accept()
@@ -60,6 +61,27 @@ class ExportDialogTests(unittest.TestCase):
                                   QSettings(str(root/'settings.ini'), QSettings.Format.IniFormat))
             self.assertFalse(dialog.export_button.isEnabled())
             self.assertIn('Add a play', dialog.error.text())
+
+    def test_padding_is_previewed_and_only_remembered_on_accept(self):
+        from PySide6.QtCore import QSettings
+        from scout.desktop.export_dialog import ExportDialog
+        from scout.groundtruth import Marked, to_plays
+        with tempfile.TemporaryDirectory() as folder:
+            settings = QSettings(str(Path(folder)/'preferences.ini'), QSettings.Format.IniFormat)
+            plays = to_plays([Marked(1, 5., 8.)])
+            dialog = ExportDialog('Demo', plays, Path(folder)/'clips', settings, pre_play=2., post_play=1.)
+            changes = []
+            dialog.paddingChanged.connect(lambda a, b: changes.append((a, b)))
+            dialog.pre_play.setValue(3.)
+            self.assertEqual(changes[-1], (3., 1.))
+            dialog.reject()
+            self.assertFalse(settings.contains('exports/Demo/pre_play'))
+            dialog.accept()
+            self.assertEqual(dialog.options()['pre_play'], 3.)
+            reopened = ExportDialog('Demo', plays, Path(folder)/'clips', settings)
+            self.assertEqual(reopened.pre_play.value(), 3.)
+            self.assertEqual(reopened.post_play.value(), 1.)
+            self.assertEqual((plays[0].start, plays[0].end), (5., 8.))
 
     def test_queued_settings_are_snapshots_and_clear_on_cancel(self):
         from unittest.mock import patch

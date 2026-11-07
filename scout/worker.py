@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 from contextlib import redirect_stdout, redirect_stderr
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -14,7 +15,8 @@ import uuid
 SCHEMA = 1
 OPTIONS = {
     'run': {}, 'detect': {}, 'segment': {},
-    'cut': {'name_pattern': str, 'start_number': int, 'number_width': int, 'review_hash': str},
+    'cut': {'name_pattern': str, 'start_number': int, 'number_width': int, 'review_hash': str,
+            'pre_play': float, 'post_play': float},
 }
 
 
@@ -31,6 +33,10 @@ def validate_job(data):
         raise ValueError('Processing configuration must have an absolute path')
     for name, value in data['options'].items():
         kind = OPTIONS[data['command']].get(name)
+        if kind is float:
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                raise ValueError(f'Invalid processing option: {name}')
+            continue
         if kind is None or type(value) is not kind or (kind is int and value <= 0):
             raise ValueError(f'Invalid processing option: {name}')
     return data

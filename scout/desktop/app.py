@@ -574,6 +574,24 @@ class Studio(QMainWindow):
         self.timeline.rangeMoved.connect(self.move_marker)
         self.timeline.rangeCreated.connect(self.create_range)
         self.timeline.viewChanged.connect(self.timeline_view_changed)
+        padding = QHBoxLayout()
+        padding.setSpacing(8)
+        padding.addWidget(label('Clip padding', 'muted'))
+        self.pre_play = QDoubleSpinBox()
+        self.post_play = QDoubleSpinBox()
+        for title, widget in [('Pre-play', self.pre_play), ('Post-play', self.post_play)]:
+            padding.addWidget(label(title, 'muted'))
+            widget.setRange(0, 3600)
+            widget.setDecimals(2)
+            widget.setSingleStep(.5)
+            widget.setSuffix(' s')
+            widget.setAccessibleName(f'{title} export time in seconds')
+            widget.setToolTip('Fixed extra time for every exported clip, limited by the available footage')
+            widget.valueChanged.connect(self.export_padding_changed)
+            padding.addWidget(widget)
+        padding.addStretch()
+        padding.addWidget(label('Dashed regions = extra footage', 'muted'))
+        layout.addLayout(padding)
         layout.addWidget(self.timeline)
         zoom = QHBoxLayout()
         zoom.setSpacing(3)
@@ -929,6 +947,7 @@ class Studio(QMainWindow):
                 return
             self.loading = False
             self.data = data
+            self.load_export_padding()
             self.transport.set_clips(data['review_clips'])
             self.sync_player_window()
             self.timeline.set_match(data['review_clips'], data['plays'])
@@ -1103,6 +1122,8 @@ class Studio(QMainWindow):
         ready = bool(data and data['clips'] and all(data['regions']))
         review = bool(data and data['review'].exists())
         self.run_button.setEnabled(ready and not review and not busy and not self.importing and not self.dirty)
+        for widget in (self.pre_play, self.post_play):
+            widget.setEnabled(bool(data and data['clips'] and not self.loading))
         self.run_button.setToolTip('Processing is already scheduled for this match' if busy else
                                   'This match already has a review' if review else
                                   'Save your field changes first' if self.dirty else
@@ -1407,14 +1428,16 @@ class Studio(QMainWindow):
         import hashlib
         match, root = self.match, self.root
         review, expected_hash = self.data['review'], self.data['review_hash']
-        cfg = self.data['cfg']
-        preferences = (QSettings(str(review.parent / 'preferences.ini'), QSettings.Format.IniFormat)
-                       if cfg.source_dir else self.settings)
+        preferences = self.export_preferences()
         dialog = ExportDialog(self.match, to_plays(self.data['plays']),
-                              review.parent / 'clips', preferences, self)
+                              review.parent / 'clips', preferences, self,
+                              pre_play=self.pre_play.value(), post_play=self.post_play.value())
+        dialog.paddingChanged.connect(self.timeline.set_padding)
         self.transport.pause()
         self.reset_speed()
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        self.load_export_padding()
+        if accepted:
             try:
                 if (self.match != match or self.root != root or
                         hashlib.sha256(review.read_bytes()).hexdigest() != expected_hash):
@@ -1423,6 +1446,28 @@ class Studio(QMainWindow):
                 self.show_error(str(exc))
                 return
             self.enqueue('cut', dict(dialog.options(), review_hash=expected_hash))
+
+    def export_preferences(self):
+        if self.data and self.data['cfg'].source_dir:
+            return QSettings(str(self.data['review'].parent / 'preferences.ini'), QSettings.Format.IniFormat)
+        return self.settings
+
+    def load_export_padding(self):
+        settings = self.export_preferences()
+        cfg = self.data['cfg'] if self.data else None
+        for key, widget in [('pre_play', self.pre_play), ('post_play', self.post_play)]:
+            default = getattr(cfg, 'cut_'+key, 0.)
+            widget.blockSignals(True)
+            widget.setValue(settings.value(f'exports/{self.match}/{key}', default, type=float) if self.match else 0.)
+            widget.blockSignals(False)
+        self.timeline.set_padding(self.pre_play.value(), self.post_play.value())
+
+    def export_padding_changed(self, *_):
+        self.timeline.set_padding(self.pre_play.value(), self.post_play.value())
+        if self.match and self.data:
+            settings = self.export_preferences()
+            settings.setValue(f'exports/{self.match}/pre_play', self.pre_play.value())
+            settings.setValue(f'exports/{self.match}/post_play', self.post_play.value())
 
     def enqueue(self, command, options=None):
         if command == 'cut' and not self.resolve_marker_dirty():

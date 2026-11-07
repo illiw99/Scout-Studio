@@ -206,6 +206,9 @@ class Config:
     #: "encode" is frame accurate; "copy" is near instant but snaps starts to
     #: the nearest keyframe (up to ~1 s early on DJI footage).
     cut_mode: str = "encode"
+    #: Extra seconds rendered around reviewed plays; review boundaries stay fixed.
+    cut_pre_play: float = 0.0
+    cut_post_play: float = 0.0
     crf: int = 20
     preset: str = "veryfast"
     clip_workers: int = 4
@@ -306,6 +309,10 @@ class Config:
         if self.detector_sha256 is not None and (not isinstance(self.detector_sha256,str) or not re.fullmatch('[0-9a-f]{64}',self.detector_sha256)):
             raise ValueError('Invalid detector weight checksum')
         if type(self.allow_gpu_fallback) is not bool:raise ValueError('Invalid GPU fallback setting')
+        for name in ('cut_pre_play', 'cut_post_play'):
+            value = getattr(self, name)
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                raise ValueError(f'Invalid {name}')
         for name in ('model_peak_threshold','model_refine_fraction','model_refine_padding'):
             value=getattr(self,name)
             if type(value) not in (int,float) or not math.isfinite(value) or value<0 or (name!='model_refine_padding' and value>1):

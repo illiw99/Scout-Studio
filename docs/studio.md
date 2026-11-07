@@ -129,6 +129,13 @@ editor and unsaved changes stay intact. Offline game paths remain registered.
   markers with their original source footage and saves an exact original backup.
   A play split across files that become separated is kept as separate ranges.
 - **Export clips** opens a naming preview before adding the job to the queue.
+  Set **Pre-play** and **Post-play** above the review timeline to add a fixed
+  number of seconds to every clip. The hatched regions with dashed outlines
+  show the extra footage around each solid play marker. Padding follows marker
+  edits, stops at the first/last frame of available footage, and can cross camera
+  file boundaries. Overlapping clips remain separate exports. These values are
+  remembered per match and can also be adjusted in the export dialog; canceling
+  restores the timeline preview. The saved play boundaries remain unchanged.
   Use **<N>** anywhere in the pattern, such as `Saints_<N>_offense`, choose the
   first number and digit width (`007`), or keep automatic padding. Preferences
   are remembered per match; original play-number/time names are also available.

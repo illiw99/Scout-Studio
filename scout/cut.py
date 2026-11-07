@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import concurrent.futures as cf
 import json
+import math
 import shutil
 import tempfile
 from pathlib import Path
@@ -35,19 +36,47 @@ def _covering(clips: list[Clip], start: float, end: float) -> list[Clip]:
     return [c for c in clips if c.end > start and c.start < end]
 
 
+def _padding(value: float, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"{name} must be finite, nonnegative seconds")
+    return float(value)
+
+
+def export_bounds(start: float, end: float, duration: float,
+                  pre_play: float, post_play: float) -> tuple[float, float]:
+    """Expand a valid core interval for export, clamped to the match timeline.
+
+    The 2 ms end tolerance accommodates review timestamp rounding. Padding
+    cannot turn an invalid core interval into a valid export.
+    """
+    pre_play = _padding(pre_play, "pre-play")
+    post_play = _padding(post_play, "post-play")
+    if (not all(math.isfinite(value) for value in (start, end, duration))
+            or duration <= 0 or start < 0 or start >= duration
+            or end <= start or end > duration + .002):
+        raise ValueError("play has invalid bounds")
+    return max(0., start - pre_play), min(duration, end + post_play)
+
+
 def _cut_part(src: Path, local_start: float, dur: float, dst: Path,
-              cfg: Config) -> None:
+              cfg: Config, *, concat_part: bool = False) -> None:
     cmd = [ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y",
            "-ss", f"{local_start:.3f}", "-i", str(src), "-t", f"{dur:.3f}"]
     cmd += _encode_args(cfg)
+    if concat_part and cfg.cut_mode != "copy":
+        # A one-frame part has no B-frame delay. Use the same zero-delay
+        # timestamps for every part so concat cannot overlap or shorten them.
+        cmd += ["-bf", "0"]
     cmd += ["-movflags", "+faststart", str(dst)]
     run(cmd)
 
 
-def cut_one(cfg: Config, clips: list[Clip], play: Play, dst: Path) -> Path:
-    parts = _covering(clips, play.start, play.end)
-    if play.start < 0 or play.end <= play.start or play.end > clips[-1].end + .002:
-        raise ValueError(f"play {play.index} has invalid bounds")
+def cut_one(cfg: Config, clips: list[Clip], play: Play, dst: Path,
+            pre_play: float | None = None, post_play: float | None = None) -> Path:
+    start, end = export_bounds(play.start, play.end, clips[-1].end if clips else 0.,
+                               cfg.cut_pre_play if pre_play is None else pre_play,
+                               cfg.cut_post_play if post_play is None else post_play)
+    parts = _covering(clips, start, end)
     if not parts:
         raise ValueError(f"play {play.index} falls outside the timeline")
 
@@ -55,8 +84,8 @@ def cut_one(cfg: Config, clips: list[Clip], play: Play, dst: Path) -> Path:
 
     if len(parts) == 1:
         c = parts[0]
-        _cut_part(c.path, play.start - c.start,
-                  min(play.end, c.end) - play.start, dst, cfg)
+        _cut_part(c.path, start - c.start,
+                  min(end, c.end) - start, dst, cfg)
         return dst
 
     # Spans a camera file split: render each side, then join them.
@@ -64,12 +93,12 @@ def cut_one(cfg: Config, clips: list[Clip], play: Play, dst: Path) -> Path:
     try:
         segs = []
         for i, c in enumerate(parts):
-            s = max(play.start, c.start)
-            e = min(play.end, c.end)
-            if e - s < 0.05:
+            s = max(start, c.start)
+            e = min(end, c.end)
+            if e <= s:
                 continue
             part = tmp / f"part{i}.mp4"
-            _cut_part(c.path, s - c.start, e - s, part, cfg)
+            _cut_part(c.path, s - c.start, e - s, part, cfg, concat_part=True)
             segs.append(part)
         listing = tmp / "list.txt"
         listing.write_text("".join(f"file '{p}'\n" for p in segs))
@@ -92,7 +121,12 @@ def name_for(play: Play) -> str:
 def cut_all(cfg: Config, clips: list[Clip], plays: list[Play],
             out_dir: Path | None = None, progress: bool = True, partial: bool = False,
             name_pattern: str | None = None, start_number: int = 1,
-            number_width: int | None = None) -> list[Path]:
+            number_width: int | None = None, pre_play: float | None = None,
+            post_play: float | None = None) -> list[Path]:
+    pre_play = _padding(cfg.cut_pre_play if pre_play is None else pre_play, "pre-play")
+    post_play = _padding(cfg.cut_post_play if post_play is None else post_play, "post-play")
+    for play in plays:
+        export_bounds(play.start, play.end, clips[-1].end if clips else 0., pre_play, post_play)
     names = (pattern_names(len(plays), name_pattern, start_number, number_width)
              if name_pattern is not None else [name_for(p) for p in plays])
     out_dir = out_dir or cfg.path(cfg.out_dir) / "clips"
@@ -118,7 +152,7 @@ def cut_all(cfg: Config, clips: list[Clip], plays: list[Play],
         failures = []
 
         def job(p: Play, name: str) -> Path:
-            return cut_one(cfg, clips, p, stage / name)
+            return cut_one(cfg, clips, p, stage / name, pre_play=pre_play, post_play=post_play)
 
         with cf.ThreadPoolExecutor(max_workers=cfg.clip_workers) as ex:
             futs = {ex.submit(job, p, name): p for p, name in zip(plays, names)}
