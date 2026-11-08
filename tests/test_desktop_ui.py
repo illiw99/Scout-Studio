@@ -28,6 +28,32 @@ class DesktopIntegrationTests(unittest.TestCase):
             QTest.qWait(20)
         self.assertTrue(condition(), 'Timed out waiting for desktop operation')
 
+    def test_export_padding_uses_captured_game_preferences_during_reload(self):
+        from PySide6.QtCore import QSettings
+        from scout.desktop.app import Studio
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            settings=QSettings(str(root/'global.ini'),QSettings.Format.IniFormat)
+            with patch.object(Studio, 'prepare_default_model'):
+                studio=Studio(root,settings=settings)
+            try:
+                studio.match='Demo'
+                studio.data=None  # Pending asynchronous review reload.
+                studio.loading_export_options=True
+                studio.pre_play.setValue(.4);studio.post_play.setValue(.6)
+                studio.loading_export_options=False
+                studio.load_export_padding()
+                self.assertEqual((studio.pre_play.value(),studio.post_play.value()),(.4,.6))
+                captured=QSettings(str(root/'game.ini'),QSettings.Format.IniFormat)
+                captured.setValue('exports/Demo/pre_play',.8)
+                captured.setValue('exports/Demo/post_play',.2)
+                studio.load_export_padding(captured)
+                self.assertEqual((studio.pre_play.value(),studio.post_play.value()),(.8,.2))
+                self.assertEqual((studio.timeline.pre_play,studio.timeline.post_play),(.8,.2))
+                self.assertFalse(settings.contains('exports/Demo/pre_play'))
+            finally:
+                studio.close();self.app.processEvents()
+
     def test_welcome_search_and_detection_settings_preserve_selection(self):
         from PySide6.QtCore import QSettings
         from scout.desktop.app import Studio

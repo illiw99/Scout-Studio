@@ -1520,7 +1520,7 @@ class Studio(QMainWindow):
         self.transport.pause()
         self.reset_speed()
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
-        self.load_export_padding()
+        self.load_export_padding(preferences if self.match == match and self.root == root else None)
         if accepted:
             try:
                 if (self.match != match or self.root != root or
@@ -1536,8 +1536,12 @@ class Studio(QMainWindow):
             return QSettings(str(self.data['review'].parent / 'preferences.ini'), QSettings.Format.IniFormat)
         return self.settings
 
-    def load_export_padding(self):
-        settings = self.export_preferences()
+    def load_export_padding(self, settings=None):
+        # A review reload may run inside a modal export dialog. Until its data
+        # arrives, never replace game preferences with the global fallback.
+        if settings is None and self.match and self.data is None:
+            return
+        settings = settings if settings is not None else self.export_preferences()
         cfg = self.data['cfg'] if self.data else None
         from scout.groundtruth import to_plays
         self.loading_export_options = True
