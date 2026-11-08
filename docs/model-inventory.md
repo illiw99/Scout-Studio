@@ -91,3 +91,11 @@ from physical space freed when model copies are hardlinked.
   the historical full-game accuracy/speed evaluations.
 
 Windows/macOS execution of this packaging change requires fresh hosted checks.
+
+The same frozen build also selected CUDA automatically and completed detection
+on the synthetic fixture. The normal local Studio launcher and desktop entry now
+select the checked build from source commit `dd482a2`; launcher backups and the
+executable hash are retained in the isolated deployment receipt. The accepted
+0.4.0 model is active locally with the previous 0.3.0 selection retained for
+rollback. Build intermediates were removed after validation. No generic detector
+weights were added to the installed model payload.

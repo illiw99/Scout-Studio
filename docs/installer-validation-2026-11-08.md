@@ -25,3 +25,8 @@ Linux standalone smoke. Installer build inputs now reject generic detector
 weights even through the legacy baseline override, and macOS distribution-root
 links are handled explicitly. These local checks do not replace the pending
 hosted installed-app smoke tests on all four platforms.
+
+Local launcher installation now selects the checked frozen Linux application from
+`dd482a2`. Fresh CPU export/detection and automatic CUDA detection both completed
+on synthetic media. This app rebuild reused the previously validated dependency
+runtime; it is not a fresh `.deb`, `.exe` or `.dmg` installer execution check.
