@@ -13,6 +13,12 @@ from scout.desktop import bundle
 
 
 class BundleTests(unittest.TestCase):
+    def setUp(self):
+        if importlib.util.find_spec('PySide6'):
+            # Teardown/dispatch fixtures do not exercise first-run model setup.
+            startup=patch('scout.desktop.app.Studio.prepare_default_model')
+            startup.start();self.addCleanup(startup.stop)
+
     @unittest.skipUnless(importlib.util.find_spec('PySide6'), 'desktop extra is not installed')
     def test_smoke_teardown_unloads_and_destroys_media_objects(self):
         os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
@@ -85,8 +91,7 @@ class BundleTests(unittest.TestCase):
             window = Studio(root / 'library', settings=settings)
             try:
                 self.assertEqual(window.detection_profile.currentData(), 'active-pack')
-                item = window.detection_profile.model().item(window.detection_profile.findData('cpu-fast'))
-                self.assertFalse(item.isEnabled())
+                self.assertEqual(window.detection_profile.findData('cpu-fast'), -1)
             finally:
                 bundle._dispose_smoke_window(window, app)
 

@@ -78,15 +78,17 @@ def _write(path, value):
 
 
 def _manifest(document):
-    if not isinstance(document, dict) or type(document.get('schema')) is not int or document['schema'] not in (1,2):
+    if not isinstance(document, dict) or type(document.get('schema')) is not int or document['schema'] not in (1,2,3):
         raise ValueError('Unsupported model-pack schema')
-    modern=document['schema']==2
+    modern=document['schema']>=2
     identity(document.get('id'), document.get('version'))
     backend = document.get('backend')
-    if backend not in ('onnx', 'openvino'):
+    if backend not in (('managed',) if document['schema']==3 else ('onnx', 'openvino')):
         raise ValueError('Only CPU ONNX/OpenVINO model packs are supported')
     expected = {'classifier.json', 'LICENSE.txt', 'detector.onnx'} if backend == 'onnx' else {
         'classifier.json', 'LICENSE.txt', 'detector.xml', 'detector.bin'}
+    if document['schema']==3:
+        expected={'classifier.json'}
     files = document.get('files')
     if not isinstance(files, dict) or set(files) != expected:
         raise ValueError('Model pack contains missing or unapproved files')
@@ -121,6 +123,8 @@ def _manifest(document):
                 or any(type(document.get(k)) is not int or not 1<=document[k]<=64 for k in ('cpu_threads','gpu_batch'))):
             raise ValueError('Incompatible model-pack feature pipeline settings')
         reference=document.get('gpu_reference')
+        if document['schema']==3 and reference is None:
+            raise ValueError('Managed detector requires a pinned pretrained reference')
         if reference is not None:
             from .inference import REFERENCE_MODELS
             if (not isinstance(reference,dict) or set(reference)!={'name','sha256'}
@@ -151,7 +155,7 @@ def verify(folder, *, probe=False):
     if (classifier['format']!=document['classifier']
             or classifier.get('feature_pipeline','legacy')!=document.get('feature_pipeline','legacy')):
         raise ValueError('Model-pack classifier feature pipeline is incompatible')
-    if document['schema']==2 and classifier.get('feature_settings')!=document['feature_settings']:
+    if document['schema']>=2 and classifier.get('feature_settings')!=document['feature_settings']:
         raise ValueError('Model-pack classifier feature settings are incompatible')
     excluded = classifier['exclude']
     feature_names = model_features.names(FEATURE_NAMES, classifier.get('feature_set', model_features.BASE))
@@ -161,7 +165,7 @@ def verify(folder, *, probe=False):
             or classifier['sample_fps'] != document['sample_fps']
             or classifier['names'] != window_names([name for name in feature_names if name not in excluded], offsets)):
         raise ValueError('Model-pack feature order, windows or sampling are incompatible')
-    if probe:
+    if probe and document['schema']!=3:
         import numpy as np
         from .inference import CpuDetector
         cfg = _configure(document, folder)
@@ -193,7 +197,7 @@ def _cuda_status(reference_name=None):
     except Exception as exc:return False,str(exc)
 
 
-def _configure(document, folder, cfg=None, *, choose_runtime=False):
+def _configure(document, folder, cfg=None, *, choose_runtime=False, prepare_cpu=False):
     from .config import Config
     cfg = cfg or Config()
     requested_device=cfg.device
@@ -237,6 +241,34 @@ def _configure(document, folder, cfg=None, *, choose_runtime=False):
             else:print(f'  model pack: using CPU ({reason})',flush=True)
         elif choose_runtime and requested_device not in ('cpu','auto'):
             raise ValueError('This model pack has no GPU reference detector')
+    if document['schema']==3:
+        cfg.model_feature_set=classifier.get('feature_set', BASE)
+        cfg.model_offsets=tuple(classifier['offsets'])
+        cfg.feature_pipeline=document['feature_pipeline']
+        cfg.decode_max_side=cfg.imgsz
+        cfg.decode_gpu=False
+        for key,value in document['feature_settings'].items():setattr(cfg,key,value)
+        for key in POSTPROCESS_V2:setattr(cfg,key,document['settings'][key])
+        if cfg.inference_threads==0:cfg.inference_threads=min(document['cpu_threads'],os.cpu_count() or 1)
+        from .inference import reference_path,reference_weights,prepare_graph,version
+        reference=document['gpu_reference']
+        cfg.model=str(reference_path(cfg,reference['name'],reference['sha256']))
+        cfg.detector_backend='torch'
+        if choose_runtime or prepare_cpu:
+            # Generic weights are fetched only when detection is requested,
+            # never while importing/activating the small decision-model pack.
+            cfg.model=str(reference_weights(cfg,reference['name'],reference['sha256']))
+            available,reason=_cuda_status(reference['name']) if choose_runtime and requested_device!='cpu' else (False,'CPU requested')
+            if available:
+                cfg.device='cuda:0' if requested_device=='auto' else requested_device
+                cfg.batch=document['gpu_batch'];cfg.decode_gpu=True
+                cfg.detector_sha256=reference['sha256'];cfg.allow_gpu_fallback=requested_device=='auto'
+            elif requested_device not in ('cpu','auto') and not prepare_cpu:
+                raise ValueError('GPU reference unavailable: '+reason)
+            else:
+                cfg.detector_backend='openvino' if version('openvino')!='unavailable' else 'onnx'
+                cfg.device='cpu';cfg.batch=1
+                cfg.model=str(prepare_graph(cfg))
     cfg.validate_pipeline()
     return cfg
 
@@ -247,7 +279,7 @@ def fallback_to_cpu(cfg):
     folder=Path(cfg.model_path).parent;document=verify(folder)
     if identity(document['id'],document['version'])!=cfg.model_pack:raise ValueError('GPU fallback model-pack identity changed')
     cfg.device='cpu'
-    return _configure(document,folder,cfg,choose_runtime=False)
+    return _configure(document,folder,cfg,choose_runtime=False,prepare_cpu=document['schema']==3)
 
 
 class ModelStore:
@@ -316,7 +348,7 @@ class ModelStore:
             with zipfile.ZipFile(snapshot) as zipped:
                 entries = zipped.infolist()
                 names = [entry.filename for entry in entries]
-                if len(entries) not in (4, 5) or len(set(names)) != len(names):
+                if len(entries) not in (2, 3, 4, 5) or len(set(names)) != len(names):
                     raise ValueError('Invalid model-pack archive entries')
                 allowed = {'manifest.json', 'classifier.json', 'LICENSE.txt', 'detector.onnx', 'detector.xml', 'detector.bin'}
                 for entry in entries:

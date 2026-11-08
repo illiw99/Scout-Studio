@@ -9,9 +9,12 @@ Scout/
 fields/
 /scout.json
 
-# Keep the shipped classifier; locally trained variants stay out of commits.
+# Keep only explicitly selected decision-model inference assets.
 models/*
-!models/play.pkl
+!models/README.md
+!models/catalog.json
+!models/scout-reviewed-precision/
+!models/person-transformer/
 
 # Weights fetched by ultralytics on first run
 yolo*.pt
@@ -41,3 +44,6 @@ htmlcov/
 # Local agent task ledgers
 .codex/runs/
 .scout-studio-runtime
+
+# Explicitly selected project-trained head (no pretrained checkpoints).
+!models/person-transformer/1.0.0/head.onnx

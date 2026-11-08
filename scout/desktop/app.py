@@ -248,18 +248,13 @@ class Studio(QMainWindow):
         self.detection_profile = ChevronComboBox()
         self.detection_profile.addItem('Current detection settings', '')
         self.detection_profile.addItem('Default model · automatic GPU / CPU', 'active-pack')
-        self.detection_profile.addItem('Faster CPU · experimental', 'cpu-fast')
         self.refresh_pipeline_choices()
         from scout.runtime import profile
-        if profile() == 'inference':
-            cpu_item = self.detection_profile.model().item(self.detection_profile.findData('cpu-fast'))
-            cpu_item.setEnabled(False)
-            cpu_item.setToolTip('Import an inference model pack to detect without reference frameworks.')
         self.detection_profile.setToolTip('Installed packs use supported acceleration and CPU fallback. Check experimental profiles against reviewed footage, especially distant players.')
         from scout.model_defaults import available
         selected_profile = self.settings.value('detectionProfile',
             'active-pack' if profile() == 'inference' or available(self.model_store()) else '')
-        if profile() == 'inference' and selected_profile == 'cpu-fast':
+        if selected_profile == 'cpu-fast':
             selected_profile = 'active-pack'
         if isinstance(selected_profile,str) and selected_profile.startswith('pipeline:') and self.detection_profile.findData(selected_profile)<0:
             self.detection_profile.addItem('Unavailable experimental pipeline',selected_profile)
@@ -799,8 +794,10 @@ class Studio(QMainWindow):
         directory = bundled_directory()
         if directory is not None:
             store = self.model_store()
-            self.task(lambda _: ensure_default(store, directory),
-                      lambda _: self.statusBar().showMessage('Default detection model ready.', 8000))
+            def ready(_):
+                self.refresh_pipeline_choices()
+                self.statusBar().showMessage('Decision models ready. The detector is downloaded on first use if needed.',8000)
+            self.task(lambda _: ensure_default(store, directory), ready)
 
     def import_model_pack(self):
         filename, _ = QFileDialog.getOpenFileName(self, 'Import inference model pack', '', 'Model pack (*.zip)')

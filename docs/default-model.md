@@ -1,6 +1,6 @@
 # Default Scout Studio detection profile
 
-The selected local profile is `scout-reviewed-precision@0.3.0`: YOLO26n at 1280,
+The selected local profile is `scout-reviewed-precision@0.4.0`: YOLO26n at 1280,
 2.5 samples/s, adaptive fields, time-scaled tracking, derived play features and
 wide temporal context. The profile binds its classifier, detector, sampler and
 postprocessing together; replacing only an old PKL is insufficient. Its operating
@@ -13,11 +13,12 @@ The processing worker selects a compatible NVIDIA reference runtime automaticall
 or uses the pack's CPU graph. Saved fields, reviews and game configuration are not
 rewritten by installing or activating a default model.
 
-A standalone build can carry an explicitly approved offline pack. First startup
-prepares it in a background task; the processing worker also ensures it is ready
-before a queued job begins. No model probing runs on the Qt UI thread. The CPU
-model is included, so it needs no model download. GPU reference weights use the
-existing pinned official-asset/hash verification and CPU fallback behavior.
+Standard reference builds include the versioned project-trained decision models
+from `models/catalog.json`. Startup prepares them in a background task without
+downloading generic detector weights. First detection fetches the pinned official
+YOLO26n weights and caches them. CPU OpenVINO/ONNX exports are generated once in
+the cache. Version 0.4.0 retains the exact accepted 0.3.0 classifier bytes and
+pipeline settings. See [model inventory](model-inventory.md).
 
 Bundled defaults are immutable installed versions. Automatic upgrades apply only
 to a previously managed bundled default; manual model selections and rollbacks
@@ -26,20 +27,18 @@ by a background default update. Damaged archives/manifests fail validation.
 
 ## Building a standalone with the selected pipeline
 
-Supply a private approved pack and its independently recorded archive hash:
+The ordinary build includes only our decision models and matching configuration:
 
 ```bash
-python scripts/build-installers.py --runtime-profile reference \
-  --baseline-pack /private/reviewed-model.zip --baseline-sha256 EXPECTED_SHA256 \
-  --ffmpeg-binary /path/to/tested/ffmpeg \
-  --work-dir /private/new-build --output-dir /private/new-installers
+python scripts/build-installers.py --runtime-profile reference
 ```
 
-The baseline is validated/probed and copied into `_scout_baseline` with a receipt.
-Only `model-pack.zip` and `receipt.json` are included. Private GT, footage, training
-arrays and arbitrary model-directory contents are never included. No trained
-weights enter Git. Build environments need the matching CPU runtime; for example,
-macOS needs a compatible ONNX pack instead of an OpenVINO-only pack.
+An optional `--baseline-pack` plus `--baseline-sha256` override must also be a
+verified schema-3 decision-only pack. Build inputs containing pretrained detector
+graphs are rejected. Legacy CPU packs remain importable at runtime. The reduced
+inference-only build needs a separately imported ready-to-run CPU pack.
+Training checkpoints, GT, footage and arbitrary model-directory contents are not
+included. Source archives and wheels use an explicit model-file allowlist.
 
 An explicitly supplied FFmpeg is copied into `_scout_media`; PyInstaller collects
 its dynamic dependencies. This allows the validated CUDA decoding/resizing path
@@ -48,10 +47,6 @@ fallback remains. CUDA inference and CUDA video decoding are separate features.
 Existing local Linux X11 cursor shims are included when present; no dependency is
 downloaded by the spec. The installed smoke checks use the selected media engine
 and an isolated model store, never the user's model store or footage.
-
-Builds without an approved baseline remain supported for development/review;
-they do not automatically acquire private weights. Public distribution is a
-separate release action.
 
 ## Local launcher selection
 
@@ -68,7 +63,7 @@ The approved `scout-reviewed-precision@0.3.0` pack and its matching defaults are
 now active for this user's normal Studio launch. The Applications entry and
 project launcher select the newly frozen reference build. The previous desktop
 entry and detection-profile preference were backed up before changing them.
-The original PKL, game configuration, field polygons and review files were not
+At that deployment, the original PKL, game configuration, field polygons and review files were not
 replaced. No personal footage was processed during deployment.
 
 Validation passed on the local Linux machine:
@@ -88,3 +83,10 @@ The standalone carries the tested FFmpeg and approved model archive. Source
 weights remain private; no model/release upload or release tag was performed.
 This validates the local Linux deployment. Windows installer execution and GPU
 hardware still require native validation; no new Windows installer was built here.
+
+## Decision-only packaging update
+
+The current source catalogue carries the approved decision head and selected
+Person Transformer. Generic detector weights and CPU exports are excluded from
+standard installer payloads. The historical deployment evidence above describes
+0.3.0; it does not establish Windows/macOS execution of this packaging update.

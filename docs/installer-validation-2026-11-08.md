@@ -18,3 +18,10 @@ Validation: all 11 native offscreen UI tests passed, including a real synthetic
 queued MP4 export and the regression. Offscreen checks do not establish native
 Windows/macOS installer execution. A fresh hosted run is required after pushing
 the fix; no hosted success is claimed here.
+
+The subsequent decision-only packaging integration passed the complete local
+376-test check (two platform skips), source/wheel inspection and rebuilt native
+Linux standalone smoke. Installer build inputs now reject generic detector
+weights even through the legacy baseline override, and macOS distribution-root
+links are handled explicitly. These local checks do not replace the pending
+hosted installed-app smoke tests on all four platforms.

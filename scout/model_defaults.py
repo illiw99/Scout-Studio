@@ -16,7 +16,10 @@ BUNDLE_DIRECTORY = '_scout_baseline'
 def bundled_directory():
     root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
     folder = root / BUNDLE_DIRECTORY
-    return folder if (folder / 'receipt.json').is_file() else None
+    if (folder / 'receipt.json').is_file():return folder
+    from .runtime import profile
+    from .model_catalog import directory
+    return directory() if profile()=='reference' else None
 
 
 def available(store):
@@ -47,12 +50,49 @@ def prepare_bundle(archive, expected_hash, destination):
     return destination
 
 
+def validate_installer_bundle(folder):
+    """Reject generic detector graphs in build inputs; runtime imports stay compatible."""
+    import zipfile
+    folder = Path(folder)
+    archive = folder / 'model-pack.zip'
+    receipt = _json((folder / 'receipt.json').resolve())
+    if sha(archive) != receipt.get('sha256'):
+        raise ValueError('Bundled model archive checksum mismatch')
+    with zipfile.ZipFile(archive) as source:
+        manifest = json.loads(source.read('manifest.json'))
+        if (manifest.get('schema') != 3 or manifest.get('backend') != 'managed'
+                or set(manifest.get('files', {})) != {'classifier.json'}
+                or set(source.namelist()) != {'manifest.json', 'classifier.json'}
+                or len(source.namelist()) != 2):
+            raise ValueError('Installers require a decision-only model pack (schema 3)')
+
+
+def prepare_installer_bundle(archive, expected_hash, destination):
+    """Stage a verified decision-only baseline, never pretrained detector weights."""
+    destination = prepare_bundle(archive, expected_hash, destination)
+    try:
+        validate_installer_bundle(destination)
+    except Exception:
+        shutil.rmtree(destination)
+        raise
+    return destination
+
+
 def ensure_default(store, bundle_dir=None):
     """Install a bundled default once; preserve manual selections and rollbacks.
 
     This can probe a CPU graph on first use. Call in a worker/background task.
     """
     folder = Path(bundle_dir) if bundle_dir is not None else bundled_directory()
+    if folder is not None and (folder/'catalog.json').is_file():
+        from .model_catalog import prepare_default_bundle,install_pipelines
+        with tempfile.TemporaryDirectory(prefix='scout-default-') as temporary:
+            prepared=prepare_default_bundle(folder,Path(temporary)/'bundle')
+            selected=ensure_default(store,prepared)
+        import importlib.util
+        if importlib.util.find_spec('onnxruntime') is not None:
+            install_pipelines(store.root.parent/'play-pipelines',folder)
+        return selected
     pointer = store.root / 'active.json'
     if pointer.is_symlink():
         raise ValueError('Active model pointer must not be a link')

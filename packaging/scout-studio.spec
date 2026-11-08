@@ -19,6 +19,10 @@ profile_file.parent.mkdir(parents=True, exist_ok=True)
 profile_file.write_text(json.dumps(dict(schema=1, profile=profile)))
 datas = [(str(profile_file), '.')]
 datas += [(str(root / 'LICENSE'), '.')]
+if reference and (root/'models/catalog.json').is_file():
+    from scout.model_catalog import release_files
+    for source in release_files(root/'models'):
+        datas.append((str(source),str(Path('models')/source.relative_to(root/'models').parent)))
 baseline_dir = os.environ.get('SCOUT_BASELINE_DIR')
 if baseline_dir:
     for name in ('model-pack.zip', 'receipt.json'):
@@ -26,6 +30,8 @@ if baseline_dir:
         if not source.is_file():
             raise ValueError(f'Missing verified baseline bundle file: {source}')
         datas.append((str(source), '_scout_baseline'))
+    from scout.model_defaults import validate_installer_bundle
+    validate_installer_bundle(baseline_dir)
 for package in ('scout', 'imageio_ffmpeg') + (('ultralytics', 'matplotlib') if reference else ()):
     datas += collect_data_files(package, excludes=['**/*.pt', '**/*.onnx', '**/tests/**'])
 for package in ('scout-flag', 'imageio-ffmpeg') + (('ultralytics', 'torch', 'torchvision') if reference else ()):

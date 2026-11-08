@@ -223,7 +223,7 @@ class BaselineBuildTests(unittest.TestCase):
         with patch.object(sys, 'argv', ['build-installers.py', '--version-only']), \
              patch.object(self.module, 'project_version', return_value='1.2.3'), \
              patch.object(self.module, 'run') as run, \
-             patch.dict(sys.modules, {'scout.model_defaults': SimpleNamespace(prepare_bundle=helper)}), \
+             patch.dict(sys.modules, {'scout.model_defaults': SimpleNamespace(prepare_installer_bundle=helper)}), \
              contextlib.redirect_stdout(io.StringIO()) as output:
             self.module.build()
         self.assertEqual(output.getvalue(), '1.2.3\n')
@@ -289,7 +289,7 @@ class BaselineBuildTests(unittest.TestCase):
              patch.object(self.module.platform, 'machine', return_value='amd64'), \
              patch.object(self.module, 'run', side_effect=run), \
              patch.object(self.module.shutil, 'which', return_value='iscc'), \
-             patch.dict(sys.modules, {'scout.model_defaults': SimpleNamespace(prepare_bundle=helper)}), \
+             patch.dict(sys.modules, {'scout.model_defaults': SimpleNamespace(prepare_installer_bundle=helper)}), \
              patch.dict(os.environ, {'SCOUT_BASELINE_DIR': 'ambient-stale-input',
                                      'SCOUT_FFMPEG_BINARY': 'ambient-ffmpeg'}, clear=True), \
              patch.object(sys, 'argv', ['build-installers.py', *arguments]), \
@@ -345,9 +345,11 @@ class BaselineBuildTests(unittest.TestCase):
         code = compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec')
         for name in ('model-pack.zip', 'receipt.json', 'private-unrelated.pt'):
             (self.root / name).write_bytes(b'fixture')
-        with patch.dict(os.environ, {'SCOUT_BASELINE_DIR': str(self.root)}):
+        with patch.dict(os.environ, {'SCOUT_BASELINE_DIR': str(self.root)}), \
+             patch('scout.model_defaults.validate_installer_bundle') as validate:
             namespace = dict(os=os, Path=Path, datas=[])
             exec(code, namespace)
+            validate.assert_called_once_with(str(self.root))
             self.assertEqual(namespace['datas'], [
                 (str(self.root / 'model-pack.zip'), '_scout_baseline'),
                 (str(self.root / 'receipt.json'), '_scout_baseline')])

@@ -30,10 +30,18 @@ SOURCE_SUFFIXES = {
     'packaging': {'.py', '.spec', '.iss', '.txt', '.md'},
 }
 
+MODEL_FILES = {
+    'models/catalog.json','models/README.md',
+    'models/scout-reviewed-precision/0.4.0/manifest.json',
+    'models/scout-reviewed-precision/0.4.0/classifier.json',
+    'models/person-transformer/1.0.0/pipeline.json',
+    'models/person-transformer/1.0.0/head.onnx',
+}
+
 
 def source_files(root: Path) -> list[Path]:
     """Select release inputs without inspecting libraries or generated state."""
-    paths = [root / name for name in sorted(ROOT_FILES)]
+    paths = [root / name for name in sorted(ROOT_FILES | MODEL_FILES)]
     for directory, suffixes in SOURCE_SUFFIXES.items():
         paths.extend(path for path in sorted((root / directory).rglob('*'))
                      if path.is_file() and '__pycache__' not in path.parts
@@ -60,7 +68,9 @@ def validate_members(names: list[str], *, wheel: bool) -> None:
         path = PurePosixPath(name)
         if path.is_absolute() or '..' in path.parts:
             raise AssertionError(f'Unsafe artifact path: {name}')
-        if any(part in {'__pycache__', '.env', '.venv', '.vscode', '.scout-cache', '.scout', 'Scout',
+        model_name = str(PurePosixPath(*path.parts[4:])) if wheel and path.parts[0].endswith('.data') and path.parts[1:4]==('data','share','scout') else name
+        known_model = model_name in MODEL_FILES and (not wheel or model_name!=name)
+        if not known_model and any(part in {'__pycache__', '.env', '.venv', '.vscode', '.scout-cache', '.scout', 'Scout',
                         'models', 'media', 'games', 'fields', 'out', 'build', 'dist'}
                for part in path.parts):
             raise AssertionError(f'User/generated data in artifact: {name}')
@@ -76,6 +86,7 @@ def validate_members(names: list[str], *, wheel: bool) -> None:
         if path.parts[0] in SOURCE_SUFFIXES:
             allowed = allowed and (path.suffix in SOURCE_SUFFIXES[path.parts[0]]
                                    or name == 'scout/py.typed')
+        allowed = allowed or known_model
         if not allowed or path.suffix in {'.pyc', '.pyo', '.pt', '.pkl', '.mp4', '.mlt', '.bak'}:
             raise AssertionError(f'Unexpected artifact member: {name}')
 
@@ -159,6 +170,14 @@ def check(root: Path = ROOT) -> None:
                 'scout': 'scout.cli:main', 'scout-studio': 'scout.desktop:main',
             }
             archive.extractall(installed)
+            # Relocate the wheel's standard data-files payload as an installer
+            # does, while keeping all validation in this disposable directory.
+            for name in names:
+                path=PurePosixPath(name)
+                if path.parts[0].endswith('.data') and path.parts[1:4]==('data','share','scout'):
+                    target=installed.joinpath(*path.parts[2:])
+                    target.parent.mkdir(parents=True,exist_ok=True)
+                    shutil.copyfile(installed/name,target)
         outside = work / 'outside'
         outside.mkdir()
         env = dict(os.environ, PYTHONPATH=str(installed), PYTHONDONTWRITEBYTECODE='1',

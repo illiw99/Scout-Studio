@@ -1,0 +1,49 @@
+{
+  "backend": "managed",
+  "classifier": "scout-hgb-v3",
+  "cpu_threads": 8,
+  "feature_pipeline": "dynamic-field-v1",
+  "feature_settings": {
+    "active_speed": 0.45,
+    "field_axis": true,
+    "field_shrink_top": 0.0,
+    "horizon_y": 0.3,
+    "max_person_h": 0.16,
+    "min_person_h": 0.03,
+    "sprint_speed": 0.9
+  },
+  "files": {
+    "classifier.json": {
+      "sha256": "1b82bd9a87b0cb1fe115fc11436f5b34d645727fea3f3562157c635515c996dc",
+      "size": 671509
+    }
+  },
+  "frozen_head_sha256": "701fbf4b648cae2772cf0e96f73f749fb6143afb199dbab821c97a0691c6f88b",
+  "gpu_batch": 16,
+  "gpu_reference": {
+    "name": "yolo26n.pt",
+    "sha256": "9b09cc8bf347f0fc8a5f7657480587f25db09b34bf33b0652110fb03a8ad4fef"
+  },
+  "id": "scout-reviewed-precision",
+  "imgsz": 1280,
+  "license": "Scout decision model: see project LICENSE. The separately obtained YOLO weights and Ultralytics runtime retain their upstream terms.",
+  "preprocessing": "scout-coco-person-resized-v1",
+  "runtime_api": 2,
+  "sample_fps": 2.5,
+  "schema": 3,
+  "settings": {
+    "conf": 0.25,
+    "merge_gap": 1.5,
+    "model_low_ratio": 0.55,
+    "model_min_duration": 4.0,
+    "model_peak_threshold": 0.6,
+    "model_post_roll": 0.0,
+    "model_pre_roll": 0.0,
+    "model_refine_fraction": 0.5,
+    "model_refine_padding": 0.2,
+    "model_smooth": 0.2,
+    "model_threshold": 0.1
+  },
+  "source": "Same trained Scout decision head as 0.3.0; pinned YOLO26n pretrained detector fetched separately on first use",
+  "version": "0.4.0"
+}

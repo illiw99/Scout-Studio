@@ -104,7 +104,7 @@ def notarize(path):
 def build() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version-only', action='store_true')
-    parser.add_argument('--baseline-pack', type=Path, help='private baseline model-pack archive to verify and bundle')
+    parser.add_argument('--baseline-pack', type=Path, help='decision-only model-pack archive to verify and bundle (schema 3)')
     parser.add_argument('--baseline-sha256', help='expected SHA256 of --baseline-pack (required together)')
     parser.add_argument('--ffmpeg-binary', type=Path, help='explicit FFmpeg executable to stage and bundle with its dynamic dependencies')
     parser.add_argument('--work-dir', type=Path, help='override the platform build working directory')
@@ -148,11 +148,11 @@ def build() -> None:
                 # Use the source helper even when this script is launched directly.
                 sys.path.insert(0, str(ROOT))
                 try:
-                    from scout.model_defaults import prepare_bundle
+                    from scout.model_defaults import prepare_installer_bundle
                 finally:
                     sys.path.pop(0)
                 temporary = staging.enter_context(tempfile.TemporaryDirectory(prefix='baseline-', dir=work))
-                baseline = prepare_bundle(args.baseline_pack.resolve(), args.baseline_sha256,
+                baseline = prepare_installer_bundle(args.baseline_pack.resolve(), args.baseline_sha256,
                                           Path(temporary) / 'bundle')
                 os.environ['SCOUT_BASELINE_DIR'] = str(baseline)
             run(sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',

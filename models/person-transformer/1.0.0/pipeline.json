@@ -1,0 +1,90 @@
+{
+  "format": "scout-play-pipeline-v1",
+  "id": "person-raw-transformer64-2p5hz",
+  "label": "Person / transformer64",
+  "approach": "person-temporal",
+  "names": [
+    "n_field",
+    "n_active",
+    "n_over_04",
+    "n_over_06",
+    "n_over_08",
+    "n_over_12",
+    "n_sprint",
+    "spd_p25",
+    "spd_p50",
+    "spd_p75",
+    "spd_p90",
+    "spd_top5",
+    "x_span",
+    "x_std",
+    "y_span",
+    "y_std",
+    "hull",
+    "los_gap",
+    "los_balance",
+    "divergence",
+    "coherence",
+    "x_span_rate",
+    "active_fraction",
+    "sprint_fraction",
+    "fast_fraction",
+    "formation_density",
+    "activity_rise",
+    "activity_drop",
+    "spread_rise",
+    "motion_disorder",
+    "relative_span_change"
+  ],
+  "offsets": [
+    -10.0,
+    -6.0,
+    -3.0,
+    -1.0,
+    0.0,
+    1.0,
+    3.0,
+    6.0,
+    10.0
+  ],
+  "sample_fps": 2.5,
+  "assets": {
+    "head": {
+      "file": "head.onnx",
+      "sha256": "27826c5f98dc557e09d043fb1a952addd9758b69f43a8a12e1e0677b381859c7"
+    }
+  },
+  "postprocessing": {
+    "model_threshold": 0.1,
+    "model_low_ratio": 0.45,
+    "model_smooth": 0.2,
+    "model_min_duration": 4.0,
+    "merge_gap": 1.5,
+    "model_peak_threshold": 0.6,
+    "model_refine_fraction": 0.5,
+    "model_refine_padding": 0.2,
+    "model_pre_roll": 0.0,
+    "model_post_roll": 0.0
+  },
+  "feature_dtype": "float32",
+  "feature_transform": "raw",
+  "encoder_revision": 1,
+  "evaluation_note": "Repeated validation on four games; GPU-derived features / CPU ONNX head. Precision 87.5%; recall 98.5%; minimum-game recall 96.2%. Experimental; default remains the accepted pipeline.",
+  "quality": {
+    "precision": 0.8753387533875339,
+    "recall": 0.9847560975609756,
+    "minimum_game_recall": 0.9615384615384616
+  },
+  "training": {
+    "games": [
+      "FLAW_GD1_TIGvsTHU",
+      "W2_SAI-CON",
+      "W2_SAI-VET",
+      "W3_SAI-DUC",
+      "FLAW_GD3_SAIvsINV"
+    ],
+    "source_report_sha256": "774b0a8a339f8212ab679cddca377f0bfaf165593b5714e0b7ff6398d9e8c4dd",
+    "selection_rule": "development precision subject to minimum game recall >=95%; no validation selection"
+  },
+  "requires_model_pack": "scout-reviewed-precision@0.4.0"
+}

@@ -17,3 +17,10 @@ include .github/workflows/promote-installers.yml
 # are deliberately absent. Bytecode must never enter either artifact.
 global-exclude *.py[cod] *~ *.bak *.swp *.swo .DS_Store
 prune **/__pycache__
+
+# Deliberate decision-model catalogue, never arbitrary models/ contents.
+include models/catalog.json models/README.md
+include models/scout-reviewed-precision/0.4.0/manifest.json
+include models/scout-reviewed-precision/0.4.0/classifier.json
+include models/person-transformer/1.0.0/pipeline.json
+include models/person-transformer/1.0.0/head.onnx

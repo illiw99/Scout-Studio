@@ -161,7 +161,7 @@ class Config:
     post_roll: float = 0.3
 
     # --- learned segmenter ---
-    #: Where the trained model lives.
+    #: Explicit legacy classifier path; a missing default uses the approved pack.
     model_path: str = "models/play.pkl"
     #: "rules" is the hand-tuned state machine, "model" the learned one.
     #: Held out over 190 marked plays: rules 74.8% F1, model 95.8%.

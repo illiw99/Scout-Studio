@@ -20,6 +20,13 @@ class DesktopIntegrationTests(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
         cls.app.setStyleSheet(STYLE)
 
+    def setUp(self):
+        # These tests exercise explicit synthetic rules/settings, not first-run
+        # production model bootstrapping (covered by test_model_catalog/default_profile).
+        for target in ('scout.model_defaults.bundled_directory','scout.model_defaults.available'):
+            mocker=patch(target,return_value=None if target.endswith('bundled_directory') else False)
+            mocker.start();self.addCleanup(mocker.stop)
+
     def wait_for(self, condition, seconds=15):
         from PySide6.QtTest import QTest
         deadline = time.monotonic()+seconds

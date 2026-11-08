@@ -200,6 +200,15 @@ def _load(args) -> Config:
             cfg.feature_pipeline='legacy'
             cfg.model_feature_set=BASE
             cfg.model_offsets=DEFAULT_OFFSETS
+    if (getattr(args,'cmd',None) in ('run','detect','segment','preview') and not cfg.play_pipeline
+            and not getattr(args,'model_pack',None) and cfg.model_pack is None
+            and cfg.segmenter=='model' and cfg.model==Config().model
+            and cfg.model_path=='models/play.pkl' and not cfg.path(cfg.model_path).is_file()):
+        from .model_defaults import available
+        from .model_packs import ModelStore
+        if available(ModelStore(getattr(args,'model_packs_dir',None) or cfg.model_packs_dir)):
+            cfg.model_pack='active'
+            print('  using approved default decision model (legacy default PKL retired)',flush=True)
     selection = getattr(args, 'model_pack', None) or cfg.model_pack
     if selection and args.cmd in ('run', 'detect', 'segment', 'preview'):
         from .model_packs import ModelStore
