@@ -1,10 +1,23 @@
 # Changelog
 
 This file summarizes user-visible changes. Focused Git commits retain the
-implementation and validation history. The package version is currently 1.0.0;
-these changes have not been published as a release.
+implementation and validation history.
 
 ## Unreleased
+
+## 1.0.1 — 2026-11-09
+
+### Models and runtime
+
+- Ship the approved play decision model and selected Person Transformer with
+  matching configuration. Download verified YOLO weights on first detection;
+  prepare and cache optimized CPU exports when needed.
+- Add persistent pre/post-play export padding and automatic clip numbering.
+- Unify native form controls, colors and spacing; compact playback controls and
+  improve timeline drag previews.
+- Preserve game export preferences during asynchronous review reloads.
+- Preserve exact model bytes in Windows checkouts and isolate synthetic tests
+  from production model downloads and exports.
 
 ### Native review
 

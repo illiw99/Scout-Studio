@@ -34,11 +34,14 @@ explicit `--workspace` selections remain supported. The Library menu reveals
 the index folder, backs it up, and explicitly imports an existing index or backup.
 Footage, fields, reviews, configuration
 and exports live outside the installed application; uninstalling keeps that library.
-Installers exclude personal footage, detector weights and trained play classifiers.
-The first detection run needs network access to fetch YOLO weights. Model-based
-play detection needs your library's configured `model_path`; without a trained
-classifier, set `"segmenter": "rules"` in the library's `scout.json`. Existing
-review libraries can be edited and exported without a classifier.
+Installers include our approved play decision model and selected Person
+Transformer with their matching configuration. Personal footage and generic
+pretrained detector weights are excluded. First detection fetches verified YOLO
+weights and, on CPU, prepares a cached OpenVINO/ONNX export. Later runs reuse
+those cached files. Studio defaults to the approved automatic GPU/CPU pipeline;
+explicit custom model selections remain supported. Existing review libraries can
+be edited and exported without downloading a detector. See the
+[model inventory](model-inventory.md) for weight origins and measured quality.
 
 New Windows builds bundle CUDA 12.8-capable PyTorch: detection automatically uses
 a supported NVIDIA GPU with a compatible driver, otherwise CPU. Earlier Windows
@@ -64,9 +67,11 @@ scout --help
 
 Install Shotcut separately if you prefer it for reviewing. Scout uses system FFmpeg when available,
 otherwise the binary supplied by `imageio-ffmpeg`. Detection runs on CPU or CUDA;
-the first detection run may download YOLO weights. The included play model is at
-`models/play.pkl`. Keep that file with this checkout; a wheel does not bundle it.
-Use `--segmenter rules` to generate initial proposals without a trained model.
+the first detection run may download YOLO weights. The versioned decision models
+in `models/` are also included in wheels. The legacy `models/play.pkl` has been
+retired; the approved default uses a numeric `classifier.json` with its matching
+pipeline recipe. Use `--segmenter rules` to generate initial proposals without
+the trained decision model.
 
 ### Optional NVIDIA video decoding (Ubuntu 24.04)
 
