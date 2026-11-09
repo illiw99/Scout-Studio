@@ -17,6 +17,12 @@ from scout.timeline import Clip
 
 class WorkflowTests(unittest.TestCase):
     def setUp(self):
+        # Synthetic workflow stages below replace detection/classification.
+        # Keep production default discovery outside these fixtures: it can
+        # download weights/export a graph and depends on the caller's store.
+        defaults = patch('scout.model_defaults.available', return_value=False)
+        defaults.start()
+        self.addCleanup(defaults.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
@@ -127,7 +133,7 @@ class WorkflowTests(unittest.TestCase):
     def test_run_only_review(self):
         output=self.root/'new'
         def effective_cpu(cfg,clips):cfg.device='cpu';cfg.detector_backend='onnx';cfg.decode_gpu=False
-        with patch('scout.cli._clips',return_value=self.clips), patch('scout.cli._region_for',return_value={'polygon':[]}), patch('scout.cli._detect_for',side_effect=effective_cpu), patch('scout.cli._features_for') as compute, patch('scout.cli._segment',return_value=self.plays), contextlib.redirect_stdout(io.StringIO()):
+        with patch('scout.inference.reference_weights', side_effect=AssertionError('synthetic workflow must not fetch weights')), patch('scout.inference.prepare_graph', side_effect=AssertionError('synthetic workflow must not export a detector')), patch('scout.cli._clips',return_value=self.clips), patch('scout.cli._region_for',return_value={'polygon':[]}), patch('scout.cli._detect_for',side_effect=effective_cpu), patch('scout.cli._features_for') as compute, patch('scout.cli._segment',return_value=self.plays), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(cli.main(['--out-dir',str(output),'run']),0)
         self.assertEqual(compute.call_args.args[0].device,'cpu')
         self.assertEqual(compute.call_args.args[0].detector_backend,'onnx')
