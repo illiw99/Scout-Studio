@@ -1,0 +1,3 @@
+# Catalogue sizes and SHA-256 values identify exact model bytes. Windows Git
+# checkouts must not rewrite JSON manifests or decision weights to CRLF.
+/models/** -text

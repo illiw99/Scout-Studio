@@ -9,6 +9,24 @@ from scout.config import Config
 ROOT=Path(__file__).resolve().parents[1]/'models'
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_windows_git_checkout_preserves_catalogue_asset_bytes(self):
+        import shutil,subprocess
+        from scout.model_catalog import release_files
+        repository=ROOT.parent
+        if not shutil.which('git'):
+            self.skipTest('Git checkout validation needs Git')
+        check=subprocess.run(['git','rev-parse','--show-toplevel'],cwd=repository,
+                             capture_output=True,text=True)
+        if check.returncode or Path(check.stdout.strip()).resolve()!=repository.resolve():
+            self.skipTest('Source archive has no repository index')
+        files=[str(p.relative_to(repository)) for p in release_files(ROOT)]
+        with tempfile.TemporaryDirectory() as d:
+            # Use this repository's index and attributes without changing it.
+            subprocess.run(['git','-c','core.autocrlf=true','checkout-index',
+                            '--prefix='+Path(d).as_posix()+'/', '--',*files],
+                           cwd=repository,check=True,capture_output=True)
+            self.assertEqual(read(Path(d)/'models'),read(ROOT))
+
     def test_catalogue_bundles_only_trained_decision_assets_without_download(self):
         from scout.model_defaults import ensure_default
         with tempfile.TemporaryDirectory() as d:
