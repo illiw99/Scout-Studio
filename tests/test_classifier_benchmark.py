@@ -12,8 +12,8 @@ from scout.config import Config
 from scout import model
 
 
-def script():
-    path = Path(__file__).resolve().parents[1] / 'scripts/benchmark-classifiers.py'
+def script(filename='benchmark-classifiers.py'):
+    path = Path(__file__).resolve().parents[1] / 'scripts' / filename
     spec = importlib.util.spec_from_file_location('classifier_benchmark', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -21,6 +21,18 @@ def script():
 
 
 class ClassifierBenchmarkTests(unittest.TestCase):
+    def test_safe_context_and_lost_action_get_different_diagnostics(self):
+        module = script('report-classifier-benchmark.py')
+        early = module.boundary_diagnostics([([[2, 6]], [[0, 8]])])
+        cut = module.boundary_diagnostics([([[2, 6]], [[4, 5]])])
+        self.assertEqual(early['covers_play_within_tolerance_recall'], 1.)
+        self.assertEqual(early['both_boundaries_accurate_recall'], 0.)
+        self.assertEqual(early['mean_lost_action_seconds'], 0.)
+        self.assertEqual(early['mean_extra_context_seconds'], 4.)
+        self.assertEqual(cut['covers_play_within_tolerance_recall'], 0.)
+        self.assertEqual(cut['mean_lost_action_seconds'], 3.)
+        self.assertEqual(cut['matched_plays_cut_by_more_than_tolerance'], 1)
+
     def test_boundaries_and_missed_plays_are_separate_from_overlap_hits(self):
         module = script()
         case = dict(t=np.arange(30.), record=dict(name='game', duration=30., marks=[[2, 6], [15, 20]]))

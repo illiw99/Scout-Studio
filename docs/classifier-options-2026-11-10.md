@@ -111,6 +111,19 @@ matched plays only. Export pre/post padding is excluded. Precision is primary
 under the per-game recall floor; boundary recall and IoU break precision ties.
 No explicit numerical boundary acceptance threshold has yet been specified.
 
+The user subsequently chose **1 second**, preferring an early start/late end to
+losing play action. `scripts/report-classifier-benchmark.py` adds a separate
+post-selection analysis: late starts, early endings, early starts and late
+endings each get counts/mean/p90; both strict 1-second boundary recall and
+coverage within that tolerance use all GT plays as the denominator. Coverage
+alone permits overlong clips, so the same table retains IoU and extra seconds.
+The frozen development choice is not changed using these confirmation results.
+
+```bash
+python scripts/report-classifier-benchmark.py --report /new-study/report.json \
+  --manifest /isolated-approach-study/manifest.json --out /new-study/timing-analysis
+```
+
 CPU timing is three warm prediction passes with four threads per confirmation
 game; the report keeps every observation. This excludes feature preparation,
 decode, detector, startup and interval postprocessing. It is not end-to-end
