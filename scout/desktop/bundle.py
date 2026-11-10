@@ -50,6 +50,14 @@ def main(argv=None):
         from scout.cli import main as cli
         return cli(argv[1:])
     if argv and argv[0] == '--smoke-test':
+        # Keep this stream alive through interpreter teardown: native Qt crashes
+        # can occur after the JSON report was successfully written.
+        import faulthandler
+        global _smoke_fault_stream
+        fault_path = Path(argv[1]).resolve().with_suffix('.fault.log')
+        fault_path.parent.mkdir(parents=True, exist_ok=True)
+        _smoke_fault_stream = fault_path.open('w', encoding='utf-8')
+        faulthandler.enable(file=_smoke_fault_stream, all_threads=True)
         if len(argv) == 4 and argv[2] == '--runtime-files':
             return smoke_test(Path(argv[1]).resolve(), runtime_files=Path(argv[3]).resolve())
         if len(argv) != 2:
@@ -87,7 +95,11 @@ def smoke_test(report_path: Path, *, runtime_files=None) -> int:
 
 def _dispose_smoke_window(window, app):
     """Release decoder/file handles before removing Windows smoke fixtures."""
-    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
+    # A queued completion signal can arrive just before QRunnable.run returns.
+    # Drain those workers while QApplication still exists, before destroying
+    # the objects their callbacks reference.
+    assert QThreadPool.globalInstance().waitForDone(10000), 'Studio workers did not stop'
     # stop() alone retains the media source and its open file on Windows.
     # Clear transport intent too, so queued playback callbacks cannot reopen it.
     window.transport.set_clips([])
@@ -99,6 +111,19 @@ def _dispose_smoke_window(window, app):
     # there is no running exec() event loop, as in this standalone smoke check.
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     app.processEvents()
+
+
+def _dispose_smoke_setup(dialog, app):
+    """Destroy the native setup dialog and its pool before application teardown."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    assert not dialog.busy and dialog.pool.waitForDone(10000), 'Setup worker did not stop'
+    destroyed = []
+    dialog.destroyed.connect(lambda: destroyed.append(True))
+    dialog.close()
+    dialog.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.processEvents()
+    assert destroyed, 'Setup dialog survived deferred deletion'
 
 
 def _exercise(root, checks, *, runtime_files=None):
@@ -280,6 +305,7 @@ def _exercise(root, checks, *, runtime_files=None):
         setup = SmokeSetup(store=store)
         assert setup.exec() == QDialog.DialogCode.Accepted, setup.status.text()
         assert setup.ready_engine is not None
+        _dispose_smoke_setup(setup, app)
         checks['runtime_setup'] = True
     if os.environ.get('SCOUT_INSTALL_TEST_DATA_ROOT'):
         from PySide6.QtCore import QStandardPaths

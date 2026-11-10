@@ -37,6 +37,10 @@ class RuntimeSetupDialog(QDialog):
         self.busy = False
         self.ready_engine = None
         self.task = None
+        # The dialog owns its workers so closing setup cannot leave runnable
+        # wrappers behind for QApplication/interpreter shutdown to collect.
+        self.pool = QThreadPool(self)
+        self.pool.setMaxThreadCount(1)
         self.cancelled = Event()
         self.setWindowTitle('Set up Scout Studio')
         self.setMinimumWidth(500)
@@ -81,7 +85,7 @@ class RuntimeSetupDialog(QDialog):
         self.task.signals.progress.connect(self.report_progress)
         self.task.signals.ready.connect(self.complete)
         self.task.signals.failed.connect(self.failed)
-        QThreadPool.globalInstance().start(self.task)
+        self.pool.start(self.task)
 
     def report_progress(self, message, percent):
         if not self.cancelled.is_set():
@@ -140,3 +144,4 @@ def ensure_setup(parent=None):
     finally:
         if parent is not None:
             parent.runtime_setup_dialog = None
+        dialog.deleteLater()

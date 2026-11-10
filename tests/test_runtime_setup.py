@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 from threading import Event
 import time
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +13,24 @@ os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 
 @unittest.skipUnless(importlib.util.find_spec('PySide6'),'desktop extra required')
 class RuntimeSetupTests(unittest.TestCase):
+    def test_setup_worker_and_dialog_support_natural_process_exit(self):
+        code = '''
+from pathlib import Path
+from PySide6.QtWidgets import QApplication
+from scout.processing_runtime import ReadyEngine
+from scout.desktop.runtime_setup import RuntimeSetupDialog
+from scout.desktop.bundle import _dispose_smoke_setup
+class Store:
+    def prepare(self, **kwargs):
+        return ReadyEngine('linux-x86_64-cpu', Path('worker'), ('cpu',))
+app = QApplication([])
+dialog = RuntimeSetupDialog(store=Store())
+assert dialog.exec() == 1
+_dispose_smoke_setup(dialog, app)
+'''
+        result = subprocess.run([sys.executable, '-c', code], capture_output=True,
+            text=True, timeout=15, env={**os.environ, 'QT_QPA_PLATFORM': 'offscreen'})
+        self.assertEqual(result.returncode, 0, result.stderr)
     def test_pipeline_import_probes_in_worker_instead_of_gui(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
@@ -49,7 +69,11 @@ class RuntimeSetupTests(unittest.TestCase):
         self.wait_for(lambda:dialog.ready_engine is not None)
         self.assertEqual(dialog.ready_engine,ready)
         self.assertEqual(dialog.result(),1)
-        dialog.deleteLater();self.app.processEvents()
+        from scout.desktop.bundle import _dispose_smoke_setup
+        import shiboken6
+        self.assertIs(dialog.pool.parent(), dialog)
+        _dispose_smoke_setup(dialog, self.app)
+        self.assertFalse(shiboken6.isValid(dialog))
 
     def test_skip_waits_for_worker_cancellation_without_blocking_ui(self):
         from scout.desktop.runtime_setup import RuntimeSetupDialog
