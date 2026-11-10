@@ -21,6 +21,18 @@ class DependencyLocksTests(unittest.TestCase):
             with self.subTest(target=target):
                 locks.validate(target, (locks.LOCKS / f"{target}.txt").read_text())
 
+    def test_native_cpu_and_cuda_snapshots_are_separate_and_hash_pinned(self):
+        for system in ('linux', 'windows'):
+            cpu = f'{system}-x86_64-cpu'
+            cuda = f'{system}-x86_64-cu128'
+            cpu_text = (locks.LOCKS / (cpu + '.txt')).read_text()
+            cuda_text = (locks.LOCKS / (cuda + '.txt')).read_text()
+            self.assertEqual(locks.pins(cpu_text)['torch'], '2.7.1+cpu')
+            self.assertEqual(locks.pins(cuda_text)['torch'], '2.7.1+cu128')
+            self.assertNotEqual(cpu_text, cuda_text)
+            with self.assertRaisesRegex(ValueError, 'CUDA dependency'):
+                locks.validate(cpu, cpu_text + '\nnvidia-cuda-runtime-cu12==12.8.90 --hash=sha256:' + 'a' * 64 + '\n')
+
     def test_requirements_reject_unpinned_unhashed_and_duplicate_entries(self):
         for text in ("numpy>=1.24", "numpy==1.26.4", "numpy==1.26.4 --hash=sha256:bad",
                      "numpy==1.26.4 --hash=sha256:" + "a" * 64 + "\nnumpy==1.26.4 --hash=sha256:" + "b" * 64):

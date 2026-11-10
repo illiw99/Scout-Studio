@@ -19,6 +19,58 @@ def release_tool():
 
 
 class CandidateTests(unittest.TestCase):
+    def bootstrap_fixture(self, target='linux-x86_64'):
+        directory=self.directory(target)
+        info=json.loads((directory/'build-info.json').read_text())
+        info.update(runtime_profile='bootstrap',processing_catalog='runtime-catalog.json')
+        (directory/'build-info.json').write_text(json.dumps(info))
+        runtimes={}
+        engines=[target] if target.startswith('macos-') else [target+'-cpu',target+'-cuda']
+        for engine in engines:
+            name=f'Scout-Runtime-1.2.3-{engine}.tar.gz.part001'
+            (directory/name).write_bytes(b'verified engine archive fixture')
+            runtimes[engine]=dict(parts=[dict(name=name,size=(directory/name).stat().st_size,
+                                             sha256=self.tool.sha256(directory/name))])
+        (directory/'runtime-catalog.json').write_text(json.dumps(dict(schema=1,application_version='1.2.3',runtimes=runtimes)))
+        for name in ('candidate.json','test-result.json','release-candidate.py'):(directory/name).unlink()
+        with patch.object(self.tool.metadata,'distributions',return_value=[]):
+            manifest=self.tool.create(directory,target,self.identity)
+        report=json.loads((directory/'smoke-report.json').read_text())
+        report['checks'].update(runtime_profile='bootstrap',runtime_setup=True,
+            runtime_catalog_sha256=manifest['files']['runtime-catalog.json']['sha256'],
+            processing_engines={engine:dict(schema=1,ok=True,nms=True,inference=True,
+                engine_id=engine,application_version='1.2.3',devices=['cpu'],
+                cuda_build='12.8' if engine.endswith('-cuda') else None) for engine in engines})
+        (directory/'smoke-report.json').write_text(json.dumps(report))
+        self.tool.record_test(directory,target,self.identity)
+        return directory,runtimes
+
+    def test_bootstrap_release_binds_and_publishes_exact_engine_parts(self):
+        directory,runtimes=self.bootstrap_fixture()
+        self.assemble()
+        for spec in runtimes.values():
+            part=spec['parts'][0]
+            self.assertEqual((self.root/'release'/part['name']).read_bytes(),(directory/part['name']).read_bytes())
+            self.assertIn(part['name'],(self.root/'release/SHA256SUMS.txt').read_text())
+
+    def test_bootstrap_corrupt_payload_or_missing_engine_probe_blocks_release(self):
+        directory,runtimes=self.bootstrap_fixture()
+        self.change_json('smoke-report.json',lambda report:report['checks']['processing_engines'].clear())
+        with self.assertRaises(ValueError):self.tool.record_test(directory,'linux-x86_64',self.identity)
+        part=next(iter(runtimes.values()))['parts'][0]['name']
+        (directory/part).write_bytes(b'bad')
+        with self.assertRaisesRegex(ValueError,'part changed'):self.tool.verify(directory,'linux-x86_64',self.identity)
+
+    def test_github_oversize_asset_is_rejected_before_hashing_or_promotion(self):
+        directory=self.directory()
+        for name in ('candidate.json','release-candidate.py'):(directory/name).unlink()
+        name=self.tool.installer_name('1.2.3','linux-x86_64')
+        with (directory/name).open('wb') as stream:stream.truncate(self.tool.MAX_RELEASE_ASSET)
+        with self.assertRaisesRegex(ValueError,'size limit'):
+            self.tool.create(directory,'linux-x86_64',self.identity)
+        self.assertFalse((directory/'candidate.json').exists())
+        self.assertFalse((directory/'release-candidate.py').exists())
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

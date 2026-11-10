@@ -19,6 +19,10 @@ jobs:
       actions: read
       contents: write
     steps:
+      - name: Free unused SDK space for unchanged runtime assets
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h .
       - uses: actions/checkout@v4
         with:
           persist-credentials: false

@@ -19,7 +19,7 @@ def bundled_directory():
     if (folder / 'receipt.json').is_file():return folder
     from .runtime import profile
     from .model_catalog import directory
-    return directory() if profile()=='reference' else None
+    return directory() if profile() in ('reference','bootstrap') else None
 
 
 def available(store):
@@ -89,9 +89,8 @@ def ensure_default(store, bundle_dir=None):
         with tempfile.TemporaryDirectory(prefix='scout-default-') as temporary:
             prepared=prepare_default_bundle(folder,Path(temporary)/'bundle')
             selected=ensure_default(store,prepared)
-        import importlib.util
-        if importlib.util.find_spec('onnxruntime') is not None:
-            install_pipelines(store.root.parent/'play-pipelines',folder)
+        # Recipes are data, validated without importing their inference engine.
+        install_pipelines(store.root.parent/'play-pipelines',folder)
         return selected
     pointer = store.root / 'active.json'
     if pointer.is_symlink():

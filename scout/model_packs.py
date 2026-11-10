@@ -197,6 +197,22 @@ def _cuda_status(reference_name=None):
     except Exception as exc:return False,str(exc)
 
 
+def _mps_status(reference_name=None):
+    import sys
+    if sys.platform != 'darwin':
+        return False
+    try:
+        import torch
+        import ultralytics
+        if reference_name and reference_name.startswith('yolo26'):
+            release=re.match(r'(\d+)\.(\d+)\.(\d+)',getattr(ultralytics,'__version__',''))
+            if release is None or tuple(map(int,release.groups()))<(8,4,0):
+                return False
+        return bool(torch.backends.mps.is_available())
+    except (ImportError, AttributeError, RuntimeError):
+        return False
+
+
 def _configure(document, folder, cfg=None, *, choose_runtime=False, prepare_cpu=False):
     from .config import Config
     cfg = cfg or Config()
@@ -258,10 +274,16 @@ def _configure(document, folder, cfg=None, *, choose_runtime=False, prepare_cpu=
             # Generic weights are fetched only when detection is requested,
             # never while importing/activating the small decision-model pack.
             cfg.model=str(reference_weights(cfg,reference['name'],reference['sha256']))
-            available,reason=_cuda_status(reference['name']) if choose_runtime and requested_device!='cpu' else (False,'CPU requested')
+            available,reason=_cuda_status(reference['name']) if choose_runtime and requested_device not in ('cpu','mps') else (False,'CPU or Metal requested')
+            metal = (choose_runtime and requested_device in ('auto','mps')
+                     and not available and _mps_status(reference['name']))
+            available = available or metal
             if available:
-                cfg.device='cuda:0' if requested_device=='auto' else requested_device
+                cfg.device='mps' if metal else 'cuda:0' if requested_device=='auto' else requested_device
                 cfg.batch=document['gpu_batch'];cfg.decode_gpu=True
+                if metal:
+                    cfg.batch=min(cfg.batch,4);cfg.decode_gpu=False
+                    cfg.half=False;cfg.quantize=None
                 cfg.detector_sha256=reference['sha256'];cfg.allow_gpu_fallback=requested_device=='auto'
             elif requested_device not in ('cpu','auto') and not prepare_cpu:
                 raise ValueError('GPU reference unavailable: '+reason)

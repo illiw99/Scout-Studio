@@ -9,6 +9,26 @@ from scout.config import Config
 ROOT=Path(__file__).resolve().parents[1]/'models'
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_managed_metal_selection_keeps_cpu_decode_and_cpu_fallback(self):
+        from scout.model_defaults import ensure_default
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);store=ModelStore(root/'store')
+            ensure_default(store,prepare_default_bundle(ROOT,root/'bundle'))
+            weights=root/'yolo.pt';weights.write_bytes(b'fixture')
+            cfg=Config(device='auto')
+            with patch('scout.inference.reference_weights',return_value=weights), \
+                 patch('scout.model_packs._cuda_status',return_value=(False,'no CUDA')), \
+                 patch('scout.model_packs._mps_status',return_value=True), \
+                 patch('scout.inference.prepare_graph',return_value=root/'model.onnx') as export, \
+                 patch('scout.inference.version',return_value='unavailable'):
+                store.apply(cfg,store.active())
+                self.assertEqual(cfg.device,'mps');self.assertFalse(cfg.decode_gpu)
+                self.assertFalse(cfg.half);self.assertIsNone(cfg.quantize)
+                export.assert_not_called()
+                fallback_to_cpu(cfg)
+                self.assertEqual(cfg.device,'cpu');self.assertEqual(cfg.detector_backend,'onnx')
+                self.assertTrue(Path(cfg.model_path).is_file())
+
     def test_windows_git_checkout_preserves_catalogue_asset_bytes(self):
         import shutil,subprocess
         from scout.model_catalog import release_files

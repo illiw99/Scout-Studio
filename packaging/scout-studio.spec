@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, co
 root = Path(SPECPATH).parent
 version = os.environ['SCOUT_STUDIO_BUILD_VERSION']
 profile = os.environ.get('SCOUT_RUNTIME_PROFILE', 'reference')
-if profile not in ('reference', 'inference'):
+if profile not in ('bootstrap', 'reference', 'inference'):
     raise ValueError('Unknown runtime profile')
 reference = profile == 'reference'
 profile_file = Path(CONF['workpath']) / 'runtime-profile.json'
@@ -19,7 +19,12 @@ profile_file.parent.mkdir(parents=True, exist_ok=True)
 profile_file.write_text(json.dumps(dict(schema=1, profile=profile)))
 datas = [(str(profile_file), '.')]
 datas += [(str(root / 'LICENSE'), '.')]
-if reference and (root/'models/catalog.json').is_file():
+if profile == 'bootstrap':
+    catalog = Path(os.environ['SCOUT_PROCESSING_CATALOG'])
+    if not catalog.is_file():
+        raise ValueError('Bootstrap requires a processing runtime catalogue')
+    datas.append((str(catalog), '.'))
+if profile in ('bootstrap', 'reference') and (root/'models/catalog.json').is_file():
     from scout.model_catalog import release_files
     for source in release_files(root/'models'):
         datas.append((str(source),str(Path('models')/source.relative_to(root/'models').parent)))
@@ -37,7 +42,7 @@ for package in ('scout', 'imageio_ffmpeg') + (('ultralytics', 'matplotlib') if r
 for package in ('scout-flag', 'imageio-ffmpeg') + (('ultralytics', 'torch', 'torchvision') if reference else ()):
     datas += copy_metadata(package)
 for package in ('onnx', 'onnxruntime', 'openvino'):
-    if importlib.util.find_spec(package):
+    if profile != 'bootstrap' and importlib.util.find_spec(package):
         datas += copy_metadata(package)
 hiddenimports = ['PySide6.QtMultimedia', 'PySide6.QtMultimediaWidgets',
                  'PySide6.QtSvg', 'PySide6.QtTest', 'cv2', 'imageio_ffmpeg']
@@ -60,7 +65,7 @@ if sys.platform == 'linux':
         if cursor_lib.is_file():
             binaries.append((str(cursor_lib), str(cursor_lib.parent.relative_to(sys.prefix))))
 for package in ('onnxruntime', 'openvino'):
-    if importlib.util.find_spec(package):
+    if profile != 'bootstrap' and importlib.util.find_spec(package):
         binaries += collect_dynamic_libs(package, search_patterns=['*.so','*.so.*','*.pyd','*.dll','*.dylib'])
         datas += collect_data_files(package)
 # Dynamic estimator/model imports are not all visible to static analysis.
@@ -71,7 +76,8 @@ a = Analysis([str(root / 'packaging' / 'launcher.py')], pathex=[str(root)],
              hookspath=[], hooksconfig={'matplotlib': {'backends': ['Agg']}},
              runtime_hooks=[], excludes=['PyQt5', 'PyQt6', 'PySide2', 'tkinter',
                                          'IPython', 'pytest'] + ([] if reference else
-                  ['torch', 'torchvision', 'ultralytics', 'sklearn', 'matplotlib']), noarchive=False)
+                  ['torch', 'torchvision', 'ultralytics', 'sklearn', 'matplotlib'] +
+                  (['onnx', 'onnxruntime', 'openvino'] if profile == 'bootstrap' else [])), noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name='Scout-Studio',
           debug=False, bootloader_ignore_signals=False, strip=False, upx=False,

@@ -85,13 +85,14 @@ def verify_windows_icon(executable: Path, icon: Path) -> None:
 
 
 def exercise_installed_app(executable: Path, report: Path, version: str,
-                           work: Path, env: dict, *, legacy=False) -> None:
+                           work: Path, env: dict, *, legacy=False, runtime_files=None) -> None:
     """Keep frozen-app errors visible even when its GUI has no console."""
     report.unlink(missing_ok=True)
     log = report.with_name('smoke-process.log')
     with log.open('w', encoding='utf-8') as stream:
         try:
-            run(executable, '--smoke-test', report, cwd=work, env=env,
+            runtime_args = ['--runtime-files', runtime_files] if runtime_files is not None and not legacy else []
+            run(executable, '--smoke-test', report, *runtime_args, cwd=work, env=env,
                 stdout=stream, stderr=subprocess.STDOUT)
         finally:
             stream.flush()
@@ -264,12 +265,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('artifacts', type=Path)
     parser.add_argument('--disposable-machine', action='store_true', help='confirm this entire user account is disposable')
+    parser.add_argument('--runtime-files', type=Path, help='explicit catalogue-identical runtime parts for bootstrap smoke checks')
     parser.add_argument('--previous', type=Path, help='verified previous release artifacts; disposable machines only')
     args = parser.parse_args()
     if os.environ.get('CI') != 'true' and not args.disposable_machine:
         raise RuntimeError('Installer checks require disposable CI or --disposable-machine; never use a personal account')
     artifacts = args.artifacts.resolve()
     info, installer, _ = artifact(artifacts)
+    if info.get('runtime_profile') == 'bootstrap' and args.runtime_files is None:
+        parser.error('--runtime-files is required to test bootstrap installers')
+    runtime_files = args.runtime_files.resolve() if args.runtime_files is not None else None
+    if runtime_files is not None and not runtime_files.is_dir():
+        parser.error('--runtime-files must be an existing directory')
     with tempfile.TemporaryDirectory(prefix='scout-studio-install-test-') as temporary:
         work = Path(temporary)
         system = info['platform']
@@ -357,7 +364,7 @@ def main() -> None:
                 run('spctl', '--assess', '--type', 'execute', destination)
                 run('xcrun', 'stapler', 'validate', installer)
             report = artifacts / ('previous-smoke-report.json' if legacy else 'smoke-report.json')
-            exercise_installed_app(executable, report, version, work, env, legacy=legacy)
+            exercise_installed_app(executable, report, version, work, env, legacy=legacy, runtime_files=runtime_files)
             if not legacy:
                 current_checks = json.loads(report.read_text())['checks']
                 assert current_checks.get('preservation_paths') is True

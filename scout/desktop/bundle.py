@@ -31,20 +31,35 @@ def main(argv=None):
         if getattr(sys, name) is None:
             setattr(sys, name, open(os.devnull, 'w', encoding='utf-8'))
     if argv and argv[0] == '--worker-job':
+        from scout.runtime import profile
+        if profile() == 'bootstrap':
+            from scout.worker import validate_job
+            if len(argv) != 2:
+                raise SystemExit('Usage: --worker-job DESCRIPTOR')
+            descriptor = Path(argv[1])
+            if descriptor.is_symlink() or descriptor.stat().st_size > 1024 * 1024:
+                raise ValueError('Unsafe processing job file')
+            job = validate_job(json.loads(descriptor.read_text()))
+            if job['command'] in ('run', 'detect', 'segment'):
+                from scout.processing_runtime import RuntimeStore, worker_environment
+                engine = RuntimeStore().prepare()
+                return subprocess.call([str(engine.executable), *argv], env=worker_environment(), **background_options())
         from scout.worker import main as worker
         return worker(argv[1:])
     if argv and argv[0] in ('--cli', '--scout-cli'):
         from scout.cli import main as cli
         return cli(argv[1:])
     if argv and argv[0] == '--smoke-test':
+        if len(argv) == 4 and argv[2] == '--runtime-files':
+            return smoke_test(Path(argv[1]).resolve(), runtime_files=Path(argv[3]).resolve())
         if len(argv) != 2:
-            raise SystemExit('Usage: --smoke-test REPORT.json')
+            raise SystemExit('Usage: --smoke-test REPORT.json [--runtime-files DIRECTORY]')
         return smoke_test(Path(argv[1]).resolve())
     from scout.desktop import main as desktop
     return desktop(argv)
 
 
-def smoke_test(report_path: Path) -> int:
+def smoke_test(report_path: Path, *, runtime_files=None) -> int:
     """Exercise the installed bundle using synthetic media and isolated settings.
 
     A JSON file works for GUI executables that have no stdout on Windows. No
@@ -55,7 +70,10 @@ def smoke_test(report_path: Path) -> int:
     report = dict(ok=False, version=__version__, frozen=bool(getattr(sys, 'frozen', False)), checks={})
     try:
         with tempfile.TemporaryDirectory(prefix='scout-studio-smoke-') as directory:
-            _exercise(Path(directory), report['checks'])
+            if runtime_files is None:
+                _exercise(Path(directory), report['checks'])
+            else:
+                _exercise(Path(directory), report['checks'], runtime_files=runtime_files)
         report['ok'] = True
     except Exception:
         report['error'] = traceback.format_exc()
@@ -83,7 +101,7 @@ def _dispose_smoke_window(window, app):
     app.processEvents()
 
 
-def _exercise(root, checks):
+def _exercise(root, checks, *, runtime_files=None):
     os.environ['YOLO_CONFIG_DIR'] = str(root / 'yolo')
     os.environ['MPLCONFIGDIR'] = str(root / 'matplotlib')
     os.environ['MPLBACKEND'] = 'Agg'
@@ -91,6 +109,29 @@ def _exercise(root, checks):
     import numpy as np
     from scout.runtime import profile
     checks['runtime_profile'] = profile()
+    if profile() == 'bootstrap':
+        import hashlib
+        from scout.processing_runtime import RuntimeStore, read_catalogue, catalogue_path, select_engine
+        catalogue = read_catalogue()
+        # Native installed checks use the exact pinned files that will be
+        # published. Production setup uses HTTPS; alternate hashes are never used.
+        store = RuntimeStore(catalogue, root / 'processing-engines', offline_parts=runtime_files)
+        reports = {}
+        chosen = select_engine(catalogue)
+        engines = sorted(catalogue['runtimes'], key=lambda engine_id: engine_id == chosen)
+        for engine_id in engines:
+            ready = store.ensure(engine_id, probe=False)
+            reports[engine_id] = store.probe(ready.executable, engine_id)
+            assert reports[engine_id].get('inference') is True
+            if engine_id != chosen:
+                import shutil
+                shutil.rmtree(store.folder(engine_id))  # This smoke test's disposable cache only.
+        ready = store.prepare()
+        checks['processing_engines'] = reports
+        checks['runtime_catalog_sha256'] = hashlib.sha256(catalogue_path().read_bytes()).hexdigest()
+        checks['inference'] = True
+        if all(report.get('openvino') is True for report in reports.values()):
+            checks['openvino'] = True
     if profile() == 'reference':
         import torch
         from torchvision.ops import nms
@@ -167,8 +208,16 @@ def _exercise(root, checks):
     worker_command = ([cli_command()[0], '--worker-job', str(descriptor)]
                       if getattr(sys, 'frozen', False)
                       else [sys.executable, '-m', 'scout.worker', str(descriptor)])
+    if profile() == 'bootstrap':
+        from scout.processing_runtime import active_engine
+        worker_command = [str(active_engine().executable), '--worker-job', str(descriptor)]
+    worker_options = {}
+    if profile() == 'bootstrap':
+        from scout.processing_runtime import worker_environment
+        worker_options['env'] = worker_environment()
     child = subprocess.run(worker_command, cwd=root, check=True, timeout=90,
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, **background_options())
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                           **worker_options, **background_options())
     result = worker.validate_result(json.loads(worker.result_path(descriptor, job).read_text()), job)
     assert result['ok'] and (game / 'Scout/clips/worker_1.mp4').is_file()
     events = [json.loads(line) for line in child.stdout.decode('utf-8').splitlines()]
@@ -177,32 +226,33 @@ def _exercise(root, checks):
 
     # Small constant graph exercises the actual CPU provider, preprocessing and
     # postprocessing without model downloads or training/football fixtures.
-    import onnx
-    from onnx import helper, TensorProto, numpy_helper
-    from scout.inference import CpuDetector
-    raw = np.zeros((1,84,1), dtype=np.float32)
-    raw[0,:4,0] = [50,50,20,20]
-    raw[0,4,0] = .9
-    graph = helper.make_model(helper.make_graph([
-        helper.make_node('Constant',[],['output0'],value=numpy_helper.from_array(raw))],
-        'installer-cpu-fixture',
-        [helper.make_tensor_value_info('images',TensorProto.FLOAT,[1,3,'height','width'])],
-        [helper.make_tensor_value_info('output0',TensorProto.FLOAT,[1,84,1])]),
-        opset_imports=[helper.make_opsetid('',17)])
-    graph.ir_version = 10
-    graph_file = root / 'fixture.onnx'
-    onnx.save(graph,str(graph_file))
-    frame = np.zeros((96,160,3),dtype=np.uint8)
-    prediction = CpuDetector(Config(model=str(graph_file),detector_backend='onnx',device='cpu',imgsz=160)).predict([frame])[0]
-    assert np.allclose(prediction.boxes, [[40,40,60,60]])
-    checks['inference'] = True
-    if sys.platform in {'win32','linux'} and getattr(sys,'frozen',False):
-        import openvino as ov
-        xml = root / 'fixture.xml'
-        ov.save_model(ov.Core().read_model(str(graph_file)),str(xml),compress_to_fp16=False)
-        exported = CpuDetector(Config(model=str(xml),detector_backend='openvino',device='cpu',imgsz=160)).predict([frame])[0]
-        assert np.allclose(exported.boxes,prediction.boxes)
-        checks['openvino'] = True
+    if profile() != 'bootstrap':
+        import onnx
+        from onnx import helper, TensorProto, numpy_helper
+        from scout.inference import CpuDetector
+        raw = np.zeros((1,84,1), dtype=np.float32)
+        raw[0,:4,0] = [50,50,20,20]
+        raw[0,4,0] = .9
+        graph = helper.make_model(helper.make_graph([
+            helper.make_node('Constant',[],['output0'],value=numpy_helper.from_array(raw))],
+            'installer-cpu-fixture',
+            [helper.make_tensor_value_info('images',TensorProto.FLOAT,[1,3,'height','width'])],
+            [helper.make_tensor_value_info('output0',TensorProto.FLOAT,[1,84,1])]),
+            opset_imports=[helper.make_opsetid('',17)])
+        graph.ir_version = 10
+        graph_file = root / 'fixture.onnx'
+        onnx.save(graph,str(graph_file))
+        frame = np.zeros((96,160,3),dtype=np.uint8)
+        prediction = CpuDetector(Config(model=str(graph_file),detector_backend='onnx',device='cpu',imgsz=160)).predict([frame])[0]
+        assert np.allclose(prediction.boxes, [[40,40,60,60]])
+        checks['inference'] = True
+        if sys.platform in {'win32','linux'} and getattr(sys,'frozen',False):
+            import openvino as ov
+            xml = root / 'fixture.xml'
+            ov.save_model(ov.Core().read_model(str(graph_file)),str(xml),compress_to_fp16=False)
+            exported = CpuDetector(Config(model=str(xml),detector_backend='openvino',device='cpu',imgsz=160)).predict([frame])[0]
+            assert np.allclose(exported.boxes,prediction.boxes)
+            checks['openvino'] = True
 
     from PySide6.QtCore import QLibraryInfo, QSettings
     from PySide6.QtWidgets import QApplication
@@ -220,6 +270,17 @@ def _exercise(root, checks):
     app = QApplication.instance() or QApplication(['Scout Studio installer check'])
     app.setApplicationName('Scout Studio')
     app.setOrganizationName('Scout')
+    if profile() == 'bootstrap':
+        from .runtime_setup import RuntimeSetupDialog
+        from PySide6.QtWidgets import QDialog
+        class SmokeSetup(RuntimeSetupDialog):
+            def failed(self, message):
+                super().failed(message)
+                self.reject()  # A disposable runner has no user to press Retry.
+        setup = SmokeSetup(store=store)
+        assert setup.exec() == QDialog.DialogCode.Accepted, setup.status.text()
+        assert setup.ready_engine is not None
+        checks['runtime_setup'] = True
     if os.environ.get('SCOUT_INSTALL_TEST_DATA_ROOT'):
         from PySide6.QtCore import QStandardPaths
         actual = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppLocalDataLocation)

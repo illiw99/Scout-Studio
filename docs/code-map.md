@@ -48,6 +48,8 @@ when moving responsibilities; read only paths relevant to the task.
 | Versioned local worker jobs, progress events and verified results | `scout/worker.py`, `tests/test_worker.py`, `tests/test_runtime_boundary.py` |
 | Themed numeric step buttons and dropdown indicators | `scout/desktop/form_controls.py`, `scout/desktop/export_dialog.py` |
 | Native theme, application identity and app icons | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/identity.py`, `scout/desktop/scout.svg`, `scout/desktop/scout.ico`, `scripts/build-icons.py` |
+| Native first-launch engine setup, downloads and verified cache | `scout/processing_runtime.py`, `scout/desktop/runtime_setup.py`, `docs/runtime-delivery.md` |
+| Headless runtime builds, small installers and engine catalogues | `scripts/build-runtime.py`, `packaging/runtime-worker.spec`, `docs/runtime-delivery-contract.md` |
 | Frozen runtime profile and reduced-bundle validation | `scout/runtime.py`, `tests/test_runtime_profile.py`, `docs/runtime-validation-2026-11-05.md` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
 | Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |

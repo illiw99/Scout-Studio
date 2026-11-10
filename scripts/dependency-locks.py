@@ -27,6 +27,8 @@ UV_VERSION = "0.9.7"
 CUTOFF = "2026-11-06"
 TARGETS = {
     "linux-x86_64-cpu": ("x86_64-manylinux_2_35", "cpu", "2.7.1+cpu", "0.22.1+cpu"),
+    "linux-x86_64-cu128": ("x86_64-manylinux_2_35", "cu128", "2.7.1+cu128", "0.22.1+cu128"),
+    "windows-x86_64-cpu": ("x86_64-pc-windows-msvc", "cpu", "2.7.1+cpu", "0.22.1+cpu"),
     "windows-x86_64-cu128": ("x86_64-pc-windows-msvc", "cu128", "2.7.1+cu128", "0.22.1+cu128"),
     "macos-arm64": ("aarch64-apple-darwin", None, "2.7.1", "0.22.1"),
     "macos-x86_64": ("x86_64-apple-darwin", None, "2.2.2", "0.17.2"),
@@ -112,6 +114,10 @@ def validate(target: str, text: str) -> None:
         raise ValueError(f"{target}: OpenVINO must be Windows/Linux only")
     if target.startswith("macos") and any(name.startswith("nvidia-") and name != "nvidia-ml-py" for name in dependencies):
         raise ValueError(f"{target}: CUDA dependency leaked into macOS")
+    if backend == 'cpu' and any(name.startswith('nvidia-') and name != 'nvidia-ml-py' for name in dependencies):
+        raise ValueError(f'{target}: CUDA dependency leaked into CPU engine')
+    if target == 'linux-x86_64-cu128' and 'nvidia-cuda-runtime-cu12' not in dependencies:
+        raise ValueError('Linux CUDA engine requires the CUDA runtime wheel')
     if target.startswith("windows") and "pefile" not in dependencies:
         raise ValueError("Windows marker dependency pefile missing")
     if target.startswith("macos") and "macholib" not in dependencies:
@@ -169,7 +175,7 @@ def pip_run(arguments, **kwargs):
                    if not key.startswith('PIP_') and key not in {'PYTHONPATH', 'PYTHONHOME'}}
     environment['PIP_CONFIG_FILE'] = os.devnull
     return subprocess.run([sys.executable, '-I', '-m', 'pip', '--isolated',
-                           '--disable-pip-version-check', *arguments], env=environment, **kwargs)
+                           '--disable-pip-version-check', '--no-cache-dir', *arguments], env=environment, **kwargs)
 
 
 def install_locked(target):

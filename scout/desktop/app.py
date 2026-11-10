@@ -803,9 +803,9 @@ class Studio(QMainWindow):
         filename, _ = QFileDialog.getOpenFileName(self, 'Import inference model pack', '', 'Model pack (*.zip)')
         if filename:
             store = self.model_store()
-            self.task(lambda _: store.install(filename),
-                      lambda selected: QMessageBox.information(self, 'Model pack imported',
-                          f'{selected} is installed. Activate it from the Models menu when ready.'))
+            self.model_operation(store, 'import', filename,
+                lambda selected: QMessageBox.information(self, 'Model pack imported',
+                    f'{selected} is installed. Activate it from the Models menu when ready.'))
 
     def activate_model_pack(self):
         store = self.model_store()
@@ -815,12 +815,28 @@ class Studio(QMainWindow):
                 return
             selected, ok = choose_item(self, 'Activate model pack', 'Pack:', packs)
             if ok:
-                self.task(lambda _: store.activate(selected), self.model_pack_changed)
+                self.model_operation(store, 'activate', selected, self.model_pack_changed)
         self.task(lambda _: store.list(), choose)
 
     def rollback_model_pack(self):
         store = self.model_store()
-        self.task(lambda _: store.rollback(), self.model_pack_changed)
+        self.model_operation(store, 'rollback', None, self.model_pack_changed)
+
+    def model_operation(self, store, action, value, complete):
+        from scout.runtime import profile
+        if profile() == 'bootstrap':
+            from .runtime_setup import ensure_setup
+            from scout.processing_runtime import model_operation
+            try:
+                if not ensure_setup(self):
+                    return
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.show_error(str(exc))
+                return
+            self.task(lambda _: model_operation(store, action, value), complete)
+        else:
+            name = 'install' if action == 'import' else action
+            self.task(lambda _: getattr(store, name)(value) if value is not None else getattr(store, name)(), complete)
 
     def model_pack_changed(self, selected):
         self.detection_profile.setCurrentIndex(self.detection_profile.findData('active-pack'))
@@ -1567,6 +1583,14 @@ class Studio(QMainWindow):
         self.play_name.setFocus()
 
     def enqueue(self, command, options=None):
+        if command in ('run','detect','segment'):
+            from .runtime_setup import ensure_setup
+            try:
+                if not ensure_setup(self):
+                    return
+            except (OSError, ValueError, RuntimeError) as exc:
+                self.show_error(str(exc))
+                return
         if command == 'cut' and not self.resolve_marker_dirty():
             return
         if self.match and not self.importing and not self.match_busy():
@@ -2363,6 +2387,11 @@ class Studio(QMainWindow):
         event.acceptProposedAction()
 
     def closeEvent(self, event):
+        setup = getattr(self, 'runtime_setup_dialog', None)
+        if setup is not None and setup.busy:
+            setup.reject()
+            event.ignore()
+            return
         if self.importing or self.jobs.current or self.jobs.pending or self.tasks:
             self.show_error('Scout is still working. Wait for imports to finish, or cancel the app queue before closing.')
             event.ignore()
@@ -2422,6 +2451,15 @@ def main(argv=None):
         root.mkdir(parents=True, exist_ok=True)
     window = Studio(root)
     window.show()
+    from scout.runtime import profile
+    if profile() == 'bootstrap':
+        from .runtime_setup import ensure_setup
+        def prepare_engine():
+            try:
+                ensure_setup(window)
+            except (OSError, ValueError, RuntimeError) as exc:
+                window.show_error(str(exc))
+        QTimer.singleShot(0, prepare_engine)
     return app.exec()
 
 

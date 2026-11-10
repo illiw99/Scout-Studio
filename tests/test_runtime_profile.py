@@ -16,6 +16,8 @@ class RuntimeProfileTests(unittest.TestCase):
             path = Path(directory) / 'runtime-profile.json'
             path.write_text(json.dumps(dict(schema=1, profile='inference')))
             self.assertEqual(runtime.profile(), 'inference')
+            path.write_text(json.dumps(dict(schema=1, profile='bootstrap')))
+            self.assertEqual(runtime.profile(), 'bootstrap')
             path.write_text(json.dumps(dict(schema=True, profile='inference')))
             with self.assertRaises(ValueError):
                 runtime.profile()

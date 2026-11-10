@@ -25,7 +25,7 @@ jobs:
           - {platform: macos-arm64, os: macos-15}
           - {platform: macos-x86_64, os: macos-15-intel}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -46,6 +46,11 @@ jobs:
           with open(os.environ['GITHUB_PATH'], 'a') as output:
               output.write(str(scripts) + '\n')
           PYTHON
+      - name: Free unused SDK space on disposable Linux build runner
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          df -h .
       - name: Install exact platform dependency snapshot
         shell: bash
         env:
@@ -53,7 +58,7 @@ jobs:
         run: |
           case "$TARGET" in
             linux-x86_64) snapshot=linux-x86_64-cpu ;;
-            windows-x86_64) snapshot=windows-x86_64-cu128 ;;
+            windows-x86_64) snapshot=windows-x86_64-cpu ;;
             *) snapshot="$TARGET" ;;
           esac
           python scripts/dependency-locks.py --install --target "$snapshot"
@@ -63,10 +68,32 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libpulse0 libasound2
-      - name: Verify Windows bundle dependencies retain CUDA support
-        if: runner.os == 'Windows'
-        # Hosted runners have no GPU: verify build support, not device availability.
-        run: python -c "import torch; assert torch.version.cuda is not None, 'Windows installer requires CUDA-capable PyTorch'; print('Bundling CUDA', torch.version.cuda)"
+      - name: Freeze and probe native processing engines in separate pinned environments
+        shell: bash
+        env:
+          TARGET: ${{ matrix.platform }}
+        run: |
+          python - <<'PYTHON'
+          import os, shutil, subprocess, sys
+          from pathlib import Path
+          target = os.environ['TARGET']
+          engines = [target] if target.startswith('macos') else [target + '-cpu', target + '-cuda']
+          for engine in engines:
+              python = Path(sys.executable)
+              environment = None
+              if engine.endswith('-cuda'):
+                  environment = Path('cuda-build-environment').resolve()
+                  subprocess.run([str(python), '-m', 'venv', str(environment)], check=True)
+                  python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+                  subprocess.run([str(python), 'scripts/dependency-locks.py', '--install',
+                                  '--target', engine.replace('-cuda', '-cu128')], check=True)
+              work = Path('build') / ('runtime-' + engine)
+              subprocess.run([str(python), 'scripts/build-runtime.py', '--engine-id', engine,
+                              '--work-dir', str(work), '--output-dir', 'dist/installers'], check=True)
+              shutil.rmtree(work)
+              if environment:
+                  shutil.rmtree(environment)
+          PYTHON
       - name: Install Inno Setup
         if: runner.os == 'Windows'
         shell: pwsh
@@ -89,7 +116,7 @@ jobs:
           SCOUT_WINDOWS_CERT_SHA1: ${{ github.event_name != 'pull_request' && vars.SCOUT_WINDOWS_CERT_SHA1 || '' }}
           SCOUT_MAC_SIGN_IDENTITY: ${{ github.event_name != 'pull_request' && vars.SCOUT_MAC_SIGN_IDENTITY || '' }}
           SCOUT_MAC_NOTARY_PROFILE: ${{ github.event_name != 'pull_request' && vars.SCOUT_MAC_NOTARY_PROFILE || '' }}
-        run: python scripts/build-installers.py
+        run: python scripts/build-installers.py --runtime-profile bootstrap --runtime-files dist/installers
       - name: Fetch explicitly pinned upgrade baseline
         if: vars.SCOUT_UPGRADE_BASELINE_VERSION != ''
         shell: bash
@@ -146,7 +173,7 @@ jobs:
           - {platform: macos-arm64, os: macos-15}
           - {platform: macos-x86_64, os: macos-15-intel}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       # Deliberately no checkout or Python/application dependency installation.
       - uses: actions/setup-python@v5
@@ -159,6 +186,7 @@ jobs:
       - name: Install Linux desktop runtime and virtual display
         if: runner.os == 'Linux'
         run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
           sudo apt-get update
           sudo apt-get install -y xvfb xauth libasound2 libpulse0
       - name: Verify downloaded candidate before installing
@@ -171,10 +199,10 @@ jobs:
             --commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
       - name: Install, exercise and uninstall (Linux)
         if: runner.os == 'Linux'
-        run: xvfb-run -a python downloaded/test-installer.py downloaded
+        run: xvfb-run -a python downloaded/test-installer.py downloaded --runtime-files downloaded
       - name: Install, exercise and uninstall (Windows/macOS)
         if: runner.os != 'Linux'
-        run: python downloaded/test-installer.py downloaded
+        run: python downloaded/test-installer.py downloaded --runtime-files downloaded
       - name: Record successful installed-candidate checks
         shell: bash
         env:

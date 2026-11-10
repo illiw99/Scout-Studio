@@ -1029,6 +1029,18 @@ def main(argv=None) -> int:
         if not hasattr(args, k):
             setattr(args, k, None)
     try:
+        from scout.runtime import profile
+        processing_command = args.cmd in (
+                'run', 'detect', 'segment', 'preview', 'export-detector',
+                'export-classifier', 'train', 'tune', 'eval', 'benchmark-pipeline')
+        probing_pack = args.cmd == 'model-pack' and args.action in ('build','import','activate','rollback')
+        if profile() == 'bootstrap' and (processing_command or probing_pack):
+            from scout.processing_runtime import RuntimeStore, worker_environment
+            import subprocess
+            engine = RuntimeStore().prepare(progress=lambda message, percent:
+                print(f'  {message}: {percent}%', flush=True))
+            return subprocess.call([str(engine.executable), '--scout-cli',
+                                    *(sys.argv[1:] if argv is None else argv)], env=worker_environment())
         return args.fn(args)
     except (ValueError, OSError, RuntimeError) as exc:
         print(f"scout: {exc}", file=sys.stderr)

@@ -28,6 +28,7 @@ PLATFORMS = {
     'macos-x86_64': ('Darwin', 'x86_64', '.dmg', 'macOS 15'),
 }
 SMOKE_CHECKS = ('dependencies', 'ffmpeg', 'export', 'gui', 'playback', 'cli', 'worker', 'inference')
+MAX_RELEASE_ASSET = 2 * 1024 ** 3
 
 
 def require(condition, message):
@@ -51,9 +52,9 @@ def file_at(directory, name):
     return path
 
 
-def read_json(path):
+def read_json(path, maximum=2 * 1024 * 1024):
     require(not path.is_symlink() and path.is_file(), f'Missing or unsafe JSON: {path.name}')
-    require(path.stat().st_size <= 2 * 1024 * 1024, 'Oversized manifest/report')
+    require(path.stat().st_size <= maximum, 'Oversized manifest/report')
     value = json.loads(path.read_text(encoding='utf-8'))
     require(isinstance(value, dict), f'Expected JSON object: {path.name}')
     return value
@@ -97,6 +98,60 @@ def baseline_files(info, target):
     return (name, name + '.sha256', 'upgrade-baseline.json')
 
 
+def processing_files(directory, info, target):
+    """Bind every separately downloaded engine part to the tested installer."""
+    name = info.get('processing_catalog')
+    if name is None:
+        require(info.get('runtime_profile') != 'bootstrap', 'Bootstrap installer has no engine catalogue')
+        return ()
+    require(name == 'runtime-catalog.json', 'Unexpected engine catalogue name')
+    catalog = read_json(file_at(directory, name), maximum=8 * 1024 * 1024)
+    expected = {target} if target.startswith('macos-') else {target + '-cpu', target + '-cuda'}
+    require(catalog.get('schema') == 1 and catalog.get('application_version') == info['version']
+            and isinstance(catalog.get('runtimes'), dict) and set(catalog['runtimes']) == expected,
+            'Incompatible processing-engine catalogue')
+    names = [name]
+    for engine_id, spec in catalog['runtimes'].items():
+        parts = spec.get('parts') if isinstance(spec, dict) else None
+        require(isinstance(parts, list) and 1 <= len(parts) <= 32, 'Invalid engine part set')
+        for index, part in enumerate(parts, 1):
+            filename = f'Scout-Runtime-{info["version"]}-{engine_id}.tar.gz.part{index:03d}'
+            require(isinstance(part, dict) and part.get('name') == filename
+                    and type(part.get('size')) is int and 0 < part['size'] <= 1024 ** 3
+                    and isinstance(part.get('sha256'), str) and re.fullmatch('[0-9a-f]{64}', part['sha256']),
+                    'Invalid engine part identity')
+            path = file_at(directory, filename)
+            require(path.stat().st_size == part['size'] and sha256(path) == part['sha256'],
+                    'Processing-engine part changed: ' + filename)
+            names.append(filename)
+    require(len(set(names)) == len(names), 'Duplicate engine part')
+    return tuple(names)
+
+
+def processing_smoke(directory, manifest, report):
+    if manifest.get('runtime_profile') != 'bootstrap':
+        return
+    info = read_json(directory / 'build-info.json')
+    catalog_name = info.get('processing_catalog')
+    checks = report.get('checks', {})
+    require(checks.get('runtime_setup') is True
+            and checks.get('runtime_catalog_sha256') == manifest['files'][catalog_name]['sha256'],
+            'Installed catalogue differs from the tested candidate')
+    catalog = read_json(directory / catalog_name, maximum=8 * 1024 * 1024)
+    engines = checks.get('processing_engines')
+    require(isinstance(engines, dict) and set(engines) == set(catalog['runtimes']),
+            'Every native engine must pass an installed probe')
+    for engine_id, probe in engines.items():
+        require(isinstance(probe, dict) and probe.get('ok') is True
+                and probe.get('nms') is True and probe.get('inference') is True
+                and probe.get('application_version') == manifest['version']
+                and probe.get('engine_id') == engine_id and 'cpu' in probe.get('devices', []),
+                'Processing-engine probe failed or mismatched')
+        if engine_id.endswith('-cuda'):
+            require(isinstance(probe.get('cuda_build'), str) and probe['cuda_build'],
+                    'CUDA engine lost CUDA build support')
+
+
 def create(directory, target, identity):
     info = read_json(directory / 'build-info.json')
     name = installer_name(info.get('version'), target)
@@ -106,8 +161,12 @@ def create(directory, target, identity):
             'Build metadata does not match target installer')
     helper = directory / 'release-candidate.py'
     require(not helper.exists() and not helper.is_symlink(), 'Candidate helper already exists')
+    processing = processing_files(directory, info, target)
+    for filename in (name, *processing):
+        require(file_at(directory, filename).stat().st_size < MAX_RELEASE_ASSET,
+                'Release asset exceeds GitHub size limit: ' + filename)
     shutil.copyfile(Path(__file__), helper)
-    names = (name, 'build-info.json', 'test-installer.py', helper.name) + baseline_files(info, target)
+    names = (name, 'build-info.json', 'test-installer.py', helper.name) + baseline_files(info, target) + processing
     files = {item: dict(sha256=sha256(file_at(directory, item)),
                         size=file_at(directory, item).stat().st_size) for item in names}
     result = dict(schema=1, context=identity, platform=target, version=info['version'],
@@ -130,7 +189,8 @@ def verify(directory, target, identity):
     build_record = manifest.get('files', {}).get('build-info.json', {})
     require(build_record.get('sha256') == sha256(file_at(directory, 'build-info.json')), 'Candidate file changed: build-info.json')
     info = read_json(directory / 'build-info.json')
-    expected = {name, 'build-info.json', 'test-installer.py', 'release-candidate.py', *baseline_files(info, target)}
+    expected = {name, 'build-info.json', 'test-installer.py', 'release-candidate.py',
+                *baseline_files(info, target), *processing_files(directory, info, target)}
     files = manifest.get('files')
     require(isinstance(files, dict) and set(files) == expected, 'Invalid candidate file set')
     for filename, record in files.items():
@@ -144,7 +204,7 @@ def verify(directory, target, identity):
             and info.get('platform') == system
             and str(info.get('architecture', '')).lower().replace('amd64', 'x86_64') == arch,
             'Candidate build metadata mismatch')
-    require(info.get('runtime_profile', 'reference') in ('reference', 'inference')
+    require(info.get('runtime_profile', 'reference') in ('reference', 'inference', 'bootstrap')
             and manifest.get('runtime_profile', 'reference') == info.get('runtime_profile', 'reference'),
             'Candidate runtime profile mismatch')
     baseline = info.get('upgrade_baseline')
@@ -190,7 +250,8 @@ def upgrade_evidence(directory, manifest, *, required=False):
 
 def record_test(directory, target, identity):
     manifest = verify(directory, target, identity)
-    smoke(directory, manifest['version'])
+    report = smoke(directory, manifest['version'])
+    processing_smoke(directory, manifest, report)
     result = dict(schema=1, context=identity, platform=target,
                   candidate_sha256=sha256(directory / 'candidate.json'),
                   installer_sha256=manifest['files'][manifest['installer']]['sha256'],
@@ -223,6 +284,7 @@ def assemble(downloaded, selection, tag, output, *, require_upgrade=False):
                     smoke_sha256=sha256(file_at(directory, 'smoke-report.json')),
                     install_and_uninstall_passed=True), 'Missing, stale or mismatched install evidence')
         report = smoke(directory, manifest['version'])
+        processing_smoke(directory, manifest, report)
         candidates.append((directory, manifest, evidence, report))
     output.parent.mkdir(parents=True, exist_ok=True)
     # Verify all inputs before assembling; expose only a complete release set.
@@ -236,6 +298,17 @@ def assemble(downloaded, selection, tag, output, *, require_upgrade=False):
             digest = sha256(stage / name)
             require(digest == evidence['installer_sha256'], 'Installer changed during release assembly')
             checksums.append(f'{digest}  {name}\n')
+            info = read_json(directory / 'build-info.json')
+            for part_name in processing_files(directory, info, manifest['platform']):
+                if part_name == 'runtime-catalog.json':
+                    continue  # Each installer embeds its pinned platform catalogue.
+                require(not (stage / part_name).exists(), 'Duplicate published engine part')
+                shutil.copyfile(file_at(directory, part_name), stage / part_name)
+                part_digest = sha256(stage / part_name)
+                require(part_digest == manifest['files'][part_name]['sha256']
+                        and (stage / part_name).stat().st_size < MAX_RELEASE_ASSET,
+                        'Engine part changed during release assembly')
+                checksums.append(f'{part_digest}  {part_name}\n')
             platforms.append(dict(candidate=manifest, test_result=evidence, smoke_report=report))
         (stage / 'SHA256SUMS.txt').write_text(''.join(sorted(checksums)), encoding='utf-8')
         write_new(stage / 'release-manifest.json', dict(schema=1, context=identity, tag=tag,

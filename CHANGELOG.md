@@ -5,7 +5,20 @@ implementation and validation history.
 
 ## Unreleased
 
+## 1.0.2 — 2026-11-09
+
+- Smaller native installers on Windows, macOS and Linux, with the same
+  first-launch hardware-aware processing-engine setup wizard.
+- Separate verified CPU/CUDA engines and native macOS CPU/Metal support, with
+  cancellable downloads, CPU fallback and cache repair.
+- Keep review/export available offline and run heavy model operations in the
+  downloaded worker. Preserve existing job, model and review integrity checks.
+- Publish runtime parts below GitHub's per-file limit; bind every part to native
+  install-test evidence and the installer's embedded catalogue.
+
 ## 1.0.1 — 2026-11-09
+
+Tag created; installer publication was blocked by GitHub's 2 GiB Windows asset limit.
 
 ### Models and runtime
 

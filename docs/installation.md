@@ -7,7 +7,9 @@
 Download an installer from [GitHub Releases](https://github.com/illiw99/Scout-Studio/releases).
 Installers appear after a version tag promotes the exact files from a successful
 main-branch build and installation-test run; tags do not rebuild installers.
-Python, the native Qt GUI, detection dependencies and FFmpeg are bundled.
+Python, the native Qt GUI, media/export support and our decision models are bundled.
+On first launch the same setup wizard automatically downloads and verifies the
+processing engine appropriate for the computer. See [automatic setup](runtime-delivery.md).
 
 | Platform | Download | Install |
 | --- | --- | --- |
@@ -35,7 +37,9 @@ the index folder, backs it up, and explicitly imports an existing index or backu
 Footage, fields, reviews, configuration
 and exports live outside the installed application; uninstalling keeps that library.
 Installers include our approved play decision model and selected Person
-Transformer with their matching configuration. Personal footage and generic
+Transformer with their matching configuration. Large inference libraries are
+downloaded by the first-launch setup wizard, rather than embedded in every
+installer. Personal footage and generic
 pretrained detector weights are excluded. First detection fetches verified YOLO
 weights and, on CPU, prepares a cached OpenVINO/ONNX export. Later runs reuse
 those cached files. Studio defaults to the approved automatic GPU/CPU pipeline;
@@ -43,11 +47,11 @@ explicit custom model selections remain supported. Existing review libraries can
 be edited and exported without downloading a detector. See the
 [model inventory](model-inventory.md) for weight origins and measured quality.
 
-New Windows builds bundle CUDA 12.8-capable PyTorch: detection automatically uses
-a supported NVIDIA GPU with a compatible driver, otherwise CPU. Earlier Windows
+Setup downloads CUDA 12.8-capable PyTorch for supported NVIDIA systems on
+Windows/Linux, otherwise the CPU engine. macOS receives its native CPU/Metal
+engine. Earlier Windows
 releases bundled CPU-only PyTorch and cannot use CUDA inference. AMD and Intel
-GPUs are not selected by the current PyTorch backend. Linux installers use CPU
-PyTorch; all installers bundle FFmpeg. CUDA inference and video decoding are
+GPUs are not selected by the current PyTorch backend. All installers bundle FFmpeg. CUDA inference and video decoding are
 separate capabilities. A CUDA-capable detector does not enable FFmpeg GPU decoding.
 See [detector performance](detection-performance.md) for faster model candidates.
 For a custom system FFmpeg or Linux CUDA inference, use the Python installation

@@ -100,3 +100,25 @@ class PrecisionTests(unittest.TestCase):
             self.assertEqual(full, key(half=False))
             with self.assertRaisesRegex(ValueError, 'quantize'):
                 key(quantize='int8')
+
+    def test_downloaded_engines_do_not_reuse_other_engine_or_device_detections(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / 'video.mp4'
+            source.write_bytes(b'cache identity fixture')
+            clip = Clip(MediaInfo(source, 1., 160, 90, 25., None), 0., 0)
+            cfg = Config(model=str(Path(folder) / 'not-downloaded.pt'))
+            with patch('scout.runtime.processing_identity', return_value=None):
+                legacy = _cache_key(cfg, clip)
+            identity = dict(engine='linux-x86_64-cuda', dependencies={'torch': '2.7.0'})
+            with patch('scout.runtime.processing_identity', return_value=identity):
+                downloaded = _cache_key(cfg, clip)
+                self.assertNotEqual(legacy, downloaded)
+                cfg.device = 'cpu'
+                self.assertNotEqual(downloaded, _cache_key(cfg, clip))
+                cpu = _cache_key(cfg, clip)
+            identity['dependencies']['torch'] = '2.8.0'
+            with patch('scout.runtime.processing_identity', return_value=identity):
+                self.assertNotEqual(cpu, _cache_key(cfg, clip))
+            with patch('scout.runtime.processing_identity', return_value=None):
+                cfg.device = 'auto'
+                self.assertEqual(legacy, _cache_key(cfg, clip))

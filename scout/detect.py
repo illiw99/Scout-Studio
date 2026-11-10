@@ -85,6 +85,11 @@ def _cache_key(cfg: Config, clip: Clip) -> str:
         elif weights.suffix=='.xml' and weights.with_suffix('.bin').is_file():
             binary=weights.with_suffix('.bin')
             settings['graph_weights']=(str(binary.resolve()),binary.stat().st_size,binary.stat().st_mtime_ns)
+    else:
+        from .runtime import processing_identity
+        identity = processing_identity()
+        if identity is not None:
+            settings['processing_engine'] = dict(identity, device=cfg.device)
     precision = _precision_name(cfg)
     # Keep all existing default fp16 caches valid. Only explicit nondefault
     # precision needs a new identity; aliases share the same cache.

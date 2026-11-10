@@ -101,6 +101,65 @@ def notarize(path):
         os.environ['SCOUT_MAC_NOTARY_PROFILE'], '--wait')
 
 
+def prepare_processing_catalog(directory: Path, output: Path, version: str, system: str, arch: str) -> Path:
+    """Verify complete native packs before embedding their immutable catalogue."""
+    if system in ('Linux', 'Windows'):
+        ids = [f'{system.lower()}-x86_64-{backend}' for backend in ('cpu', 'cuda')]
+    else:
+        ids = [f'macos-{arch}']
+    runtimes = {}
+    for engine_id in ids:
+        source = directory / f'runtime-{engine_id}.json'
+        if source.is_symlink() or not source.is_file():
+            raise ValueError(f'Missing native runtime metadata: {source.name}')
+        document = json.loads(source.read_text(encoding='utf-8'))
+        if (set(document) != {'schema', 'application_version', 'runtimes'} or document['schema'] != 1
+                or document['application_version'] != version or set(document['runtimes']) != {engine_id}):
+            raise ValueError('Incompatible processing runtime metadata')
+        runtime = document['runtimes'][engine_id]
+        expected_entry = 'Scout-Worker/Scout-Worker' + ('.exe' if system == 'Windows' else '')
+        if (set(runtime) != {'entrypoint', 'archive', 'uncompressed_size', 'members', 'parts'}
+                or runtime['entrypoint'] != expected_entry or runtime['archive'] != 'tar.gz'
+                or not isinstance(runtime['members'], dict) or not 1 <= len(runtime['members']) <= 40000
+                or expected_entry not in runtime['members']
+                or not isinstance(runtime['parts'], list) or not runtime['parts']):
+            raise ValueError('Invalid processing runtime metadata')
+        total = 0
+        names = set()
+        for name, item in runtime['members'].items():
+            if (not isinstance(name, str) or not name.startswith('Scout-Worker/') or '\\' in name
+                    or ':' in name or '\x00' in name or name.casefold() in names
+                    or any(part in ('', '.', '..') for part in name.split('/'))
+                    or set(item) != {'size', 'sha256', 'mode'} or type(item['size']) is not int or item['size'] < 0
+                    or not re.fullmatch('[a-f0-9]{64}', item['sha256']) or type(item['mode']) is not int
+                    or item['mode'] not in (0o644, 0o755)):
+                raise ValueError('Invalid processing runtime member')
+            names.add(name.casefold())
+            total += item['size']
+        if runtime['uncompressed_size'] != total or not 0 < total <= 24 * 1024**3:
+            raise ValueError('Invalid processing runtime size')
+        for index, part in enumerate(runtime['parts'], 1):
+            name = f'Scout-Runtime-{version}-{engine_id}.tar.gz.part{index:03d}'
+            if (set(part) != {'name', 'size', 'sha256'} or part['name'] != name
+                    or type(part['size']) is not int or not 0 < part['size'] <= 1024**3
+                    or not re.fullmatch('[a-f0-9]{64}', part['sha256'])):
+                raise ValueError('Invalid processing runtime part')
+            path = directory / name
+            if (path.is_symlink() or not path.is_file() or path.stat().st_size != part['size']
+                    or sha256(path) != part['sha256']):
+                raise ValueError(f'Processing runtime part checksum mismatch: {name}')
+            destination = output / name
+            if destination.resolve() != path.resolve():
+                shutil.copy2(path, destination)
+        runtimes[engine_id] = runtime
+    catalog = output / 'runtime-catalog.json'
+    serialized = json.dumps(dict(schema=1, application_version=version, runtimes=runtimes), indent=2) + '\n'
+    if len(serialized.encode('utf-8')) > 8 * 1024**2:
+        raise ValueError('Processing runtime catalogue exceeds client size limit')
+    catalog.write_text(serialized, encoding='utf-8')
+    return catalog
+
+
 def build() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version-only', action='store_true')
@@ -109,8 +168,9 @@ def build() -> None:
     parser.add_argument('--ffmpeg-binary', type=Path, help='explicit FFmpeg executable to stage and bundle with its dynamic dependencies')
     parser.add_argument('--work-dir', type=Path, help='override the platform build working directory')
     parser.add_argument('--output-dir', type=Path, help='override the installer output directory')
-    parser.add_argument('--runtime-profile', choices=('reference', 'inference'), default='reference',
+    parser.add_argument('--runtime-profile', choices=('bootstrap', 'reference', 'inference'), default='reference',
                         help='inference excludes training/reference frameworks; requires an installed inference model pack')
+    parser.add_argument('--runtime-files', type=Path, help='directory containing native runtime metadata and verified parts (bootstrap only)')
     args = parser.parse_args()
     if (args.baseline_pack is None) != (args.baseline_sha256 is None):
         parser.error('--baseline-pack and --baseline-sha256 must be supplied together')
@@ -118,6 +178,10 @@ def build() -> None:
     if args.version_only:
         print(version)
         return
+    if args.runtime_profile == 'bootstrap' and args.runtime_files is None:
+        parser.error('--runtime-files is required for bootstrap installers')
+    if args.runtime_profile != 'bootstrap' and args.runtime_files is not None:
+        parser.error('--runtime-files requires the bootstrap profile')
     system = platform.system()
     arch = platform.machine().lower()
     signed = signing_configuration(system)
@@ -132,6 +196,12 @@ def build() -> None:
     output.mkdir(parents=True, exist_ok=True)
     os.environ['SCOUT_STUDIO_BUILD_VERSION'] = version
     os.environ['SCOUT_RUNTIME_PROFILE'] = args.runtime_profile
+    catalog = None
+    if args.runtime_profile == 'bootstrap':
+        catalog = prepare_processing_catalog(args.runtime_files.resolve(), output, version, system, arch)
+    previous_catalog = os.environ.pop('SCOUT_PROCESSING_CATALOG', None)
+    if catalog is not None:
+        os.environ['SCOUT_PROCESSING_CATALOG'] = str(catalog)
     previous_baseline = os.environ.pop('SCOUT_BASELINE_DIR', None)
     previous_ffmpeg = os.environ.pop('SCOUT_FFMPEG_BINARY', None)
     try:
@@ -159,6 +229,9 @@ def build() -> None:
                 '--distpath', work / 'dist', '--workpath', work / 'pyinstaller',
                 ROOT / 'packaging/scout-studio.spec')
     finally:
+        os.environ.pop('SCOUT_PROCESSING_CATALOG', None)
+        if previous_catalog is not None:
+            os.environ['SCOUT_PROCESSING_CATALOG'] = previous_catalog
         os.environ.pop('SCOUT_BASELINE_DIR', None)
         if previous_baseline is not None:
             os.environ['SCOUT_BASELINE_DIR'] = previous_baseline
@@ -237,10 +310,13 @@ def build() -> None:
             run('xcrun', 'stapler', 'staple', installer)
             run('xcrun', 'stapler', 'validate', installer)
             run('codesign', '--verify', '--strict', installer)
+    if installer.stat().st_size >= 2 * 1024**3:
+        raise ValueError('Installer exceeds the release asset size limit')
     digest = sha256(installer)
     (output / f'{installer.name}.sha256').write_text(f'{digest}  {installer.name}\n', encoding='utf-8')
     (output / 'build-info.json').write_text(json.dumps({'version': version, 'platform': system,
         'architecture': arch, 'installer': installer.name, 'runtime_profile': args.runtime_profile,
+        **({'processing_catalog': 'runtime-catalog.json'} if args.runtime_profile == 'bootstrap' else {}),
         'signing': ('authenticode-verified' if system == 'Windows' else 'notarized-verified') if signed else 'not-configured'}, indent=2) + '\n', encoding='utf-8')
     shutil.copy2(ROOT / 'scripts/test-installer.py', output / 'test-installer.py')
     print(installer)

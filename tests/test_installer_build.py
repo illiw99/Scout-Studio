@@ -395,3 +395,44 @@ class BaselineBuildTests(unittest.TestCase):
             namespace['sys'].platform = 'linux'
             exec(code, namespace)
             self.assertEqual(namespace['binaries'], [])
+
+
+class BootstrapBuildTests(unittest.TestCase):
+    def test_bootstrap_requires_explicit_native_runtime_files(self):
+        module = builder()
+        with patch.object(sys, 'argv', ['build-installers.py', '--runtime-profile', 'bootstrap']), \
+             patch.object(module, 'run') as run, contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                module.build()
+        run.assert_not_called()
+
+    def test_bootstrap_spec_excludes_heavy_frameworks_and_embeds_catalogue(self):
+        source = (Path(__file__).resolve().parents[1] / 'packaging/scout-studio.spec').read_text()
+        tree = ast.parse(source)
+        analysis = next(node for node in ast.walk(tree) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'Analysis')
+        excluded = next(keyword.value for keyword in analysis.keywords if keyword.arg == 'excludes')
+        expression = compile(ast.Expression(excluded), '<spec-excludes>', 'eval')
+        bootstrap = eval(expression, {'reference': False, 'profile': 'bootstrap'})
+        self.assertTrue(set(['torch', 'torchvision', 'ultralytics', 'sklearn', 'matplotlib', 'onnx', 'onnxruntime', 'openvino']).issubset(bootstrap))
+        self.assertNotIn('torch', eval(expression, {'reference': True, 'profile': 'reference'}))
+        self.assertNotIn('onnxruntime', eval(expression, {'reference': False, 'profile': 'inference'}))
+        self.assertIn("SCOUT_PROCESSING_CATALOG", source)
+        self.assertIn("profile in ('bootstrap', 'reference')", source)
+
+
+    def test_installer_smoke_forwards_runtime_files_only_when_explicit(self):
+        path = Path(__file__).resolve().parents[1] / 'scripts/test-installer.py'
+        spec = importlib.util.spec_from_file_location('installer_runtime_test', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            report = root / 'report.json'
+            executable = root / 'Scout-Studio'
+            def run(*args, **kwargs):
+                report.write_text('{}')
+            for local, expected in ((None, ()), (root, ('--runtime-files', root))):
+                with self.subTest(local=local), patch.object(module, 'run', side_effect=run) as command, \
+                     patch.object(module, 'validate_report'), contextlib.redirect_stdout(io.StringIO()):
+                    module.exercise_installed_app(executable, report, '1.0.2', root, {}, runtime_files=local)
+                self.assertEqual(command.call_args.args, (executable, '--smoke-test', report, *expected))

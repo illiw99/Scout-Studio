@@ -1,6 +1,6 @@
 # Standalone dependency snapshots
 
-These four full transitive, hash-pinned snapshots target CPython 3.12. They include
+These six full transitive, hash-pinned snapshots target CPython 3.12. They include
 the application, desktop and inference extras, plus PyInstaller and build tools.
 They do not change the Python 3.10+ source-install contract or make desktop
 dependencies mandatory for CLI users.
@@ -8,12 +8,15 @@ dependencies mandatory for CLI users.
 | File | Target | Torch |
 | --- | --- | --- |
 | `linux-x86_64-cpu.txt` | Linux x86_64, glibc 2.35+ (Ubuntu 22.04 baseline) | 2.7.1 CPU |
+| `linux-x86_64-cu128.txt` | Linux x86_64, glibc 2.35+ | 2.7.1 CUDA 12.8, CPU fallback |
+| `windows-x86_64-cpu.txt` | Windows x86_64 | 2.7.1 CPU |
 | `windows-x86_64-cu128.txt` | Windows x86_64 | 2.7.1 CUDA 12.8, also runs on CPU |
 | `macos-arm64.txt` | macOS 15 arm64 | 2.7.1 |
 | `macos-x86_64.txt` | macOS 15 Intel | 2.2.2, torchvision 0.17.2, NumPy 1.26.4 |
 
-The Windows snapshot contains the CUDA-capable wheel; CPU fallback uses the same
-environment when CUDA is unavailable. It is not a second CPU-only installation.
+Windows and Linux each have CPU-only and CUDA-capable snapshots. The CUDA
+worker also supports CPU probing on machines without an NVIDIA GPU; first-launch
+setup can choose the smaller CPU engine independently.
 Intel macOS retains the last Intel Torch release and NumPy's compatible pre-2
 ABI. Its older OpenCV and ONNX Runtime versions are selected by wheel/ABI
 availability. All other dependencies resolve against the recorded cutoff.
@@ -68,3 +71,12 @@ macOS resolution sets `MACOSX_DEPLOYMENT_TARGET=15.0`; Linux targets glibc 2.35.
 resolves and compares the complete result. Neither establishes successful native
 installation, Torch operators, playback, codecs, GPU availability or packaging.
 Native candidate CI must install and exercise each platform separately.
+
+Processing packs use separate native CPU/CUDA build environments on Linux and
+Windows. `scripts/build-runtime.py` checks every installed pin before freezing;
+CUDA workers must pass a real CPU TorchVision NMS probe on GPU-less runners.
+macOS uses one native CPU/MPS engine per architecture. Bootstrap installers are
+frozen with `--runtime-profile bootstrap --runtime-files DIRECTORY`; they bundle
+the merged, platform-only catalogue, native Qt and approved project model files,
+while excluding ML frameworks. Pack archives materialize library links and split
+into parts of at most 1 GiB. Reference/inference installer profiles remain usable.
