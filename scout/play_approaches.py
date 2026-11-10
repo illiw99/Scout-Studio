@@ -340,15 +340,16 @@ def create_pipeline(path=None):
     return BaselinePipeline() if path is None else ArtifactPipeline(path)
 
 
-def install_pipeline(path,store):
+def install_pipeline(path,store,*,probe=True):
     """Install verified immutable assets only; never copy training/GT directories."""
     import os,shutil,tempfile
     path=Path(path);raw=path.read_bytes();identity=hashlib.sha256(raw).hexdigest()
     spec=read_manifest(path,verify=True,expected_sha256=identity)
     # Probe the portable head off the UI thread before publishing any selection.
-    predictor=create_predictor(path,expected_manifest_sha256=identity)
-    observations=Observations(np.array([0.,1.]),np.zeros((2,len(spec['names'])),np.float32),tuple(spec['names']))
-    predictor.predict(observations)
+    if probe:
+        predictor=create_predictor(path,expected_manifest_sha256=identity)
+        observations=Observations(np.array([0.,1.]),np.zeros((2,len(spec['names'])),np.float32),tuple(spec['names']))
+        predictor.predict(observations)
     store=Path(store);store.mkdir(parents=True,exist_ok=True)
     if path.read_bytes()!=raw:raise ValueError('Pipeline changed during installation')
     target=store/(spec['id']+'-'+identity[:12])

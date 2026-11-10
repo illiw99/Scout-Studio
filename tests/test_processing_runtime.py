@@ -95,7 +95,8 @@ class ProcessingRuntimeTests(unittest.TestCase):
         from scout import cli
         from types import SimpleNamespace
         ready=ReadyEngine('linux-x86_64-cpu',Path('/verified/worker'),('cpu',))
-        for args in (['detect'],['model-pack','activate','--pack','approved@1.0.0']):
+        for args in (['detect'],['model-pack','activate','--pack','approved@1.0.0'],
+                     ['play-pipeline','import','--file','/private/pipeline.json']):
             with self.subTest(args=args),patch('scout.runtime.profile',return_value='bootstrap'), \
                  patch('scout.processing_runtime.RuntimeStore') as factory, \
                  patch('scout.cli._load',side_effect=AssertionError('GUI must not load a detector')), \
@@ -104,6 +105,23 @@ class ProcessingRuntimeTests(unittest.TestCase):
                 self.assertEqual(cli.main(args),17)
                 self.assertEqual(call.call_args.args[0],[str(ready.executable),'--scout-cli',*args])
                 self.assertEqual(call.call_args.kwargs['env']['PyInstaller_RESET_ENVIRONMENT'],'1')
+
+    def test_pipeline_import_uses_engine_and_revalidates_published_recipe(self):
+        from types import SimpleNamespace
+        import scout.processing_runtime as module
+        with tempfile.TemporaryDirectory() as d:
+            store=Path(d);installed=store/'recipe'/'pipeline.json'
+            ready=ReadyEngine('linux-x86_64-cpu',Path('/verified/worker'),('cpu',))
+            with patch.object(module,'_active',ready), \
+                 patch('subprocess.run',return_value=SimpleNamespace(returncode=0,stdout=str(installed)+'\n',stderr='')) as run, \
+                 patch('scout.play_approaches.read_manifest',return_value={}) as read:
+                self.assertEqual(module.pipeline_operation(store,Path('/input/pipeline.json')),installed)
+                self.assertIn('play-pipeline',run.call_args.args[0])
+                read.assert_called_once_with(installed,verify=True)
+            with patch.object(module,'_active',ready), \
+                 patch('subprocess.run',return_value=SimpleNamespace(returncode=0,stdout='/outside/pipeline.json\n',stderr='')):
+                with self.assertRaisesRegex(ValueError,'location'):
+                    module.pipeline_operation(store,Path('/input/pipeline.json'))
 
     def test_lightweight_cli_model_list_does_not_prepare_an_engine(self):
         from scout import cli

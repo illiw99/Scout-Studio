@@ -776,7 +776,17 @@ class Studio(QMainWindow):
         def done(_):
             self.refresh_pipeline_choices()
             self.statusBar().showMessage('Pipeline installed. Choose it in Detection settings.',8000)
-        self.task(lambda _:install_pipeline(Path(path),store),done)
+        from scout.runtime import profile
+        if profile() == 'bootstrap':
+            from .runtime_setup import ensure_setup
+            from scout.processing_runtime import pipeline_operation
+            try:
+                if not ensure_setup(self):return
+            except (ValueError,OSError,RuntimeError) as exc:
+                self.show_error(str(exc));return
+            self.task(lambda _:pipeline_operation(store,Path(path)),done)
+        else:
+            self.task(lambda _:install_pipeline(Path(path),store),done)
 
     def detection_profile_changed(self, *_):
         self.settings.setValue('detectionProfile',self.detection_profile.currentData())

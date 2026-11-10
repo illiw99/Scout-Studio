@@ -55,6 +55,11 @@ def engine_probe(destination):
                 except Exception as exc:
                     report['gpu_error'] = str(exc)
             probe_inference(root, report)
+            from scout.model_catalog import directory, install_pipelines
+            if directory() is None:
+                raise RuntimeError('Processing engine lacks its bundled decision catalogue')
+            install_pipelines(root / 'pipeline-probe')
+            report['bundled_pipelines'] = True
             report['ok'] = True
         except Exception as exc:
             report['error'] = f'{type(exc).__name__}: {exc}'

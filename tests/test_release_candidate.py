@@ -38,7 +38,7 @@ class CandidateTests(unittest.TestCase):
         report=json.loads((directory/'smoke-report.json').read_text())
         report['checks'].update(runtime_profile='bootstrap',runtime_setup=True,
             runtime_catalog_sha256=manifest['files']['runtime-catalog.json']['sha256'],
-            processing_engines={engine:dict(schema=1,ok=True,nms=True,inference=True,
+            processing_engines={engine:dict(schema=1,ok=True,nms=True,inference=True,bundled_pipelines=True,
                 engine_id=engine,application_version='1.2.3',devices=['cpu'],
                 cuda_build='12.8' if engine.endswith('-cuda') else None) for engine in engines})
         (directory/'smoke-report.json').write_text(json.dumps(report))
@@ -60,6 +60,12 @@ class CandidateTests(unittest.TestCase):
         part=next(iter(runtimes.values()))['parts'][0]['name']
         (directory/part).write_bytes(b'bad')
         with self.assertRaisesRegex(ValueError,'part changed'):self.tool.verify(directory,'linux-x86_64',self.identity)
+
+    def test_bundled_pipeline_compatibility_evidence_is_required(self):
+        directory,_=self.bootstrap_fixture()
+        self.change_json('smoke-report.json',lambda report:next(iter(report['checks']['processing_engines'].values())).pop('bundled_pipelines'))
+        with self.assertRaises(ValueError):
+            self.tool.record_test(directory,'linux-x86_64',self.identity)
 
     def test_github_oversize_asset_is_rejected_before_hashing_or_promotion(self):
         directory=self.directory()

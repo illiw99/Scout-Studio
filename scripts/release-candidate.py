@@ -144,6 +144,7 @@ def processing_smoke(directory, manifest, report):
     for engine_id, probe in engines.items():
         require(isinstance(probe, dict) and probe.get('ok') is True
                 and probe.get('nms') is True and probe.get('inference') is True
+                and probe.get('bundled_pipelines') is True
                 and probe.get('application_version') == manifest['version']
                 and probe.get('engine_id') == engine_id and 'cpu' in probe.get('devices', []),
                 'Processing-engine probe failed or mismatched')

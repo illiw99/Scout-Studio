@@ -1034,7 +1034,8 @@ def main(argv=None) -> int:
                 'run', 'detect', 'segment', 'preview', 'export-detector',
                 'export-classifier', 'train', 'tune', 'eval', 'benchmark-pipeline')
         probing_pack = args.cmd == 'model-pack' and args.action in ('build','import','activate','rollback')
-        if profile() == 'bootstrap' and (processing_command or probing_pack):
+        probing_pipeline = args.cmd == 'play-pipeline' and args.action == 'import'
+        if profile() == 'bootstrap' and (processing_command or probing_pack or probing_pipeline):
             from scout.processing_runtime import RuntimeStore, worker_environment
             import subprocess
             engine = RuntimeStore().prepare(progress=lambda message, percent:

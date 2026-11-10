@@ -225,6 +225,27 @@ def model_operation(store, action, value=None):
     return selected
 
 
+def pipeline_operation(store, path):
+    """Import and probe an arbitrary recipe in the prepared processing engine."""
+    ready = active_engine()
+    if ready is None:
+        raise ValueError('Complete Scout setup before importing inference pipelines')
+    result = subprocess.run([str(ready.executable), '--scout-cli', 'play-pipeline', 'import',
+        '--store', str(store), '--file', str(path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, timeout=180, env=worker_environment(), **background_options())
+    if result.returncode:
+        raise ValueError((result.stderr or result.stdout or 'Pipeline import failed')[-2000:])
+    lines = result.stdout.strip().splitlines()
+    if not lines:
+        raise ValueError('Processing engine returned no installed pipeline')
+    target = Path(lines[-1])
+    if target.name != 'pipeline.json' or target.parent.parent.resolve() != Path(store).resolve():
+        raise ValueError('Processing engine returned an invalid pipeline location')
+    from .play_approaches import read_manifest
+    read_manifest(target, verify=True)
+    return target
+
+
 class _PartReader(io.RawIOBase):
     def __init__(self, paths):
         self.paths = iter(paths)

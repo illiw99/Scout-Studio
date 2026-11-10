@@ -9,6 +9,19 @@ from scout.config import Config
 ROOT=Path(__file__).resolve().parents[1]/'models'
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_bootstrap_prepares_pinned_models_without_importing_graph_provider(self):
+        from scout.model_defaults import ensure_default
+        from scout.play_approaches import available_pipelines,install_pipeline
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);store=ModelStore(root/'model-packs')
+            with patch('scout.runtime.profile',return_value='bootstrap'), \
+                 patch('scout.play_approaches.create_predictor',side_effect=ModuleNotFoundError('onnxruntime')):
+                self.assertEqual(ensure_default(store,ROOT),'scout-reviewed-precision@0.4.0')
+                installed=available_pipelines(root/'play-pipelines')
+                self.assertEqual(len(installed),1)
+                # Generic imports still probe even in a bootstrap process.
+                with self.assertRaises(ModuleNotFoundError):
+                    install_pipeline(installed[0][0],root/'arbitrary-import')
     def test_managed_metal_selection_keeps_cpu_decode_and_cpu_fallback(self):
         from scout.model_defaults import ensure_default
         with tempfile.TemporaryDirectory() as d:

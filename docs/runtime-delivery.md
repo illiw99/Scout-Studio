@@ -42,7 +42,10 @@ setup flow.
 Each native runner builds headless CPU/CUDA engines from separate exact/hash-pinned
 environments (one native CPU/Metal wheel on each macOS architecture). Every engine
 performs synthetic TorchVision, numeric classifier, ONNX and available OpenVINO
-checks before packaging. Engines contain no Qt. The small GUI excludes Torch,
+checks before packaging. It also probes every catalogue-pinned bundled pipeline
+head before setup succeeds. The bootstrap GUI installs those trusted recipes as
+verified data; arbitrary recipe imports run their compatibility probe in the
+prepared worker. Engines contain no Qt. The small GUI excludes Torch,
 TorchVision, Ultralytics, sklearn, matplotlib and ONNX/OpenVINO providers.
 
 Installed smoke tests use the exact catalogue-pinned runtime files from the same

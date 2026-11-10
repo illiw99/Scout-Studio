@@ -61,7 +61,11 @@ def install_pipelines(store, root=None):
     root=Path(root or directory());document=read(root)
     known={spec['id'] for _,spec in available_pipelines(store)}
     installed=[]
+    from .runtime import profile
     for name in document['pipelines']:
         path=root/name;spec=read_manifest(path,verify=True)
-        if spec['id'] not in known:installed.append(install_pipeline(path,store))
+        # Only catalogue-pinned bundled recipes may be installed as data in the
+        # lightweight GUI. The matching worker probes these same bundled heads
+        # before setup succeeds. Arbitrary imports retain their runtime probe.
+        if spec['id'] not in known:installed.append(install_pipeline(path,store,probe=profile()!='bootstrap'))
     return installed

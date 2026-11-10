@@ -11,6 +11,20 @@ os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 
 @unittest.skipUnless(importlib.util.find_spec('PySide6'),'desktop extra required')
 class RuntimeSetupTests(unittest.TestCase):
+    def test_pipeline_import_probes_in_worker_instead_of_gui(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from scout.desktop.app import Studio
+        state=SimpleNamespace(model_store=lambda:SimpleNamespace(root=Path('/private/model-packs')),
+            task=Mock(),show_error=Mock())
+        with patch('scout.desktop.app.QFileDialog.getOpenFileName',return_value=('/private/pipeline.json','')), \
+             patch('scout.runtime.profile',return_value='bootstrap'), \
+             patch('scout.desktop.runtime_setup.ensure_setup',return_value=True), \
+             patch('scout.processing_runtime.pipeline_operation',return_value=Path('/private/play-pipelines/recipe/pipeline.json')) as operation, \
+             patch('scout.play_approaches.install_pipeline',side_effect=AssertionError('GUI must not probe')):
+            Studio.import_play_pipeline(state)
+            state.task.call_args.args[0](None)
+            operation.assert_called_once_with(Path('/private/play-pipelines'),Path('/private/pipeline.json'))
     @classmethod
     def setUpClass(cls):
         from PySide6.QtWidgets import QApplication
