@@ -7,6 +7,17 @@ postprocessing together; replacing only an old PKL is insufficient. Its operatin
 point prioritizes precision while keeping recall above 95% in every measured
 validation game. See [measurements and limitations](model-improvement.md).
 
+The decision classifier is **HistGradientBoosting**, not Random Forest. The
+person-feature transformer and temporal CNN experiments are documented in the
+[approach comparison](play-approach-comparison-2026-11-07.md). A simple MLP,
+AdaBoost, Random Forest and Extra Trees have not yet received the same complete
+game-grouped comparison; the current default is the strongest validated pipeline,
+not a claim that every classifier family has been exhausted. Any replacement
+must improve event precision while retaining at least 95% per-game recall, with
+thresholds selected on development games before held-out evaluation. Compare the
+same features and folds, and report clip boundaries and complete pipeline time
+alongside classifier inference time.
+
 Studio defaults to **Default model · automatic GPU / CPU** when an active model
 or bundled default is available. Explicit saved profile choices remain respected.
 The processing worker selects a compatible NVIDIA reference runtime automatically
