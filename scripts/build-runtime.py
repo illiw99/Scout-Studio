@@ -89,7 +89,10 @@ def pack_runtime(bundle, output, engine_id, version, *, part_size=PART_SIZE):
             raise ValueError('Missing frozen worker entrypoint')
         members = {}
         archive = temporary / 'runtime.tar.gz'
-        with archive.open('wb') as stream, gzip.GzipFile(filename='', mode='wb', fileobj=stream, mtime=0) as compressed:
+        # CUDA libraries dominate these archives. Moderate compression avoids
+        # spending many runner minutes chasing the final few percent; parts
+        # retain the same integrity and size bounds at every compression level.
+        with archive.open('wb') as stream, gzip.GzipFile(filename='', mode='wb', fileobj=stream, mtime=0, compresslevel=3) as compressed:
             with tarfile.open(fileobj=compressed, mode='w|', format=tarfile.PAX_FORMAT) as tar:
                 for path in sorted(tree.rglob('*')):
                     if not path.is_file():
