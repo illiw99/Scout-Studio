@@ -124,13 +124,22 @@ def load_case(study, record, expected_names, fps):
     return dict(record=record, t=t, X=X, y=y, sha256=digest(path))
 
 
+def duration(record):
+    value = record.get('duration')
+    if value is None:
+        value = max(clip['start'] + clip['duration'] for clip in record['clips'])
+    if not np.isfinite(value) or value <= 0:
+        raise ValueError('Invalid source timeline duration')
+    return float(value)
+
+
 def score(cases, probabilities, cfg):
     events, strict, games = [], [], []
     for case, prob in zip(cases, probabilities):
         if prob.shape != case['t'].shape or not np.isfinite(prob).all() or np.any((prob < 0) | (prob > 1)):
             raise ValueError('Invalid classifier probabilities')
         record = case['record']
-        end = record['duration']
+        end = duration(record)
         spans = [(max(0., a), min(end, b)) for a, b in model.postprocess(cfg, case['t'], prob)
                  if min(end, b) > max(0., a)]
         result = interval_metrics(record['marks'], spans, 0)
@@ -229,7 +238,20 @@ def run(args):
         feature_sha256={case['record']['name']: case['sha256'] for case in development},
         development_games=[case['record']['name'] for case in development], candidates=[])
     with threadpool_limits(limits=args.threads):
-        for variant in args.variants:
+        reused = getattr(args, 'reuse_selection', None)
+        if reused is not None:
+            previous = json.loads(reused.read_text())
+            for key in ('manifest_sha256', 'baseline_sha256', 'configuration',
+                        'feature_sha256', 'threads', 'seed', 'minimum_game_recall', 'versions'):
+                # JSON arrays and Config tuples have the same canonical form.
+                if json.dumps(previous[key], sort_keys=True) != json.dumps(report[key], sort_keys=True):
+                    raise ValueError('Frozen selection inputs/settings differ: ' + key)
+            if [item['variant'] for item in previous['candidates']] != args.variants:
+                raise ValueError('Frozen selection classifier variants differ')
+            report['candidates'] = previous['candidates']
+            report['reused_selection_sha256'] = digest(reused)
+            report['development_code_sha256'] = previous['code_sha256']
+        for variant in ([] if reused is not None else args.variants):
             probabilities = {}
             fold_reports = []
             for group in groups:
@@ -255,13 +277,17 @@ def run(args):
         # Freeze ALL family parameters and the overall choice before loading any
         # held-out feature array. No validation result can change this selection.
         selected = max(report['candidates'], key=lambda x: rank(x['development'], args.minimum_recall))
-        report['selected_on_development'] = selected['variant']
+        report['selected_on_development'] = (previous['selected_on_development']
+            if reused is not None else selected['variant'])
+        if report['selected_on_development'] not in args.variants:
+            raise ValueError('Invalid frozen selection identity')
         write_new(output / 'selection.json', report)
         confirmation = [load_case(study, record, names, fps) for record in records if record['partition'] != 'development']
         for case in confirmation:
             report['feature_sha256'][case['record']['name']] = case['sha256']
         for result in report['candidates']:
             variant = result['variant']
+            (output / variant).mkdir(exist_ok=True)
             classifier = make_classifier(variant, args.seed, args.threads)
             elapsed, messages = fit(classifier, development)
             probabilities, timings = [], []
@@ -274,7 +300,7 @@ def run(args):
                     repeats.append(time.perf_counter() - start)
                 probabilities.append(prob)
                 timings.append(dict(game=case['record']['name'], rows=len(prob), prediction_seconds=repeats,
-                    median_seconds=float(np.median(repeats)), video_seconds=case['record']['duration']))
+                    median_seconds=float(np.median(repeats)), video_seconds=duration(case['record'])))
                 np.savez_compressed(output / variant / (case['record']['name'] + '-confirmation.npz'), t=case['t'], prob=prob)
             operating = replace(cfg, **result['development']['parameters'])
             result.update(confirmation=score(confirmation, probabilities, operating), timing=timings,
@@ -301,6 +327,8 @@ def main():
     parser.add_argument('--threads', type=int, default=4)
     parser.add_argument('--seed', type=int, default=17)
     parser.add_argument('--minimum-recall', type=float, default=.95)
+    parser.add_argument('--reuse-selection', type=Path,
+                        help='resume final fitting/scoring from an unchanged frozen development selection into a new output directory')
     args = parser.parse_args()
     if not 0 < args.minimum_recall <= 1 or args.threads < 1 or len(set(args.variants)) != len(args.variants):
         parser.error('Invalid recall, thread count or duplicate variants')

@@ -21,6 +21,9 @@ def script(filename='benchmark-classifiers.py'):
 
 
 class ClassifierBenchmarkTests(unittest.TestCase):
+    def test_duration_uses_full_source_timeline_for_older_confirmation_manifest(self):
+        module = script()
+        self.assertEqual(module.duration(dict(clips=[dict(start=0., duration=3.), dict(start=3., duration=5.)])), 8.)
     def test_safe_context_and_lost_action_get_different_diagnostics(self):
         module = script('report-classifier-benchmark.py')
         early = module.boundary_diagnostics([([[2, 6]], [[0, 8]])])
@@ -99,6 +102,13 @@ class ClassifierBenchmarkTests(unittest.TestCase):
             self.assertTrue(report['inputs_unchanged'])
             with self.assertRaises(ValueError):
                 module.run(args)
+            args.reuse_selection = output / 'selection.json'
+            args.out = root / 'resumed'
+            fitting.clear()
+            with patch.object(module, 'make_classifier', return_value=Classifier()), \
+                 patch.object(module, 'tune', side_effect=AssertionError('Resume must not retune')):
+                self.assertEqual(module.run(args), 0)
+            self.assertEqual(fitting, [{1., 2.}])
 
 
 if __name__ == '__main__':
