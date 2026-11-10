@@ -30,6 +30,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Frozen research heads, complete-pipeline timing and reserved full-game confirmation | `scripts/freeze-reviewed-candidate.py`, `scripts/benchmark-reviewed-pipeline.py`, `scripts/evaluate-frozen-candidate.py`, `tests/test_reviewed_game_evaluation.py` |
 | Native adaptive-field profiles, resized decode/cache coordinates and verified GPU references | `scout/cli.py`, `scout/detect.py`, `scout/media.py`, `scout/inference.py`, `tests/test_decode_profile.py`, `tests/test_reference_assets.py` |
 | Trained classifier, derived play features, evaluation and parameter tuning | `scout/model.py`, `scout/model_features.py`, `scout/evaluate.py`, `scout/tune.py` |
+| Game-grouped HGB/MLP/AdaBoost/forest comparison and timestamp metrics | `scripts/benchmark-classifiers.py`, `tests/test_classifier_benchmark.py`, `docs/classifier-options-2026-11-10.md` |
 | NumPy-only exported classifier inference and numerical/boundary checks | `scout/classifier_runtime.py`, `tests/test_classifier_runtime.py` |
 | MP4 cuts, fixed pre/post export padding, cross-source clips, audio and encoding | `scout/cut.py`, `scout/desktop/export_dialog.py`, `scout/desktop/review.py` |
 | Export filename patterns and native naming preview | `scout/clip_names.py`, `scout/desktop/export_dialog.py` |
