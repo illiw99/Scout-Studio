@@ -4,6 +4,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 from pathlib import Path
 import tarfile
 import tempfile
@@ -68,6 +69,14 @@ class RuntimeBuildTests(unittest.TestCase):
         second = self.pack(output=self.root / 'second')
         self.assertEqual(first, second)
         self.assertEqual((self.bundle / 'library.dat').read_bytes(), bytes(range(256))*3)
+
+    def test_windows_writable_stat_mode_is_normalized_in_archive_metadata(self):
+        (self.bundle / 'library.dat').chmod(0o666)
+        # Windows retains 0666 after chmod(0644); preserve that condition in the
+        # staging fixture even on POSIX so the catalogue contract is exercised.
+        with patch.object(runtime, 'materialize', side_effect=shutil.copytree):
+            spec = self.pack()['runtimes']['linux-x86_64-cpu']
+        self.assertEqual(spec['members']['Scout-Worker/library.dat']['mode'], 0o644)
 
     @unittest.skipIf(os.name == 'nt', 'Windows symlinks require privileges')
     def test_library_links_are_materialized_as_regular_archive_members(self):

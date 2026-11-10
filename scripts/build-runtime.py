@@ -95,7 +95,10 @@ def pack_runtime(bundle, output, engine_id, version, *, part_size=PART_SIZE):
                     if not path.is_file():
                         continue
                     name = path.relative_to(temporary).as_posix()
-                    item = dict(size=path.stat().st_size, sha256=sha256(path), mode=stat.S_IMODE(path.stat().st_mode))
+                    # Windows chmod only toggles read-only and stat still reports
+                    # 0666 for writable files. The archive uses portable modes.
+                    item = dict(size=path.stat().st_size, sha256=sha256(path),
+                                mode=0o755 if path.stat().st_mode & 0o111 else 0o644)
                     members[name] = item
                     info = tarfile.TarInfo(name)
                     info.size, info.mode, info.mtime = item['size'], item['mode'], 0
