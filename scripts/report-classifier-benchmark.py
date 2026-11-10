@@ -15,9 +15,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scout.model_evaluation import interval_metrics
 
 
-def boundary_diagnostics(truth_and_predictions, tolerance=1.):
+def boundary_diagnostics(truth_and_predictions, tolerance=1., cut_weight=4.):
     if not np.isfinite(tolerance) or tolerance <= 0:
         raise ValueError('Positive timing tolerance required')
+    if not np.isfinite(cut_weight) or cut_weight < 1:
+        raise ValueError('Cut weight must be finite and at least one')
     results = [interval_metrics(truth, predictions, 0) for truth, predictions in truth_and_predictions]
     start = np.asarray([value for result in results for value in result['start_errors']])
     end = np.asarray([value for result in results for value in result['end_errors']])
@@ -26,15 +28,27 @@ def boundary_diagnostics(truth_and_predictions, tolerance=1.):
         raise ValueError('Expected annotated plays')
     late_start, early_end = np.maximum(start, 0), np.maximum(-end, 0)
     early_start, late_end = np.maximum(-start, 0), np.maximum(end, 0)
+    predictions = sum(result['hits'] + result['false_positives'] for result in results)
+    accurate = int(np.count_nonzero((np.abs(start) <= tolerance) & (np.abs(end) <= tolerance)))
+    absolute = np.abs(start) + np.abs(end)
+    weighted = cut_weight * (late_start + early_end) + early_start + late_end
     def summary(errors):
         return dict(affected_plays=int(np.count_nonzero(errors > 1e-6)),
                     mean_seconds=float(np.mean(errors)) if len(errors) else None,
                     p90_seconds=float(np.percentile(errors, 90)) if len(errors) else None)
-    return dict(tolerance_seconds=tolerance, ground_truth_plays=total, matched_plays=len(start),
+    return dict(tolerance_seconds=tolerance, cut_weight=cut_weight,
+        ground_truth_plays=total, predicted_plays=predictions, matched_plays=len(start),
+        accurate_plays=accurate,
+        start_within_tolerance_recall=float(np.count_nonzero(np.abs(start) <= tolerance) / total),
+        end_within_tolerance_recall=float(np.count_nonzero(np.abs(end) <= tolerance) / total),
+        both_boundaries_accurate_precision=accurate / predictions if predictions else 0.,
+        continuous_boundary_quality_recall=float(np.exp(-absolute / (2 * tolerance)).sum() / total),
+        continuous_protective_quality_recall=float(np.exp(-weighted / (2 * tolerance)).sum() / total),
+        mean_absolute_boundary_error_seconds=float(absolute.mean() / 2) if len(start) else None,
+        mean_protective_boundary_cost_seconds=float(weighted.mean() / 2) if len(start) else None,
         late_start=summary(late_start), early_end=summary(early_end),
         early_start=summary(early_start), late_end=summary(late_end),
-        both_boundaries_accurate_recall=float(np.count_nonzero(
-            (np.abs(start) <= tolerance) & (np.abs(end) <= tolerance)) / total),
+        both_boundaries_accurate_recall=accurate / total,
         covers_play_within_tolerance_recall=float(np.count_nonzero(
             (start <= tolerance) & (end >= -tolerance)) / total),
         matched_plays_cut_by_more_than_tolerance=int(np.count_nonzero(

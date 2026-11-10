@@ -21,6 +21,44 @@ def script(filename='benchmark-classifiers.py'):
 
 
 class ClassifierBenchmarkTests(unittest.TestCase):
+    def test_saved_approach_comparison_recomputes_metrics_without_fitting(self):
+        module = script('compare-boundary-approaches.py')
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest, report, out = root/'manifest.json', root/'report.json', root/'out'
+            manifest.write_text(json.dumps([dict(name='one', marks=[[2, 6]])]))
+            report.write_text(json.dumps(dict(candidates=[dict(variant='fixture', confirmation=dict(
+                per_game=[dict(game='one', predictions=[[2, 6], [10, 12]])]))])))
+            argv = ['compare', '--report', str(report), '--manifest', str(manifest), '--out', str(out)]
+            with patch('sys.argv', argv):
+                self.assertEqual(module.main(), 0)
+            result = json.loads((out/'report.json').read_text())
+            row = result['candidates'][0]
+            self.assertEqual(row['precision'], .5)
+            self.assertEqual(row['recall'], 1.)
+            self.assertEqual(row['both_boundaries_accurate_recall'], 1.)
+            self.assertEqual(row['both_boundaries_accurate_precision'], .5)
+            self.assertTrue((out/'comparison.csv').is_file())
+            with patch('sys.argv', argv), self.assertRaises(FileExistsError):
+                module.main()
+    def test_continuous_boundary_cost_penalizes_lost_action_and_misses(self):
+        module = script('report-classifier-benchmark.py')
+        safe = module.boundary_diagnostics([([[2, 6]], [[1.5, 6.5]])])
+        cut = module.boundary_diagnostics([([[2, 6]], [[2.5, 5.5]])])
+        self.assertAlmostEqual(safe['mean_protective_boundary_cost_seconds'], .5)
+        self.assertAlmostEqual(cut['mean_protective_boundary_cost_seconds'], 2.)
+        self.assertEqual(safe['continuous_boundary_quality_recall'], cut['continuous_boundary_quality_recall'])
+        self.assertGreater(safe['continuous_protective_quality_recall'], cut['continuous_protective_quality_recall'])
+        missed = module.boundary_diagnostics([([[2, 6], [10, 14]], [[2, 6], [20, 24]])])
+        self.assertEqual(missed['both_boundaries_accurate_recall'], .5)
+        self.assertEqual(missed['both_boundaries_accurate_precision'], .5)
+        self.assertEqual(missed['continuous_boundary_quality_recall'], .5)
+        empty = module.boundary_diagnostics([([[2, 6]], [])])
+        self.assertEqual(empty['continuous_protective_quality_recall'], 0.)
+        self.assertIsNone(empty['mean_protective_boundary_cost_seconds'])
+        for weight in (0, float('nan')):
+            with self.assertRaises(ValueError):
+                module.boundary_diagnostics([([[2, 6]], [])], cut_weight=weight)
     def test_duration_uses_full_source_timeline_for_older_confirmation_manifest(self):
         module = script()
         self.assertEqual(module.duration(dict(clips=[dict(start=0., duration=3.), dict(start=3., duration=5.)])), 8.)
