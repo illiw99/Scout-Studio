@@ -81,3 +81,5 @@ Runtime state includes imported game folders and their `Scout/` state,
 by Git. Tests use temporary fixtures; do not validate by modifying a real library.
 Read README only for setup and operational details. The existing CLI setup helper
 in `scout/pick.py` is separate from the native desktop workflow.
+
+Latest visual pool and interaction ablations: `docs/visual-feature-pool-2026-11-13.md`.
