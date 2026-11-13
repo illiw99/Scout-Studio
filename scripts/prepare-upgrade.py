@@ -2,15 +2,36 @@
 """Fetch an explicitly pinned previous release; do not execute downloaded code."""
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import sys
+from urllib.request import Request, HTTPRedirectHandler, build_opener
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scout.updates import Update, _read, stage, version, REPOSITORY
 
 
-def prepare(directory, baseline, target, expected, *, read=_read, download=stage):
+class _NoTokenRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None  # Never forward the CI token to another endpoint.
+
+
+def release_read(url, limit):
+    token=os.environ.get('GH_TOKEN')
+    if not token:return _read(url,limit)
+    prefix=f'https://api.github.com/repos/{REPOSITORY}/releases/tags/v'
+    if not url.startswith(prefix) or not re.fullmatch(r'\d+\.\d+\.\d+',url[len(prefix):]):
+        raise ValueError('Authenticated baseline lookup must use the fixed release API')
+    request=Request(url,headers={'Authorization':f'Bearer {token}',
+        'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'})
+    with build_opener(_NoTokenRedirect()).open(request,timeout=30) as response:
+        data=response.read(limit+1)
+    if len(data)>limit:raise ValueError('Upgrade release metadata exceeds size limit')
+    return data
+
+
+def prepare(directory, baseline, target, expected, *, read=release_read, download=stage):
     version(baseline)
     if not isinstance(expected, str) or not re.fullmatch('[0-9a-f]{64}', expected):
         raise ValueError('A deliberately pinned previous installer SHA-256 is required')

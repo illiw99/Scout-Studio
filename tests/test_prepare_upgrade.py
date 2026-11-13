@@ -1,10 +1,12 @@
 """Pinned baseline fetches validate metadata before accepting installer bytes."""
 import importlib.util
 import json
+import io
+import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 
 def helper():
@@ -42,3 +44,14 @@ class PrepareUpgradeTests(unittest.TestCase):
             no_download.assert_not_called()
             with self.assertRaisesRegex(ValueError, 'pinned'):
                 module.prepare(root, '1.0.0', 'linux-x86_64', '', read=read, download=no_download)
+
+    def test_ci_token_is_confined_to_fixed_api_without_redirects(self):
+        module=helper();opener=Mock();opener.open.return_value=io.BytesIO(b'{}')
+        url=f'https://api.github.com/repos/{module.REPOSITORY}/releases/tags/v1.0.2'
+        with patch.dict(os.environ,GH_TOKEN='fixture-token'),patch.object(module,'build_opener',return_value=opener):
+            self.assertEqual(module.release_read(url,100),b'{}')
+            request=opener.open.call_args.args[0]
+            self.assertEqual(request.get_header('Authorization'),'Bearer fixture-token')
+            with self.assertRaises(ValueError):module.release_read('https://evil.test/releases/tags/v1.0.2',100)
+            opener.open.assert_called_once()
+        self.assertIsNone(module._NoTokenRedirect().redirect_request(None,None,None,None,None,None))
