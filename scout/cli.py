@@ -1039,7 +1039,7 @@ def main(argv=None) -> int:
             import subprocess
             engine = RuntimeStore().prepare(progress=lambda message, percent:
                 print(f'  {message}: {percent}%', flush=True))
-            return subprocess.call([str(engine.executable), '--scout-cli',
+            return subprocess.call([*engine.command, '--scout-cli',
                                     *(sys.argv[1:] if argv is None else argv)], env=worker_environment())
         return args.fn(args)
     except (ValueError, OSError, RuntimeError) as exc:

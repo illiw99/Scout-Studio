@@ -24,6 +24,8 @@ if profile == 'bootstrap':
     if not catalog.is_file():
         raise ValueError('Bootstrap requires a processing runtime catalogue')
     datas.append((str(catalog), '.'))
+    for name in json.loads(catalog.read_text(encoding='utf-8')).get('files', {}):
+        datas.append((str(catalog.parent / name), '.'))
 if profile in ('bootstrap', 'reference') and (root/'models/catalog.json').is_file():
     from scout.model_catalog import release_files
     for source in release_files(root/'models'):

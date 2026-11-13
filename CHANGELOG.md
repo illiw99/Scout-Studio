@@ -7,6 +7,10 @@ implementation and validation history.
 
 ## 1.0.3 — 2026-11-13
 
+- Publish only native installers; first-launch setup downloads pinned upstream
+  Python/processing packages into private CPU/CUDA environments, with repair
+  and cancellation. No separate runtime or support releases are required.
+
 - Ship the saved visual-only boundary refiner as the default decision pack 0.5.0;
   retain the prior classifier for rollback and Transformer compatibility.
 - Refined cuts reproduce 73.48% joint ±1-second accuracy on four confirmation

@@ -1,7 +1,7 @@
-"""Verified, cancellable delivery of isolated native processing engines.
+"""Verified, cancellable setup of isolated processing workers.
 
-The GUI never installs Python packages, changes drivers, or loads downloaded
-code. It verifies a complete versioned worker before launching a subprocess.
+Current installers fetch pinned upstream packages into a private environment.
+Legacy archive catalogues remain readable; system Python and drivers are untouched.
 """
 from __future__ import annotations
 
@@ -91,6 +91,9 @@ def read_catalogue(path=None):
 
 
 def validate_catalogue(document):
+    if isinstance(document,dict) and document.get('schema')==2:
+        from .pip_runtime import validate_catalog
+        return validate_catalog(document)
     if (not isinstance(document, dict) or type(document.get('schema')) is not int or document.get('schema') != 1
             or document.get('application_version') != __version__
             or not isinstance(document.get('runtimes'), dict)
@@ -182,6 +185,11 @@ class ReadyEngine:
     engine_id: str
     executable: Path
     devices: tuple
+    arguments: tuple = ()
+
+    @property
+    def command(self):
+        return [str(self.executable),*self.arguments]
 
 
 def active_engine():
@@ -192,6 +200,8 @@ def worker_environment():
     """Let the worker bootloader use its own libraries instead of the GUI's."""
     env = os.environ.copy()
     env.update(PYTHONDONTWRITEBYTECODE='1', PYTHONUNBUFFERED='1', PyInstaller_RESET_ENVIRONMENT='1')
+    env.pop('PYTHONPATH',None);env.pop('PYTHONHOME',None)
+    env['MPLBACKEND']='Agg'
     if getattr(sys, 'frozen', False):
         for key in ('LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'):
             if key + '_ORIG' in env:
@@ -206,7 +216,7 @@ def model_operation(store, action, value=None):
     ready = active_engine()
     if ready is None:
         raise ValueError('Complete Scout setup before changing inference model packs')
-    args = [str(ready.executable), '--scout-cli', 'model-pack', action, '--store', str(store.root)]
+    args = [*ready.command, '--scout-cli', 'model-pack', action, '--store', str(store.root)]
     if value is not None:
         args.extend(['--file' if action == 'import' else '--pack', str(value)])
     result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -230,7 +240,7 @@ def pipeline_operation(store, path):
     ready = active_engine()
     if ready is None:
         raise ValueError('Complete Scout setup before importing inference pipelines')
-    result = subprocess.run([str(ready.executable), '--scout-cli', 'play-pipeline', 'import',
+    result = subprocess.run([*ready.command, '--scout-cli', 'play-pipeline', 'import',
         '--store', str(store), '--file', str(path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, timeout=180, env=worker_environment(), **background_options())
     if result.returncode:
@@ -274,6 +284,14 @@ class _PartReader(io.RawIOBase):
 
 
 class RuntimeStore:
+    def __new__(cls,catalogue=None,root=None,**kwargs):
+        if cls is RuntimeStore:
+            document=catalogue if catalogue is not None else read_catalogue()
+            if isinstance(document,dict) and document.get('schema')==2:
+                from .pip_runtime import PipRuntimeStore
+                return PipRuntimeStore(document,root,**kwargs)
+        return super().__new__(cls)
+
     def __init__(self, catalogue=None, root=None, *, offline_parts=None, open_url=None):
         self.catalogue = validate_catalogue(catalogue) if catalogue is not None else read_catalogue()
         self.root = Path(root or cache_root()).expanduser().absolute()
@@ -469,7 +487,8 @@ class RuntimeStore:
             log = Path(temporary) / 'probe.log'
             env = worker_environment()
             with log.open('wb') as output:
-                process = subprocess.Popen([str(executable), '--engine-probe', str(report)],
+                command=(self.worker_command(executable,engine_id) if hasattr(self,'worker_command') else [str(executable)])
+                process = subprocess.Popen([*command, '--engine-probe', str(report)],
                     stdout=output, stderr=subprocess.STDOUT, env=env,
                     start_new_session=os.name == 'posix', **background_options())
                 started = time.monotonic()

@@ -107,6 +107,25 @@ def prepare_processing_catalog(directory: Path, output: Path, version: str, syst
         ids = [f'{system.lower()}-x86_64-{backend}' for backend in ('cpu', 'cuda')]
     else:
         ids = [f'macos-{arch}']
+    source_catalog = directory / 'runtime-catalog.json'
+    if source_catalog.is_file():
+        document = json.loads(source_catalog.read_text(encoding='utf-8'))
+        if document.get('schema') == 2:
+            from scout.pip_runtime import validate_catalog
+            validate_catalog(document, version=version)
+            if set(document['runtimes']) != set(ids):
+                raise ValueError('Missing native runtime metadata')
+            for name, item in document['files'].items():
+                path = directory / name
+                if (path.is_symlink() or not path.is_file() or path.stat().st_size != item['size']
+                        or sha256(path) != item['sha256']):
+                    raise ValueError('Processing recipe checksum mismatch: ' + name)
+                if path.resolve() != (output / name).resolve():
+                    shutil.copy2(path, output / name)
+            catalog = output / 'runtime-catalog.json'
+            if catalog.resolve() != source_catalog.resolve():
+                shutil.copy2(source_catalog, catalog)
+            return catalog
     runtimes = {}
     for engine_id in ids:
         source = directory / f'runtime-{engine_id}.json'
@@ -170,7 +189,7 @@ def build() -> None:
     parser.add_argument('--output-dir', type=Path, help='override the installer output directory')
     parser.add_argument('--runtime-profile', choices=('bootstrap', 'reference', 'inference'), default='reference',
                         help='inference excludes training/reference frameworks; requires an installed inference model pack')
-    parser.add_argument('--runtime-files', type=Path, help='directory containing native runtime metadata and verified parts (bootstrap only)')
+    parser.add_argument('--runtime-files', type=Path, help='directory containing verified native pip recipes (bootstrap only)')
     args = parser.parse_args()
     if (args.baseline_pack is None) != (args.baseline_sha256 is None):
         parser.error('--baseline-pack and --baseline-sha256 must be supplied together')

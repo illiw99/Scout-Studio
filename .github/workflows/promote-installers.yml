@@ -19,10 +19,6 @@ jobs:
       actions: read
       contents: write
     steps:
-      - name: Free unused SDK space for unchanged runtime assets
-        run: |
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
-          df -h .
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -62,4 +58,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
             --title "Scout Studio ${GITHUB_REF_NAME#v}" \
-            --notes 'Exact tested candidate installers; build and test identities are recorded in release-manifest.json. Signing status is recorded per platform in the manifest. See the installation guide for platform security prompts. SHA256SUMS.txt verifies download integrity.'
+            --notes 'Exact tested installers. Build, signing and installed-test evidence is retained in the matching GitHub Actions artifacts. Processing dependencies are installed from pinned upstream wheels during setup. See the installation guide for platform security prompts.'

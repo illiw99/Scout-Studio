@@ -43,7 +43,7 @@ def main(argv=None):
             if job['command'] in ('run', 'detect', 'segment'):
                 from scout.processing_runtime import RuntimeStore, worker_environment
                 engine = RuntimeStore().prepare()
-                return subprocess.call([str(engine.executable), *argv], env=worker_environment(), **background_options())
+                return subprocess.call([*engine.command, *argv], env=worker_environment(), **background_options())
         from scout.worker import main as worker
         return worker(argv[1:])
     if argv and argv[0] in ('--cli', '--scout-cli'):
@@ -235,7 +235,7 @@ def _exercise(root, checks, *, runtime_files=None):
                       else [sys.executable, '-m', 'scout.worker', str(descriptor)])
     if profile() == 'bootstrap':
         from scout.processing_runtime import active_engine
-        worker_command = [str(active_engine().executable), '--worker-job', str(descriptor)]
+        worker_command = [*active_engine().command, '--worker-job', str(descriptor)]
     worker_options = {}
     if profile() == 'bootstrap':
         from scout.processing_runtime import worker_environment

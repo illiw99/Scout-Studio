@@ -28,6 +28,30 @@ launcher = module('worker_launcher', 'packaging/worker_launcher.py')
 
 
 class RuntimeBuildTests(unittest.TestCase):
+    def test_worker_recipes_preserve_hashes_and_remove_desktop_build_packages(self):
+        for lock in (ROOT / 'packaging/locks').glob('*.txt'):
+            text = runtime.worker_requirements(lock.read_text())
+            names = set(runtime.re.findall(r'(?m)^([a-zA-Z0-9_.-]+)==', text))
+            self.assertFalse(names & runtime.EXCLUDED)
+            self.assertTrue({'torch', 'torchvision', 'numpy', 'opencv-python-headless', 'ultralytics'} <= names)
+            self.assertIn('--hash=sha256:', text)
+            self.assertIn('--index-url', text)
+
+    def test_pip_recipe_inventory_binds_launcher_wheel_and_native_locks(self):
+        from scout import __version__
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            wheel = output / f'scout_flag-{__version__}-py3-none-any.whl'
+            wheel.write_bytes(b'fixture own wheel')
+            runtime.build_recipe('linux-x86_64-cpu', output)
+            document = runtime.build_recipe('linux-x86_64-cuda', output)
+            self.assertEqual(document['schema'], 2)
+            self.assertEqual(set(document['runtimes']), {'linux-x86_64-cpu', 'linux-x86_64-cuda'})
+            self.assertEqual(len(document['files']), 4)
+            for name, item in document['files'].items():
+                self.assertEqual(item, dict(size=(output/name).stat().st_size,sha256=runtime.sha256(output/name)))
+            self.assertEqual((output/'worker_launcher.py').read_bytes(),(ROOT/'packaging/worker_launcher.py').read_bytes())
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

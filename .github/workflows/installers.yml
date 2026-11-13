@@ -68,31 +68,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libegl1 libopengl0 libxcb-cursor0 libpulse0 libasound2
-      - name: Freeze and probe native processing engines in separate pinned environments
+      - name: Build small native pip recipes
         shell: bash
         env:
           TARGET: ${{ matrix.platform }}
         run: |
           python - <<'PYTHON'
-          import os, shutil, subprocess, sys
-          from pathlib import Path
+          import os, subprocess, sys
           target = os.environ['TARGET']
           engines = [target] if target.startswith('macos') else [target + '-cpu', target + '-cuda']
           for engine in engines:
-              python = Path(sys.executable)
-              environment = None
-              if engine.endswith('-cuda'):
-                  environment = Path('cuda-build-environment').resolve()
-                  subprocess.run([str(python), '-m', 'venv', str(environment)], check=True)
-                  python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
-                  subprocess.run([str(python), 'scripts/dependency-locks.py', '--install',
-                                  '--target', engine.replace('-cuda', '-cu128')], check=True)
-              work = Path('build') / ('runtime-' + engine)
-              subprocess.run([str(python), 'scripts/build-runtime.py', '--engine-id', engine,
-                              '--work-dir', str(work), '--output-dir', 'dist/installers'], check=True)
-              shutil.rmtree(work)
-              if environment:
-                  shutil.rmtree(environment)
+              subprocess.run([sys.executable, 'scripts/build-runtime.py', '--engine-id', engine,
+                              '--output-dir', 'dist/installers'], check=True)
           PYTHON
       - name: Install Inno Setup
         if: runner.os == 'Windows'
@@ -118,15 +105,14 @@ jobs:
           SCOUT_MAC_NOTARY_PROFILE: ${{ github.event_name != 'pull_request' && vars.SCOUT_MAC_NOTARY_PROFILE || '' }}
         run: python scripts/build-installers.py --runtime-profile bootstrap --runtime-files dist/installers
       - name: Fetch explicitly pinned upgrade baseline
-        if: vars.SCOUT_UPGRADE_BASELINE_VERSION != ''
         shell: bash
         env:
           TARGET: ${{ matrix.platform }}
-          BASELINE_VERSION: ${{ vars.SCOUT_UPGRADE_BASELINE_VERSION }}
-          LINUX_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_LINUX_X86_64 }}
-          WINDOWS_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_WINDOWS_X86_64 }}
-          MAC_ARM_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_MACOS_ARM64 }}
-          MAC_INTEL_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_MACOS_X86_64 }}
+          BASELINE_VERSION: ${{ vars.SCOUT_UPGRADE_BASELINE_VERSION || '1.0.2' }}
+          LINUX_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_LINUX_X86_64 || '010c198af0b0b8ae6b88b59fb64b6e2de7c6db517f999f049ae7ca85e7b30a8f' }}
+          WINDOWS_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_WINDOWS_X86_64 || '8645ba5dfe066346ef3148b5218827fc2a2f60b3928818c1d4ade122a04e7cce' }}
+          MAC_ARM_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_MACOS_ARM64 || '90e73cb66cd9e16eed130b3abb352631445ddb23b424336c4fe5d9061a95c31e' }}
+          MAC_INTEL_HASH: ${{ vars.SCOUT_UPGRADE_SHA256_MACOS_X86_64 || '1b933166e4638007460e6621deeedb55a39d51615b65854974373d010f87fd38' }}
         run: |
           case "$TARGET" in
             linux-x86_64) baseline_hash="$LINUX_HASH" ;;
@@ -173,9 +159,10 @@ jobs:
           - {platform: macos-arm64, os: macos-15}
           - {platform: macos-x86_64, os: macos-15-intel}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
-      # Deliberately no checkout or Python/application dependency installation.
+      # No checkout or application dependency installation in the system environment.
+      # The installed application downloads upstream packages into its private engines.
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

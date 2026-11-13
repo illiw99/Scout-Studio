@@ -1,0 +1,26 @@
+{
+  "linux-x86_64": {
+    "url": "https://files.pythonhosted.org/packages/c7/59/61d8e9f1734069049abe9e593961de602397c7194712346906c075fec65f/uv-0.9.7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+    "size": 21382006,
+    "sha256": "8cf6bc2482d1293cc630f66b862b494c09acda9b7faff7307ef52667a2b3ad49",
+    "member": "uv-0.9.7.data/scripts/uv"
+  },
+  "windows-x86_64": {
+    "url": "https://files.pythonhosted.org/packages/de/7f/e3cdaffac70852f5ff933b04c7b8a06c0f91f41e563f04b689caa65b71bd/uv-0.9.7-py3-none-win_amd64.whl",
+    "size": 21443513,
+    "sha256": "62b315f62669899076a1953fba6baf50bd2b57f66f656280491331dcedd7e6c6",
+    "member": "uv-0.9.7.data/scripts/uv.exe"
+  },
+  "macos-arm64": {
+    "url": "https://files.pythonhosted.org/packages/f5/7d/b618174d8a8216af350398ace03805b2b2df6267b1745abf45556c2fda58/uv-0.9.7-py3-none-macosx_11_0_arm64.whl",
+    "size": 18345022,
+    "sha256": "0fdbfad5b367e7a3968264af6da5bbfffd4944a90319042f166e8df1a2d9de09",
+    "member": "uv-0.9.7.data/scripts/uv"
+  },
+  "macos-x86_64": {
+    "url": "https://files.pythonhosted.org/packages/6f/b7/1b1ff8dfde05e9d27abf29ebf22da48428fe1e16f0b4d65a839bd2211303/uv-0.9.7-py3-none-macosx_10_12_x86_64.whl",
+    "size": 19692886,
+    "sha256": "1aaf79b4234400e9e2fbf5b50b091726ccbb0b6d4d032edd3dfd4c9673d89dca",
+    "member": "uv-0.9.7.data/scripts/uv"
+  }
+}

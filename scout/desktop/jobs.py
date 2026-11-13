@@ -136,6 +136,7 @@ class JobQueue(QObject):
         if getattr(sys, 'frozen', False):
             from .bundle import cli_command
             executable = cli_command()[0]
+            prefix=[]
             from scout.runtime import profile as runtime_profile
             if command in ('run','detect','segment') and runtime_profile() == 'bootstrap':
                 from scout.processing_runtime import active_engine
@@ -143,12 +144,13 @@ class JobQueue(QObject):
                 if engine is None:
                     raise ValueError('Complete Scout setup before starting detection')
                 executable = str(engine.executable)
+                prefix=list(engine.arguments)
                 from scout.processing_runtime import worker_environment
                 isolated = QProcessEnvironment()
                 for key, value in worker_environment().items():
                     isolated.insert(key, value)
                 self.process.setProcessEnvironment(isolated)
-            self.process.start(executable, ['--worker-job', str(descriptor)])
+            self.process.start(executable, [*prefix,'--worker-job', str(descriptor)])
         else:
             # The absolute package parent lets other workspace folders work too.
             env.insert('PYTHONPATH', str(Path(__file__).resolve().parents[2]) + os.pathsep + os.environ.get('PYTHONPATH', ''))

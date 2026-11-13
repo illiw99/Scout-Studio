@@ -48,7 +48,7 @@ class RuntimeSetupDialog(QDialog):
         title = QLabel('Get Scout ready for your computer')
         title.setObjectName('title')
         layout.addWidget(title)
-        explanation = QLabel('Scout automatically chooses and downloads a compatible processing engine. '
+        explanation = QLabel('Scout automatically installs the processing packages for your computer in its own private environment. '
                              'This is needed once for automatic play detection. '
                              'You can skip setup to review and export saved plays offline.')
         explanation.setWordWrap(True)
@@ -90,7 +90,7 @@ class RuntimeSetupDialog(QDialog):
     def report_progress(self, message, percent):
         if not self.cancelled.is_set():
             self.status.setText(message)
-            self.progress.setRange(0, 0 if message.startswith('Checking') else 100)
+            self.progress.setRange(0, 0 if message.startswith(('Checking','Installing','Downloading')) else 100)
             self.progress.setValue(percent)
 
     def complete(self, ready):

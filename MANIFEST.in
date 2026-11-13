@@ -24,3 +24,7 @@ include models/scout-reviewed-precision/0.4.0/manifest.json
 include models/scout-reviewed-precision/0.4.0/classifier.json
 include models/person-transformer/1.0.0/pipeline.json
 include models/person-transformer/1.0.0/head.onnx
+
+include packaging/bootstrap-uv.json
+include models/scout-reviewed-precision/0.5.0/manifest.json
+include models/scout-reviewed-precision/0.5.0/classifier.json

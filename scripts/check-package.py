@@ -22,7 +22,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = {
     'pyproject.toml', 'README.md', 'LICENSE', 'MANIFEST.in', 'AGENTS.md',
-    'start-studio.sh', 'CHANGELOG.md', 'CONTRIBUTING.md', '.editorconfig', '.gitattributes',
+    'packaging/bootstrap-uv.json', 'start-studio.sh', 'CHANGELOG.md', 'CONTRIBUTING.md', '.editorconfig', '.gitattributes',
 }
 SOURCE_SUFFIXES = {
     'scout': {'.py', '.svg', '.ico'}, 'docs': {'.md'}, 'tests': {'.py'},
@@ -88,7 +88,7 @@ def validate_members(names: list[str], *, wheel: bool) -> None:
         if path.parts[0] in SOURCE_SUFFIXES:
             allowed = allowed and (path.suffix in SOURCE_SUFFIXES[path.parts[0]]
                                    or name == 'scout/py.typed')
-        allowed = allowed or known_model
+        allowed = allowed or known_model or (not wheel and name in ROOT_FILES)
         if not allowed or path.suffix in {'.pyc', '.pyo', '.pt', '.pkl', '.mp4', '.mlt', '.bak'}:
             raise AssertionError(f'Unexpected artifact member: {name}')
 
@@ -133,7 +133,8 @@ def check(root: Path = ROOT) -> None:
                      for member in members]
             validate_members(names, wheel=False)
             assert {'LICENSE', 'README.md', 'scripts/check-package.py',
-                    'tests/test_packaging.py', 'packaging/launcher.py',
+                    'tests/test_packaging.py', 'packaging/launcher.py', 'packaging/bootstrap-uv.json',
+                    'models/scout-reviewed-precision/0.5.0/classifier.json',
                     'packaging/scout-studio.spec', '.github/workflows/installers.yml', 'scout/py.typed',
                     '.github/workflows/promote-installers.yml', 'scripts/release-candidate.py',
                     'scout/desktop/scout.svg', 'scout/desktop/scout.ico'} <= set(names)

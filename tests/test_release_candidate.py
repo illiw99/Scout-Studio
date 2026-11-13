@@ -26,12 +26,16 @@ class CandidateTests(unittest.TestCase):
         (directory/'build-info.json').write_text(json.dumps(info))
         runtimes={}
         engines=[target] if target.startswith('macos-') else [target+'-cpu',target+'-cuda']
+        files={}
+        wheel='scout_flag-1.2.3-py3-none-any.whl'
         for engine in engines:
-            name=f'Scout-Runtime-1.2.3-{engine}.tar.gz.part001'
-            (directory/name).write_bytes(b'verified engine archive fixture')
-            runtimes[engine]=dict(parts=[dict(name=name,size=(directory/name).stat().st_size,
-                                             sha256=self.tool.sha256(directory/name))])
-        (directory/'runtime-catalog.json').write_text(json.dumps(dict(schema=1,application_version='1.2.3',runtimes=runtimes)))
+            name=f'requirements-{engine}.txt'
+            runtimes[engine]=dict(requirements=name,wheel=wheel,entrypoint='worker_launcher.py')
+        for name in [wheel,'worker_launcher.py']+[spec['requirements'] for spec in runtimes.values()]:
+            (directory/name).write_bytes(b'verified small recipe fixture')
+            files[name]=dict(size=(directory/name).stat().st_size,sha256=self.tool.sha256(directory/name))
+        (directory/'runtime-catalog.json').write_text(json.dumps(dict(schema=2,application_version='1.2.3',
+            python='3.12.12',target=target,bootstrap={},files=files,runtimes=runtimes)))
         for name in ('candidate.json','test-result.json','release-candidate.py'):(directory/name).unlink()
         with patch.object(self.tool.metadata,'distributions',return_value=[]):
             manifest=self.tool.create(directory,target,self.identity)
@@ -40,26 +44,31 @@ class CandidateTests(unittest.TestCase):
             runtime_catalog_sha256=manifest['files']['runtime-catalog.json']['sha256'],
             processing_engines={engine:dict(schema=1,ok=True,nms=True,inference=True,bundled_pipelines=True,
                 engine_id=engine,application_version='1.2.3',devices=['cpu'],
+                requirements_sha256=files[runtimes[engine]['requirements']]['sha256'],wheel_sha256=files[wheel]['sha256'],
                 cuda_build='12.8' if engine.endswith('-cuda') else None) for engine in engines})
         (directory/'smoke-report.json').write_text(json.dumps(report))
         self.tool.record_test(directory,target,self.identity)
         return directory,runtimes
 
-    def test_bootstrap_release_binds_and_publishes_exact_engine_parts(self):
-        directory,runtimes=self.bootstrap_fixture()
+    def test_bootstrap_release_contains_only_tested_installers(self):
+        self.bootstrap_fixture()
         self.assemble()
-        for spec in runtimes.values():
-            part=spec['parts'][0]
-            self.assertEqual((self.root/'release'/part['name']).read_bytes(),(directory/part['name']).read_bytes())
-            self.assertIn(part['name'],(self.root/'release/SHA256SUMS.txt').read_text())
+        self.assertEqual(len(list((self.root/'release').iterdir())),4)
+        self.assertTrue(all(path.suffix in ('.deb','.exe','.dmg') for path in (self.root/'release').iterdir()))
 
     def test_bootstrap_corrupt_payload_or_missing_engine_probe_blocks_release(self):
         directory,runtimes=self.bootstrap_fixture()
         self.change_json('smoke-report.json',lambda report:report['checks']['processing_engines'].clear())
         with self.assertRaises(ValueError):self.tool.record_test(directory,'linux-x86_64',self.identity)
-        part=next(iter(runtimes.values()))['parts'][0]['name']
+        part=next(iter(runtimes.values()))['requirements']
         (directory/part).write_bytes(b'bad')
-        with self.assertRaisesRegex(ValueError,'part changed'):self.tool.verify(directory,'linux-x86_64',self.identity)
+        with self.assertRaisesRegex(ValueError,'recipe changed'):self.tool.verify(directory,'linux-x86_64',self.identity)
+
+    def test_probe_must_bind_exact_recipe_hashes(self):
+        directory,_=self.bootstrap_fixture()
+        self.change_json('smoke-report.json',lambda report:next(iter(report['checks']['processing_engines'].values())).pop('requirements_sha256'))
+        with self.assertRaisesRegex(ValueError,'recipe identity'):
+            self.tool.record_test(directory,'linux-x86_64',self.identity)
 
     def test_bundled_pipeline_compatibility_evidence_is_required(self):
         directory,_=self.bootstrap_fixture()
@@ -116,16 +125,11 @@ class CandidateTests(unittest.TestCase):
         self.assemble()
         output = self.root / 'release'
         names = {self.tool.installer_name('1.2.3', target) for target in self.tool.PLATFORMS}
-        self.assertEqual({path.name for path in output.iterdir()},
-                         names | {'SHA256SUMS.txt', 'release-manifest.json'})
-        for target in self.tool.PLATFORMS:
-            name = self.tool.installer_name('1.2.3', target)
-            self.assertEqual((output / name).read_bytes(), (self.directory(target) / name).read_bytes())
-            self.assertIn(f'{self.tool.sha256(output / name)}  {name}\n',
-                          (output / 'SHA256SUMS.txt').read_text())
-        manifest = json.loads((output / 'release-manifest.json').read_text())
-        self.assertEqual(manifest['context'], self.identity)
-        self.assertEqual(len(manifest['platforms']), 4)
+        self.assertEqual({path.name for path in output.iterdir()}, names)
+        for name in names:
+            self.assertEqual((output/name).read_bytes(),
+                             (self.directory(next(target for target in self.tool.PLATFORMS
+                                                  if target in name))/name).read_bytes())
 
     def test_altered_installer_and_helper_are_rejected(self):
         for filename in ('Scout-Studio-1.2.3-linux-x86_64.deb', 'release-candidate.py',

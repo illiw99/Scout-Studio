@@ -10,6 +10,17 @@ import tempfile
 import importlib.util
 
 
+def load_engine_identity():
+    identity = Path(getattr(sys, '_MEIPASS', Path(__file__).parent)) / 'engine-id.json'
+    if identity.is_file():
+        value = json.loads(identity.read_text(encoding='utf-8'))
+        os.environ['SCOUT_ENGINE_ID'] = value['engine_id']
+        sys._scout_engine_identity = value
+
+
+load_engine_identity()
+
+
 def engine_probe(destination):
     """Exercise a real CPU operator even when this is a CUDA wheel without a GPU."""
     from scout import __version__
@@ -72,7 +83,11 @@ def engine_probe(destination):
     # The frozen identity is build data, never inferred from the caller's machine.
     identity = Path(getattr(sys, '_MEIPASS', Path(__file__).parent)) / 'engine-id.json'
     if identity.is_file():
-        report['engine_id'] = json.loads(identity.read_text(encoding='utf-8'))['engine_id']
+        value = json.loads(identity.read_text(encoding='utf-8'))
+        report['engine_id'] = value['engine_id']
+        for name in ('requirements_sha256', 'wheel_sha256'):
+            if name in value:
+                report[name] = value[name]
     Path(destination).write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     return 0 if report['ok'] else 1
 

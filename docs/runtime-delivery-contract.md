@@ -1,52 +1,41 @@
 # Processing engine delivery contract
 
-The application is version 1.0.2. Frozen `bootstrap` installers include native Qt,
-media/review/export dependencies, project decision models and a platform-specific
-`runtime-catalog.json`. They exclude Torch, TorchVision, Ultralytics, sklearn,
-matplotlib, ONNX, ONNX Runtime and OpenVINO. First-launch setup selects and prepares
-a headless processing worker in the user's cache; source installations keep their
-existing environment and reference/inference profiles remain supported.
+Scout Studio 1.0.3 bootstrap installers contain native Qt, media/export support,
+project decision models and a small platform-specific pip recipe catalogue. They
+exclude the processing frameworks. Source installations retain their explicit
+Python environment. Runtime Python is pinned to 3.12.12; the application supports
+Python 3.10+ for source installations.
 
-Bundled catalogue schema (no arbitrary download URLs):
+Catalogue schema 2 has `application_version`, `python`, `target`, `bootstrap`,
+`files` and `runtimes`. `bootstrap` pins the upstream uv 0.9.7 platform wheel URL,
+size, SHA256 and exact ZIP executable member. `packaging/bootstrap-uv.json` records
+those pins from PyPI. `files` maps simple filenames to size/SHA256 identities for
+one Scout wheel, `worker_launcher.py` and native `requirements-<engine>.txt` files.
+Every runtime maps `requirements`, `wheel` and `entrypoint` to these files. All
+recipe files are embedded adjacent to `runtime-catalog.json` in the installer.
+No generic dependency binary, archive part or support release is published.
 
-```json
-{"schema":1,"application_version":"1.0.2","runtimes":{
- "linux-x86_64-cpu":{
-  "entrypoint":"Scout-Worker/Scout-Worker",
-  "archive":"tar.gz","uncompressed_size":123,
-  "members":{"Scout-Worker/Scout-Worker":{"size":123,"sha256":"...","mode":493}},
-  "parts":[{"name":"Scout-Runtime-1.0.2-linux-x86_64-cpu.tar.gz.part001","size":123,"sha256":"..."}]
- }}}
-```
+Windows/Linux catalogues contain native CPU and CUDA recipes; macOS contains one
+native CPU/Metal recipe. Requirements preserve exact native wheel pins, hashes
+and upstream indexes from `packaging/locks/`, removing Qt, installer/build tooling
+and duplicate `opencv-python` while retaining `opencv-python-headless`.
 
-Engine ids: `windows-x86_64-cpu`, `windows-x86_64-cuda`, `linux-x86_64-cpu`,
-`linux-x86_64-cuda`, `macos-arm64`, `macos-x86_64`. macOS Torch wheels include
-CPU/MPS in one native engine. CPU/CUDA engines must use separately pinned native
-environments. Catalogue for each GUI contains its platform's engine(s) only.
+Setup verifies uv, provisions a private managed Python, and uses pip-compatible
+uv commands to install only hash-pinned upstream wheels into a private virtual
+environment. It never changes a system Python or graphics driver. Network access
+is required for initial setup and repair. Cancellation, progress, integrity
+verification and successful worker probes precede publication of readiness.
 
-Pack archives contain a frozen `Scout-Worker` onedir, with every link materialized
-as a regular file at build time and bounded, exact member SHA-256 identities.
-Archive bytes are split into parts no larger than 1 GiB; every published asset
-must be strictly below GitHub's 2 GiB limit. URLs derive exclusively from
-`https://github.com/illiw99/Scout-Studio/releases/download/v<application_version>/<part.name>`.
-Clients verify parts, each extracted member and the complete set before atomic
-publication; no archive links or path traversal are accepted. Executable modes
-come from trusted member metadata. Corrupt or partial engines never run.
+The worker runs as `<private-python> -I worker_launcher.py` followed by
+`--worker-job DESCRIPTOR`, `--scout-cli ARGS...` or `--engine-probe REPORT.json`.
+Adjacent `engine-id.json` binds the engine id, requirements hash and Scout wheel
+hash before Scout imports. Probes verify CPU NMS, classifier, ONNX inference,
+available OpenVINO and bundled pipeline compatibility; CUDA builds must probe on
+GPU-less CI. Native installed smoke prepares every platform recipe from upstream,
+then exercises the GUI, worker, export and uninstall paths.
 
-Worker command contract: `Scout-Worker[.exe] --worker-job DESCRIPTOR`;
-`--scout-cli ARGS...`; `--engine-probe REPORT.json`. The probe runs without Qt,
-verifies TorchVision NMS, Torch/Ultralytics imports and reports available devices
-and versions. It must support CPU probing in CUDA builds on GPU-less CI runners.
-All normal processing stays within existing versioned worker job/event/result
-contracts. GUI/export commands can still use the bundled small worker.
-
-Build metadata: `build-info.json.processing_catalog` is `runtime-catalog.json`.
-Candidate files include that catalogue and every referenced runtime part, plus
-existing installer/helper/evidence files. Promotion verifies/copies every runtime
-part unchanged and includes each in SHA256SUMS.txt, preserving build/test identity.
-Installer tests preseed **only** the exact expected parts via explicit
-`--runtime-files DIRECTORY` smoke-test arguments; local test files use the same
-catalogue identities, never alternate hashes or arbitrary production URLs.
-Fresh native smoke must prepare/probe each engine, execute a real worker command,
-and then exercise the installed bootstrap GUI/media/export paths. Local synthetic
-unit fixtures cover interrupted, corrupted, unsafe and incompatible downloads.
+Candidate manifests bind the installer, catalogue and each recipe file to the
+same build and installed-test evidence. Promotion verifies all four candidates
+before copying only the four unchanged deb/dmg/exe installers into the main
+release. Candidate metadata, checksums and probe reports remain in Actions
+artifacts. The legacy schema-1 archive helper remains for compatibility fixtures.

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Freeze, probe and pack a native headless engine; never install dependencies.
-
-Use a fresh environment installed with dependency-locks.py for the engine target.
-Published archives contain regular files only. Parts are at most 1 GiB each.
-"""
+"""Build small pip recipes; legacy archive packing remains for compatibility fixtures."""
 from __future__ import annotations
 
 import argparse
@@ -134,40 +130,82 @@ def pack_runtime(bundle, output, engine_id, version, *, part_size=PART_SIZE):
     return document
 
 
+EXCLUDED = {'altgraph', 'build', 'macholib', 'opencv-python', 'pefile',
+            'pyinstaller', 'pyinstaller-hooks-contrib', 'pyproject-hooks',
+            'pyside6', 'pyside6-addons', 'pyside6-essentials', 'shiboken6'}
+
+
+def worker_requirements(text):
+    """Preserve wheel pins, index options and all hashes from the native lock."""
+    blocks = re.split(r'(?m)(?=^[a-zA-Z0-9][a-zA-Z0-9_.-]*==)', text)
+    kept = []
+    for block in blocks:
+        match = re.match(r'([a-zA-Z0-9_.-]+)==', block)
+        if match and match.group(1).lower().replace('_', '-') in EXCLUDED:
+            continue
+        kept.append(block)
+    return ''.join(kept)
+
+
+def build_recipe(engine_id, output):
+    from scout import __version__
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    target = engine_id.rsplit('-', 1)[0] if engine_id.endswith(('-cpu', '-cuda')) else engine_id
+    catalog_path = output / 'runtime-catalog.json'
+    pins = json.loads((ROOT / 'packaging/bootstrap-uv.json').read_text())
+    document = dict(schema=2, application_version=__version__, python='3.12.12',
+                    target=target, bootstrap=pins[target], files={}, runtimes={})
+    if catalog_path.exists():
+        previous = json.loads(catalog_path.read_text())
+        if any(previous.get(k) != document[k] for k in ('schema', 'application_version', 'python', 'target', 'bootstrap')):
+            raise ValueError('Incompatible existing recipe catalogue')
+        document = previous
+    wheels = list(output.glob(f'scout_flag-{__version__}-*.whl'))
+    if not wheels:
+        # Build a disposable source copy: setuptools must not leave build/egg-info
+        # state in the checkout or mutate the application environment.
+        with tempfile.TemporaryDirectory(prefix='scout-wheel-') as temporary:
+            source = Path(temporary) / 'source'
+            source.mkdir()
+            for name in ('pyproject.toml', 'README.md', 'LICENSE', 'MANIFEST.in'):
+                shutil.copy2(ROOT / name, source / name)
+            shutil.copytree(ROOT / 'scout', source / 'scout', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+            from scout.model_catalog import release_files
+            for path in release_files(ROOT / 'models'):
+                destination = source / path.relative_to(ROOT)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, destination)
+            subprocess.run([sys.executable, '-c',
+                            'from setuptools.build_meta import build_wheel; '
+                            'import sys; build_wheel(sys.argv[1])', str(output.resolve())],
+                           cwd=source, check=True)
+        wheels = list(output.glob(f'scout_flag-{__version__}-*.whl'))
+    if len(wheels) != 1:
+        raise ValueError('Expected exactly one application wheel')
+    lock = ROOT / 'packaging/locks' / (engine_id.replace('-cuda', '-cu128') + '.txt')
+    requirements = output / f'requirements-{engine_id}.txt'
+    requirements.write_text(worker_requirements(lock.read_text()), encoding='utf-8')
+    launcher = output / 'worker_launcher.py'
+    shutil.copy2(ROOT / 'packaging/worker_launcher.py', launcher)
+    for path in (requirements, wheels[0], launcher):
+        document['files'][path.name] = dict(size=path.stat().st_size, sha256=sha256(path))
+    document['runtimes'][engine_id] = dict(requirements=requirements.name,
+                                         wheel=wheels[0].name, entrypoint=launcher.name)
+    catalog_path.write_text(json.dumps(document, indent=2) + '\n', encoding='utf-8')
+    return document
+
+
 def build():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Build small, hash-pinned native pip recipes')
     parser.add_argument('--engine-id', required=True, choices=ENGINES)
-    parser.add_argument('--work-dir', type=Path)
+    parser.add_argument('--work-dir', type=Path, help='accepted for compatibility; no frozen work tree is created')
     parser.add_argument('--output-dir', type=Path, default=ROOT / 'dist/installers')
     args = parser.parse_args()
     if args.engine_id not in host_engines():
         parser.error('Engine must match the native host')
-    # Require the exact native snapshot, including CUDA/CPU wheel identity.
-    spec = importlib.util.spec_from_file_location('scout_build_locks', ROOT / 'scripts/dependency-locks.py')
-    locks = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(locks)
-    target = args.engine_id.replace('-cuda', '-cu128')
-    locks.check_installed(target)
-    work = (args.work_dir or ROOT / f'build/runtime-{args.engine_id}').resolve()
-    work.mkdir(parents=True, exist_ok=True)
-    environment = dict(os.environ, SCOUT_ENGINE_ID=args.engine_id)
-    subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean',
-                    '--distpath', str(work / 'dist'), '--workpath', str(work / 'pyinstaller'),
-                    str(ROOT / 'packaging/runtime-worker.spec')], env=environment, check=True)
-    bundle = work / 'dist/Scout-Worker'
-    executable = bundle / ('Scout-Worker.exe' if args.engine_id.startswith('windows') else 'Scout-Worker')
-    report = work / 'engine-probe.json'
-    subprocess.run([str(executable), '--engine-probe', str(report)], check=True, env=environment, timeout=180)
-    probe = json.loads(report.read_text(encoding='utf-8'))
-    if not probe.get('ok') or not probe.get('inference') or not probe.get('nms') or probe.get('engine_id') != args.engine_id or 'cpu' not in probe.get('devices', []):
-        raise ValueError('Frozen worker CPU probe failed')
-    if args.engine_id.endswith('-cuda') and not probe.get('cuda_build'):
-        raise ValueError('CUDA engine was built with a CPU wheel')
-    version_spec = importlib.util.spec_from_file_location('scout_build_installers', ROOT / 'scripts/build-installers.py')
-    installer = importlib.util.module_from_spec(version_spec)
-    version_spec.loader.exec_module(installer)
-    pack_runtime(bundle, args.output_dir.resolve(), args.engine_id, installer.project_version())
-    shutil.copy2(report, args.output_dir / f'engine-probe-{args.engine_id}.json')
+    sys.path.insert(0, str(ROOT))
+    build_recipe(args.engine_id, args.output_dir.resolve())
 
 
 if __name__ == '__main__':
