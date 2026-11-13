@@ -122,6 +122,17 @@ class PipRuntimeTests(unittest.TestCase):
             with patch.object(RuntimeStore,'probe',return_value={'devices':['cpu']}):
                 with self.assertRaisesRegex(ValueError,'identity'):PipRuntimeStore.probe(store,Path('python'),engine)
 
+    def test_native_smoke_keeps_shared_python_evidence_until_both_engines_ready(self):
+        from scout.desktop.bundle import _prepare_smoke_engines
+        with tempfile.TemporaryDirectory() as d:
+            store,engine,_=self.setup_store(Path(d))
+            store.prepare=lambda:store.ensure(engine)
+            ready,reports=_prepare_smoke_engines(store,store.catalogue,engine)
+            self.assertTrue(ready.executable.exists())
+            self.assertEqual(set(reports),set(store.catalogue['runtimes']))
+            self.assertTrue(store.ensure(engine).executable.exists())
+            for other in set(reports)-{engine}:self.assertFalse(store.folder(other).exists())
+
     def test_shared_python_changes_cannot_be_blessed_by_second_engine(self):
         with tempfile.TemporaryDirectory() as d:
             store,engine,commands=self.setup_store(Path(d));store.ensure(engine)

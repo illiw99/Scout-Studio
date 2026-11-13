@@ -126,6 +126,23 @@ def _dispose_smoke_setup(dialog, app):
     assert destroyed, 'Setup dialog survived deferred deletion'
 
 
+def _prepare_smoke_engines(store, catalogue, chosen):
+    reports = {}
+    engines = sorted(catalogue['runtimes'], key=lambda engine_id: engine_id == chosen)
+    for engine_id in engines:
+        ready = store.ensure(engine_id, probe=False)
+        reports[engine_id] = store.probe(ready.executable, engine_id)
+        assert reports[engine_id].get('inference') is True
+    # The second pip engine verifies shared Python against the first engine's
+    # ready receipt. Retain both until the chosen engine is fully installed.
+    for engine_id in engines:
+        if engine_id != chosen:
+            import shutil
+            shutil.rmtree(store.folder(engine_id))  # This smoke test's disposable cache only.
+    ready = store.prepare()
+    return ready, reports
+
+
 def _exercise(root, checks, *, runtime_files=None):
     os.environ['YOLO_CONFIG_DIR'] = str(root / 'yolo')
     os.environ['MPLCONFIGDIR'] = str(root / 'matplotlib')
@@ -141,17 +158,7 @@ def _exercise(root, checks, *, runtime_files=None):
         # Native installed checks use the exact pinned files that will be
         # published. Production setup uses HTTPS; alternate hashes are never used.
         store = RuntimeStore(catalogue, root / 'processing-engines', offline_parts=runtime_files)
-        reports = {}
-        chosen = select_engine(catalogue)
-        engines = sorted(catalogue['runtimes'], key=lambda engine_id: engine_id == chosen)
-        for engine_id in engines:
-            ready = store.ensure(engine_id, probe=False)
-            reports[engine_id] = store.probe(ready.executable, engine_id)
-            assert reports[engine_id].get('inference') is True
-            if engine_id != chosen:
-                import shutil
-                shutil.rmtree(store.folder(engine_id))  # This smoke test's disposable cache only.
-        ready = store.prepare()
+        ready,reports = _prepare_smoke_engines(store,catalogue,select_engine(catalogue))
         checks['processing_engines'] = reports
         checks['runtime_catalog_sha256'] = hashlib.sha256(catalogue_path().read_bytes()).hexdigest()
         checks['inference'] = True
