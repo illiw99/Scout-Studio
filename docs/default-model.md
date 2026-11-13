@@ -1,6 +1,6 @@
 # Default Scout Studio detection profile
 
-The selected local profile is `scout-reviewed-precision@0.4.0`: YOLO26n at 1280,
+The selected local profile is `scout-reviewed-precision@0.5.0`: YOLO26n at 1280,
 2.5 samples/s, adaptive fields, time-scaled tracking, derived play features and
 wide temporal context. The profile binds its classifier, detector, sampler and
 postprocessing together; replacing only an old PKL is insufficient. Its operating
@@ -28,8 +28,10 @@ Standard reference builds include the versioned project-trained decision models
 from `models/catalog.json`. Startup prepares them in a background task without
 downloading generic detector weights. First detection fetches the pinned official
 YOLO26n weights and caches them. CPU OpenVINO/ONNX exports are generated once in
-the cache. Version 0.4.0 retains the exact accepted 0.3.0 classifier bytes and
-pipeline settings. See [model inventory](model-inventory.md).
+the cache. Version 0.5.0 retains the base decision trees and adds visual-only boundary-window
+scoring. The frozen four-game result is 73.48% for both cuts within ±1 second,
+92.05% play precision and 98.78% recall. This is repeated confirmation, not a new
+blind test or a 95% timing guarantee. See [refiner validation](visual-refiner-2026-11-13.md). See [model inventory](model-inventory.md).
 
 Bundled defaults are immutable installed versions. Automatic upgrades apply only
 to a previously managed bundled default; manual model selections and rollbacks

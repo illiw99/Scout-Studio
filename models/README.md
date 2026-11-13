@@ -4,7 +4,10 @@ Only project-trained inference models and their matching configurations live her
 No pretrained YOLO/S3D/MobileNet weights, CPU detector exports, footage, GT or training
 checkpoints are shipped in this folder.
 
-- `scout-reviewed-precision/0.4.0/classifier.json`: approved HGB decision classifier.
+- `scout-reviewed-precision/0.5.0/classifier.json`: default HGB plus visual-only
+  boundary-window scoring, exported as validated numeric JSON.
+- `scout-reviewed-precision/0.4.0/classifier.json`: prior HGB classifier, retained
+  for rollback and the Person Transformer detector/feature dependency.
   Its learned tree bytes are unchanged from accepted version 0.3.0. Version 0.4.0
   changes packaging to a decision-only pack with a pinned, lazy YOLO dependency.
 - `person-transformer/1.0.0/head.onnx`: best tested person-feature Transformer;

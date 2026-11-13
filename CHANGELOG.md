@@ -5,6 +5,16 @@ implementation and validation history.
 
 ## Unreleased
 
+## 1.0.3 — 2026-11-13
+
+- Ship the saved visual-only boundary refiner as the default decision pack 0.5.0;
+  retain the prior classifier for rollback and Transformer compatibility.
+- Refined cuts reproduce 73.48% joint ±1-second accuracy on four confirmation
+  games, with unchanged 92.05% precision / 98.78% recall; targets remain unmet.
+- Use small validated numeric weights without training dependencies; prevent
+  refinement from reversing plays or creating new overlaps.
+- Add separate refiner-overhead and bounded full-pipeline CPU/GPU benchmarks.
+
 ## 1.0.2 — 2026-11-09
 
 - Smaller native installers on Windows, macOS and Linux, with the same

@@ -138,11 +138,27 @@ def fit(cfg: Config, ds: Dataset, rows: np.ndarray | None = None):
 
 def predict(clf, f: Features, cfg: Config) -> np.ndarray:
     """P(a play is in progress) for every frame of one file."""
+    return clf.predict_proba(prediction_inputs(f,cfg))[:, 1]
+
+
+def prediction_inputs(f: Features, cfg: Config) -> np.ndarray:
+    """Shared classifier/refiner columns, in the trained temporal order."""
     cfg.validate_pipeline()
     drop = set(cfg.model_exclude or ())
     expanded, names = model_features.expand(f.X, f.names, cfg.sample_fps, cfg.model_feature_set)
     keep = [i for i, nm in enumerate(names) if nm not in drop]
-    return clf.predict_proba(window(expanded[:, keep], cfg.sample_fps, cfg.model_offsets))[:, 1]
+    return window(expanded[:, keep], cfg.sample_fps, cfg.model_offsets)
+
+
+def predicted_intervals(clf, f, cfg, duration):
+    X = prediction_inputs(f,cfg)
+    probability = clf.predict_proba(X)[:,1]
+    proposals = postprocess(cfg,f.t,probability)
+    refiner = getattr(clf,'boundary_refiner',None)
+    if refiner is None:
+        return proposals
+    proposals = [(max(0.,a),min(duration,b)) for a,b in proposals if min(duration,b)>max(0.,a)]
+    return refiner.refine(f.t,X,probability,proposals,duration)
 
 
 # --- turning probabilities back into plays --------------------------------
@@ -258,8 +274,8 @@ def load(path: Path, cfg: Config | None = None):
     if path.suffix.lower() == '.json':
         from .classifier_runtime import load as load_exported
         classifier, d = load_exported(path)
-        from .classifier_runtime import CONTEXT_FORMAT
-        if d.get('format') != CONTEXT_FORMAT and d.get('offsets') != list(OFFSETS):
+        from .classifier_runtime import CONTEXT_FORMAT, BOUNDARY_FORMAT
+        if d.get('format') not in (CONTEXT_FORMAT,BOUNDARY_FORMAT) and d.get('offsets') != list(OFFSETS):
             raise ValueError('Exported classifier temporal offsets do not match this engine')
         d['clf'] = classifier
     else:
@@ -274,7 +290,7 @@ def load(path: Path, cfg: Config | None = None):
             if d['format'] != CONTEXT_PICKLE_FORMAT or 'classifier' not in d or 'clf' in d:
                 raise ValueError('Unsupported pickle classifier format')
             d['clf'] = d['classifier']
-    if (d.get('format') == 'scout-hgb-v3' or d.get('feature_set', model_features.BASE) != model_features.BASE
+    if (d.get('format') in ('scout-hgb-v3','scout-hgb-v4') or d.get('feature_set', model_features.BASE) != model_features.BASE
             or tuple(d.get('offsets', OFFSETS)) != OFFSETS):
         offsets = model_features.validate_offsets(d.get('offsets'))
         from .features import FEATURE_NAMES

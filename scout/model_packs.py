@@ -99,7 +99,7 @@ def _manifest(document):
     if sum(item['size'] for item in files.values()) > MAX_TOTAL:
         raise ValueError('Model pack exceeds its size limit')
     if (document.get('preprocessing') != ('scout-coco-person-resized-v1' if modern else 'scout-coco-person-v1')
-            or document.get('classifier') not in (('scout-hgb-v2','scout-hgb-v3') if modern else ('scout-hgb-v1',))
+            or document.get('classifier') not in (('scout-hgb-v2','scout-hgb-v3','scout-hgb-v4') if modern else ('scout-hgb-v1',))
             or type(document.get('imgsz')) is not int or not 32 <= document['imgsz'] <= 2048
             or document['imgsz'] % 32 or type(document.get('sample_fps')) not in (int, float)
             or not 0 < document['sample_fps'] <= 30):
@@ -161,7 +161,7 @@ def verify(folder, *, probe=False):
     feature_names = model_features.names(FEATURE_NAMES, classifier.get('feature_set', model_features.BASE))
     offsets = model_features.validate_offsets(classifier['offsets'])
     if (len(set(excluded)) != len(excluded) or not set(excluded) <= set(feature_names)
-            or (classifier['format'] != 'scout-hgb-v3' and offsets != OFFSETS)
+            or (classifier['format'] not in ('scout-hgb-v3','scout-hgb-v4') and offsets != OFFSETS)
             or classifier['sample_fps'] != document['sample_fps']
             or classifier['names'] != window_names([name for name in feature_names if name not in excluded], offsets)):
         raise ValueError('Model-pack feature order, windows or sampling are incompatible')
@@ -334,6 +334,9 @@ class ModelStore:
     def apply(self, cfg, selection):
         selection = self.active() if selection == 'active' else selection
         folder = self.folder(selection)
+        if not folder.exists():
+            from .model_catalog import ensure_pack
+            ensure_pack(self,selection)
         return _configure(verify(folder),folder,cfg,choose_runtime=True)
 
     def list(self):

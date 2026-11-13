@@ -456,8 +456,7 @@ def _gt_files(cfg: Config, mlts: list[str]):
 
 
 def _plays_from_model(cfg: Config, clf, f, t_end):
-    prob = model.predict(clf, f, cfg)
-    return model.to_plays(cfg,model.postprocess(cfg,f.t,prob),t_end)
+    return model.to_plays(cfg,model.predicted_intervals(clf,f,cfg,t_end),t_end)
 
 
 def cmd_train(args) -> int:

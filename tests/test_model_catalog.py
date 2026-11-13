@@ -9,6 +9,18 @@ from scout.config import Config
 ROOT=Path(__file__).resolve().parents[1]/'models'
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_older_transformer_dependency_is_installed_without_changing_default(self):
+        from scout.model_defaults import ensure_default
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);store=ModelStore(root/'store')
+            bundle=prepare_default_bundle(ROOT,root/'bundle');ensure_default(store,bundle)
+            before=(store.root/'active.json').read_bytes()
+            with patch('scout.model_catalog.directory',return_value=ROOT), \
+                 patch('scout.model_packs._configure',return_value='configured'):
+                self.assertEqual(store.apply(Config(),'scout-reviewed-precision@0.4.0'),'configured')
+            self.assertTrue((store.folder('scout-reviewed-precision@0.4.0')/'classifier.json').is_file())
+            self.assertEqual((store.root/'active.json').read_bytes(),before)
+            self.assertEqual(store.active(),'scout-reviewed-precision@0.5.0')
     def test_bootstrap_prepares_pinned_models_without_importing_graph_provider(self):
         from scout.model_defaults import ensure_default
         from scout.play_approaches import available_pipelines,install_pipeline
@@ -16,7 +28,7 @@ class ModelCatalogTests(unittest.TestCase):
             root=Path(d);store=ModelStore(root/'model-packs')
             with patch('scout.runtime.profile',return_value='bootstrap'), \
                  patch('scout.play_approaches.create_predictor',side_effect=ModuleNotFoundError('onnxruntime')):
-                self.assertEqual(ensure_default(store,ROOT),'scout-reviewed-precision@0.4.0')
+                self.assertEqual(ensure_default(store,ROOT),'scout-reviewed-precision@0.5.0')
                 installed=available_pipelines(root/'play-pipelines')
                 self.assertEqual(len(installed),1)
                 # Generic imports still probe even in a bootstrap process.
@@ -68,7 +80,7 @@ class ModelCatalogTests(unittest.TestCase):
                 bundle=prepare_default_bundle(ROOT,root/'bundle')
                 with zipfile.ZipFile(bundle/'model-pack.zip') as archive:
                     self.assertEqual(set(archive.namelist()),{'manifest.json','classifier.json'})
-                self.assertEqual(ensure_default(store,bundle),'scout-reviewed-precision@0.4.0')
+                self.assertEqual(ensure_default(store,bundle),'scout-reviewed-precision@0.5.0')
             spec=json.loads((store.folder(store.active())/'manifest.json').read_text())
             self.assertEqual(spec['schema'],3)
             self.assertEqual(spec['backend'],'managed')
@@ -89,13 +101,13 @@ class ModelCatalogTests(unittest.TestCase):
                 fallback_to_cpu(cfg)
                 self.assertEqual(cfg.device,'cpu');self.assertEqual(cfg.detector_backend,'openvino')
                 self.assertEqual(cfg.model,str(root/'model.xml'));export.assert_called_once()
-            self.assertEqual(hashlib.sha256(Path(cfg.model_path).read_bytes()).hexdigest(),read(ROOT)['files']['scout-reviewed-precision/0.4.0/classifier.json']['sha256'])
+            self.assertEqual(hashlib.sha256(Path(cfg.model_path).read_bytes()).hexdigest(),read(ROOT)['files']['scout-reviewed-precision/0.5.0/classifier.json']['sha256'])
 
     def test_catalogue_path_and_checksum_rejection(self):
         import shutil
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)/'models';shutil.copytree(ROOT,root,ignore=shutil.ignore_patterns('play.pkl'))
-            file=root/'scout-reviewed-precision/0.4.0/classifier.json';file.write_bytes(b'corrupt')
+            file=root/'scout-reviewed-precision/0.5.0/classifier.json';file.write_bytes(b'corrupt')
             with self.assertRaises(ValueError):read(root)
             document=json.loads((root/'catalog.json').read_text());document['files']['../outside']={'size':1,'sha256':'0'*64};(root/'catalog.json').write_text(json.dumps(document))
             with self.assertRaises(ValueError):read(root)

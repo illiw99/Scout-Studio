@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "default_pack": "scout-reviewed-precision/0.4.0",
+  "default_pack": "scout-reviewed-precision/0.5.0",
   "pipelines": [
     "person-transformer/1.0.0/pipeline.json"
   ],
@@ -20,6 +20,14 @@
     "person-transformer/1.0.0/pipeline.json": {
       "size": 2160,
       "sha256": "12f910d2952f42bcf4b567a945c839d59e05db7724639319cc57589fcfa1899a"
+    },
+    "scout-reviewed-precision/0.5.0/classifier.json": {
+      "size": 800363,
+      "sha256": "73fb3da92330cf3095ce4a6651d3ed1ae2b1805c6c4e7ec607d00807ac58ae3b"
+    },
+    "scout-reviewed-precision/0.5.0/manifest.json": {
+      "size": 1678,
+      "sha256": "301c37bd888763af29a035e4aa964789c6820bb6c285c6e7ba5115b5e4b916a6"
     }
   }
 }

@@ -8,8 +8,12 @@ files shipped in source archives, wheels and standard reference installers.
 | --- | --- | --- | --- |
 | YOLO26n | Detect people in sampled frames | Official Ultralytics pretrained COCO weights; not trained on these games | Pinned official asset, downloaded on first detection and cached |
 | Tracking, motion and formation features | Convert person detections into temporal play evidence | Deterministic Scout code | Application source |
-| HGB `classifier.json` | Decide which intervals contain plays | Trained and calibrated on the reviewed development games | `models/scout-reviewed-precision/0.4.0/` |
+| HGB `classifier.json` | Decide which intervals contain plays | Trained and calibrated on the reviewed development games | `models/scout-reviewed-precision/0.5.0/` |
 | Person Transformer `head.onnx` | Alternative temporal decision model over the same person features | Best tested project-trained Transformer | `models/person-transformer/1.0.0/` |
+
+Version 0.5.0 adds two project-trained numeric boundary classifiers to that HGB
+core; no audio input or new vision backbone is used. The prior 0.4.0 pack remains
+available for rollback and the Transformer feature dependency.
 
 The HGB classifier bytes in 0.4.0 are identical to accepted 0.3.0. This version
 changes distribution and lazy detector preparation, not training or accuracy.
@@ -25,13 +29,13 @@ separate from development games; these are measured results, not guarantees.
 
 | Approach | Validation precision | Validation recall | Decision |
 | --- | ---: | ---: | --- |
-| Approved HGB, GPU pipeline | 92.05% | 98.78% | Default |
-| Approved HGB, CPU pipeline | 92.53% | 98.17% | Default CPU fallback |
+| HGB + visual boundary refiner, GPU-derived observations | 92.05% | 98.78% | Default 0.5.0 |
+| Prior HGB, CPU pipeline | 92.53% | 98.17% | Historical 0.4.0 reference |
 | Person Transformer | 87.53% | 98.48% | Selectable experiment |
 | S3D temporal head | 40.24% | 91.16% | Retire model binaries |
 | MobileNet temporal head | 35.61% | 58.84% | Retire model binaries |
 
-On the separately evaluated NT17-SAI game, the approved GPU pipeline measured
+On the separately evaluated NT17-SAI game, the prior GPU pipeline measured
 95.68% precision and 98.52% recall (133/135 plays). Full PAN timing measured
 15.86× realtime on GPU and 6.59× on CPU on this machine. The four-game aggregate
 precision remains below 95%; do not describe this as universal 95% precision.

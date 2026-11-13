@@ -17,6 +17,7 @@ from .model_features import BASE, DEFAULT_OFFSETS, FEATURE_SETS, validate_offset
 FORMAT = 'scout-hgb-v1'
 DYNAMIC_FORMAT = 'scout-hgb-v2'
 CONTEXT_FORMAT = 'scout-hgb-v3'
+BOUNDARY_FORMAT = 'scout-hgb-v4'
 FEATURE_SETTINGS=('min_person_h','max_person_h','active_speed','sprint_speed','field_axis','field_shrink_top','horizon_y')
 TREE_FIELDS = {'feature', 'threshold', 'left', 'right', 'value', 'missing_left', 'leaf'}
 
@@ -31,13 +32,13 @@ def _threshold(value):
 
 class Classifier:
     def __init__(self, document):
-        if not isinstance(document, dict) or document.get('format') not in (FORMAT,DYNAMIC_FORMAT,CONTEXT_FORMAT):
+        if not isinstance(document, dict) or document.get('format') not in (FORMAT,DYNAMIC_FORMAT,CONTEXT_FORMAT,BOUNDARY_FORMAT):
             raise ValueError('Unsupported exported classifier format')
         pipeline=document.get('feature_pipeline','legacy')
         if ((document['format']==FORMAT and pipeline!='legacy')
-                or (document['format'] in (DYNAMIC_FORMAT,CONTEXT_FORMAT) and pipeline!='dynamic-field-v1')):
+                or (document['format'] in (DYNAMIC_FORMAT,CONTEXT_FORMAT,BOUNDARY_FORMAT) and pipeline!='dynamic-field-v1')):
             raise ValueError('Unsupported classifier feature pipeline')
-        if document['format'] == CONTEXT_FORMAT:
+        if document['format'] in (CONTEXT_FORMAT,BOUNDARY_FORMAT):
             if document.get('feature_set') not in FEATURE_SETS:
                 raise ValueError('Unsupported classifier feature set')
             validate_offsets(document.get('offsets'))
@@ -92,6 +93,12 @@ class Classifier:
             converted = {key: np.asarray(value) for key, value in tree.items() if key != 'threshold'}
             converted['threshold'] = threshold
             self.trees.append(converted)
+        self.boundary_refiner = None
+        if document['format'] == BOUNDARY_FORMAT:
+            from .boundary_runtime import BoundaryRefiner
+            self.boundary_refiner = BoundaryRefiner(document.get('boundary_refiner'), self.names)
+        elif 'boundary_refiner' in document:
+            raise ValueError('Boundary refinement requires a version-four classifier')
 
     def predict_proba(self, X):
         X = np.asarray(X, dtype=np.float64)
@@ -124,7 +131,7 @@ def load(path):
         raise ValueError('Exported classifier is too large')
     document = json.loads(path.read_text(encoding='utf-8'))
     classifier = Classifier(document)
-    if document['format'] in (DYNAMIC_FORMAT,CONTEXT_FORMAT):
+    if document['format'] in (DYNAMIC_FORMAT,CONTEXT_FORMAT,BOUNDARY_FORMAT):
         settings=document.get('feature_settings')
         if (not isinstance(settings,dict) or set(settings)!=set(FEATURE_SETTINGS)
                 or type(settings['field_axis']) is not bool

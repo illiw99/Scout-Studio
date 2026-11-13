@@ -34,6 +34,8 @@ MODEL_FILES = {
     'models/catalog.json','models/README.md',
     'models/scout-reviewed-precision/0.4.0/manifest.json',
     'models/scout-reviewed-precision/0.4.0/classifier.json',
+    'models/scout-reviewed-precision/0.5.0/manifest.json',
+    'models/scout-reviewed-precision/0.5.0/classifier.json',
     'models/person-transformer/1.0.0/pipeline.json',
     'models/person-transformer/1.0.0/head.onnx',
 }

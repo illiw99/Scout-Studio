@@ -69,3 +69,21 @@ def install_pipelines(store, root=None):
         # before setup succeeds. Arbitrary imports retain their runtime probe.
         if spec['id'] not in known:installed.append(install_pipeline(path,store,probe=profile()!='bootstrap'))
     return installed
+
+
+def ensure_pack(store, selection, root=None):
+    """Lazily install a catalogue-pinned compatibility pack without activating it."""
+    root=root or directory()
+    if root is None:return False
+    root=Path(root);document=read(root)
+    relative=selection.replace('@','/')
+    if relative+'/manifest.json' not in document['files']:return False
+    from .model_packs import verify,sha
+    folder=root/relative;spec=verify(folder,probe=False)
+    if spec['schema']!=3:raise ValueError('Bundled compatibility packs must be decision-only')
+    with tempfile.TemporaryDirectory(prefix='scout-compatible-pack-') as temporary:
+        archive=Path(temporary)/'pack.zip'
+        with zipfile.ZipFile(archive,'w',compression=zipfile.ZIP_DEFLATED) as output:
+            for name in ['manifest.json',*spec['files']]:output.write(folder/name,name)
+        if store.install(archive,sha(archive))!=selection:raise ValueError('Compatibility pack identity differs')
+    return True
