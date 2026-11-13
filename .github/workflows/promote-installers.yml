@@ -58,4 +58,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" release/* --verify-tag \
             --title "Scout Studio ${GITHUB_REF_NAME#v}" \
-            --notes 'Exact tested installers. Build, signing and installed-test evidence is retained in the matching GitHub Actions artifacts. Processing dependencies are installed from pinned upstream wheels during setup. See the installation guide for platform security prompts.'
+            --notes-file release-notes.md

@@ -44,6 +44,22 @@ class UpdateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'evidence'):
             check('1.0.0', target='linux-x86_64', read=read)
 
+    def test_installer_only_release_binds_embedded_evidence_to_github_digest(self):
+        read,release,manifest,values,data=self.metadata()
+        release['assets']=[a for a in release['assets'] if a['name'].endswith('.deb')]
+        release['assets'][0]['digest']='sha256:'+hashlib.sha256(data).hexdigest()
+        release['body']='Human notes\n<!-- scout-installer-evidence-v1\n'+json.dumps(manifest)+'\n-->'
+        self.assertEqual(check('1.0.0',target='linux-x86_64',read=read).sha256,hashlib.sha256(data).hexdigest())
+        release['assets'][0]['digest']='sha256:'+'0'*64
+        with self.assertRaisesRegex(ValueError,'digest'):check('1.0.0',target='linux-x86_64',read=read)
+        release['assets'][0]['digest']='sha256:'+hashlib.sha256(data).hexdigest()
+        manifest['platforms'][0]['test_result']['install_and_uninstall_passed']=False
+        release['body']='<!-- scout-installer-evidence-v1\n'+json.dumps(manifest)+'\n-->'
+        with self.assertRaisesRegex(ValueError,'evidence'):check('1.0.0',target='linux-x86_64',read=read)
+        for body in ('', '<!-- scout-installer-evidence-v1\n[]\n-->', release['body']*2):
+            release['body']=body
+            with self.assertRaises(ValueError):check('1.0.0',target='linux-x86_64',read=read)
+
     def test_corruption_cancellation_and_oversize_leave_no_installer(self):
         read, _, _, _, data = self.metadata()
         update = check('1.0.0', target='linux-x86_64', read=read)

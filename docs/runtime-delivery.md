@@ -41,3 +41,8 @@ receipts, permission changes, cancellation and user-environment isolation.
 Native Windows/macOS setup and upgrade checks must pass in Actions before the
 1.0.3 tag is promoted. The default upgrade baseline is the published 1.0.2,
 with explicit installer SHA-256 pins; repository variables can override it.
+
+Compact tested installer identities are also embedded in release notes, where
+Studio's update checker matches them against GitHub asset digests. This keeps
+update verification available without extra release attachments. Studio 1.0.2
+and earlier need a one-time manual installer download for this format change.

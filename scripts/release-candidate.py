@@ -326,6 +326,21 @@ def assemble(downloaded, selection, tag, output, *, require_upgrade=False):
             # release contains only the four tested native installers.
         stage.rename(output)
 
+    # Compact evidence lives in release notes, keeping exactly four attachments.
+    published=dict(schema=1,tag=tag,context=identity,platforms=[])
+    for directory,manifest,evidence,report in candidates:
+        name=manifest['installer']
+        candidate={key:manifest[key] for key in ('platform','version','installer','context')}
+        candidate['signing']=manifest.get('signing','not-configured')
+        candidate['files']={name:manifest['files'][name]}
+        published['platforms'].append(dict(candidate=candidate,test_result=evidence))
+    notes=('Exact tested installers. Processing dependencies install from pinned upstream wheels during setup. '
+           'Build, upgrade and installed-test reports remain in GitHub Actions artifacts.\n\n'
+           '<!-- scout-installer-evidence-v1\n'+json.dumps(published,separators=(',',':'))+'\n-->\n')
+    require(len(notes)<64000,'Release notes exceed metadata bound')
+    with (output.parent/'release-notes.md').open('x',encoding='utf-8') as stream:stream.write(notes)
+
+
 
 def select_candidate(api, repository, commit):
     """Select one complete trusted build; never substitute another commit/build."""

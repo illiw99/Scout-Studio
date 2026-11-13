@@ -126,6 +126,13 @@ class CandidateTests(unittest.TestCase):
         output = self.root / 'release'
         names = {self.tool.installer_name('1.2.3', target) for target in self.tool.PLATFORMS}
         self.assertEqual({path.name for path in output.iterdir()}, names)
+        notes=(self.root/'release-notes.md').read_text()
+        published=json.loads(notes.split('<!-- scout-installer-evidence-v1\n',1)[1].split('\n-->',1)[0])
+        self.assertEqual(published['context'],self.identity)
+        self.assertEqual(len(published['platforms']),4)
+        for entry in published['platforms']:
+            self.assertTrue(entry['test_result']['install_and_uninstall_passed'])
+            self.assertEqual(set(entry['candidate']['files']),{entry['candidate']['installer']})
         for name in names:
             self.assertEqual((output/name).read_bytes(),
                              (self.directory(next(target for target in self.tool.PLATFORMS

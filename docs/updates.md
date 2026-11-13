@@ -60,3 +60,10 @@ policy exception, not evidence of an upgrade test. Local unit tests never instal
 packages or modify `/Applications` or `/opt`; only run `test-installer.py` on a
 disposable machine. Its `--previous` option can select a separately verified
 artifact directory for manual CI checks.
+
+Installer-only releases embed compact tested candidate metadata in a hidden
+release-note block. The checker requires matching install-test evidence and the
+same SHA-256 in GitHub's asset digest before staging a download. Older releases
+with separate manifest/checksum attachments retain their original validation.
+Studio 1.0.2 and earlier cannot read the new release-note format; download the
+1.0.3 installer from GitHub once to upgrade those installations.

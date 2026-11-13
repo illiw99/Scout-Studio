@@ -105,8 +105,19 @@ def check(current, *, target=None, repository=REPOSITORY, read=None):
                 or not 0 < item['size'] <= maximum):
             raise ValueError(f'Missing or invalid release asset: {name}')
         return item
-    manifest_asset = asset('release-manifest.json', 2 * 1024 * 1024)
-    manifest = json.loads(read(manifest_asset['browser_download_url'], 2 * 1024 * 1024))
+    embedded = 'release-manifest.json' not in files
+    if embedded:
+        body=release.get('body')
+        opening='<!-- scout-installer-evidence-v1\n';closing='\n-->'
+        if (not isinstance(body,str) or len(body)>64000 or body.count(opening)!=1):
+            raise ValueError('Missing or invalid release installer evidence')
+        payload=body.split(opening,1)[1]
+        if closing not in payload:raise ValueError('Incomplete release installer evidence')
+        manifest=json.loads(payload.split(closing,1)[0])
+    else:
+        manifest_asset = asset('release-manifest.json', 2 * 1024 * 1024)
+        manifest = json.loads(read(manifest_asset['browser_download_url'], 2 * 1024 * 1024))
+    if not isinstance(manifest,dict):raise ValueError('Invalid release manifest')
     if (type(manifest.get('schema')) is not int or manifest['schema'] != 1 or manifest.get('tag') != tag
             or manifest.get('context', {}).get('repository') != repository):
         raise ValueError('Release manifest does not match this update channel')
@@ -125,10 +136,14 @@ def check(current, *, target=None, repository=REPOSITORY, read=None):
             or evidence.get('installer_sha256') != digest or file_info.get('size') != item['size']
             or not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest)):
         raise ValueError('Update candidate lacks matching install-test evidence')
-    checksums = read(asset('SHA256SUMS.txt', 64 * 1024)['browser_download_url'], 64 * 1024).decode('utf-8')
-    entries = [line.split() for line in checksums.splitlines()]
-    if sum(row == [digest, filename] for row in entries) != 1 or sum(len(row) == 2 and row[1] == filename for row in entries) != 1:
-        raise ValueError('Release checksum does not match the tested installer')
+    if embedded:
+        if item.get('digest') != 'sha256:'+digest:
+            raise ValueError('GitHub asset digest differs from tested installer evidence')
+    else:
+        checksums = read(asset('SHA256SUMS.txt', 64 * 1024)['browser_download_url'], 64 * 1024).decode('utf-8')
+        entries = [line.split() for line in checksums.splitlines()]
+        if sum(row == [digest, filename] for row in entries) != 1 or sum(len(row) == 2 and row[1] == filename for row in entries) != 1:
+            raise ValueError('Release checksum does not match the tested installer')
     return Update(latest, target, filename, item['browser_download_url'], digest, item['size'],
                   f'https://github.com/{repository}/releases/tag/{tag}', candidate.get('signing', 'not-configured'))
 
