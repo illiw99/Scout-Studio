@@ -34,7 +34,7 @@ much as extra context; it remains reported alongside symmetric timing accuracy.
   speed, coherence and formation features. Each contributes past/future means,
   current-minus-past/future changes, local variation and local peaks. Long pools
   add 66 inputs to the original 848-input boundary head. No additional vision
-  backbone, model weights or video decode are required.
+  backbone, pretrained vision weights or video decode are required.
 - Eleven player-interaction cues: nearest-player spacing, close pairs, relative
   closing motion, connected player groups, stopped/recently stopped players and
   deceleration. Five offsets contribute 55 boundary inputs. Extraction reused

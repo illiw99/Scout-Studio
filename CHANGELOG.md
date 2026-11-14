@@ -5,7 +5,7 @@ implementation and validation history.
 
 ## Unreleased
 
-## 1.0.3 — 2026-11-13
+## 1.0.3 — 2026-11-14
 
 - Publish only native installers; first-launch setup downloads pinned upstream
   Python/processing packages into private CPU/CUDA environments, with repair

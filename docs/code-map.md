@@ -83,3 +83,5 @@ Read README only for setup and operational details. The existing CLI setup helpe
 in `scout/pick.py` is separate from the native desktop workflow.
 
 Latest visual pool and interaction ablations: `docs/visual-feature-pool-2026-11-13.md`.
+
+Compact recurrent/convolution boundary-head screen: `docs/neural-boundary-context-2026-11-14.md`.

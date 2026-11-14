@@ -82,3 +82,26 @@ The detector and inference settings must remain bound to this model pack. Bigger
 feature pools are a subsequent experiment: retain only features that improve
 game-held-out quality at acceptable CPU cost. Player-interaction, sudden-stop
 and cluster-transition cues are candidates; no gain from them is claimed here.
+
+## Published release verification — 14 November 2026
+
+[Studio 1.0.3](https://github.com/illiw99/Scout-Studio/releases/tag/v1.0.3) is
+published from `ce53c48`. All four native builds and installed/upgrade smoke
+checks passed in [Actions](https://github.com/illiw99/Scout-Studio/actions/runs/43484622175),
+and both source-test jobs passed. Promotion passed without rebuilding the
+installers. The live GitHub API exposes exactly four installer assets: Linux
+deb (209.3MB), Windows exe (138.2MB), Mac ARM dmg (150.1MB), Mac Intel dmg
+(189.9MB), decimal sizes. No runtime parts or support releases are published.
+
+All four GitHub upload digests match the tested installer identities embedded
+in release notes, and the updater accepted that live metadata for every target.
+CPU/CUDA/native processing packages install from pinned upstream sources into
+private Python environments. Existing Studio 1.0.2 and earlier need a one-time
+manual download of the new installer; their old updater cannot read this new
+metadata format. Actual NVIDIA performance on a physical Windows machine
+remains unverified by GPU-less hosted tests.
+
+The model research continued separately with
+[feature pools](visual-feature-pool-2026-11-13.md) and
+[compact neural boundary heads](neural-boundary-context-2026-11-14.md).
+Those candidates do not replace the frozen release model.
