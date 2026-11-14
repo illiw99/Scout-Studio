@@ -1,522 +1,76 @@
-# Decision-model improvement experiments
-
-Started 6 November 2026. Priority: represent reviewed play intervals accurately
-and make full processing efficient on CPU. Targets supplied by the user are
-15× realtime on the local GPU and 5–10× on CPU; these are targets, not promises.
-Existing game footage, Scout state, reviews, fields, caches and production models
-remain unchanged. All data copies, trained candidates and generated predictions
-live in separate private experiment directories, outside the repository, with a
-persistent isolated backup and desktop evaluation workspace.
-
-## Available reviewed data
-
-Initial read-only inventory: seven games have current review MLTs and cached
-5 fps detections, totaling 578 play ranges across 31 original videos, about 449
-minutes. W3_SAI-HON and W3_SAI-PAN are incomplete with Nextcloud placeholders;
-they were excluded from initial model selection. Both subsequently completed and
-were admitted only for additional confirmation; their W3 day also occurs in
-development through DUC, so they do not add an unseen-day claim.
-Authoritative labels are current `Scout/review.mlt` files, not backups or prior
-prediction checks. The labels describe play intervals, not individual person
-bounding boxes. They support classifier training and end-to-end play evaluation;
-they do not directly supervise a person detector.
-
-## Protocol fixed before model comparisons
-
-1. Snapshot reviews, field polygons and detection caches with source/copy hashes.
-   Validate original source duration/order against the reviewed timeline. Rebuild
-   cache timestamps from that order; never inherit old cache timeline offsets.
-   Skip pending downloads and changing/missing files. Record ambiguous caches or
-   unverifiable detector provenance; do not silently choose different outputs.
-2. Reserve both FLAW_GD4 games (173 ranges) for final evaluation. Development uses
-   the other five complete games (405 ranges). Development folds hold out whole
-   match days: W2's two games share one group. No adjacent frames or camera files
-   from the same game are split randomly between training and validation.
-3. First reuse copied detections to compare decision models and 5/2.5/1 fps
-   sampling. Recompute tracking/features at each rate instead of thinning already
-   computed features. This screening cannot establish the quality of a different
-   detector or lowered image resolution; those require fresh detections later.
-4. Compare fixed HGB settings before tuning thresholds. Select using development
-   folds only. Evaluate preselected quality/CPU candidates on the reserved games
-   without retuning on their results. Keep training-fit and held-out scores distinct.
-5. Report event precision/recall/F1 at temporal IoU 0.3 and 0.5, missed/extra plays,
-   start/end mean absolute error and 90th-percentile boundary error. Legacy
-   any-overlap scores are insufficient: one-second overlap can conceal a badly
-   located clip. Match intervals one-to-one, maximizing hit count then overlap.
-6. Expand to detector size, input resolution, sampling, precision/runtime and
-   coarse-to-fine video strategies. Measure complete processing, including decode,
-   model load, feature extraction, classification and review creation. Keep cold
-   startup/export costs separate from warm repeated processing measurements.
-
-Every run records exact configuration, versions, identities, data split, results
-and limitations in its private experiment manifest. Only aggregate findings and
-reproducible code enter the repository; no GT, footage or private trained model is
-published. Production defaults change only after measured quality/speed tradeoffs
-are reviewed. No model is assumed equally accurate because it is faster.
-
-## Work log
-
-- Read-only inventory and review parsing completed: 578 current range labels.
-- Added isolated detection subsampling and stricter interval metrics with tests.
-- Preparing copied-cache screening; production cache identity cannot be inferred
-  from filenames alone, so legacy-cache provenance is explicitly audited.
-- Literature review started: efficient temporal video recognition and temporal
-  action localization, with primary papers recorded below as they are assessed.
-
-## Literature and implications
-
-- [TSM, ICCV 2019](https://arxiv.org/abs/1811.08383): temporal shifts add temporal
-  context to 2D video recognition with little extra arithmetic. It suggests a
-  lightweight temporal video baseline, but the backbone still costs compute and
-  its recognition results do not establish football play-boundary accuracy.
-- [MoViNets, CVPR 2021](https://arxiv.org/abs/2103.11511): efficient video networks
-  and streaming feature buffers target video recognition with bounded activation
-  memory. A pretrained compact encoder is a candidate alternative to per-frame
-  person detection. Our interpretation: it still needs binary play supervision,
-  temporal boundary logic and CPU measurements on these camera views.
-- [ActionFormer, ECCV 2022](https://arxiv.org/abs/2202.07925): multiscale temporal
-  features, local attention and boundary regression address interval localization
-  directly. Its benchmark results are not end-to-end Scout speed estimates;
-  video feature extraction must be included in any comparison. A small temporal
-  head over cheap features is worth testing before adopting a large video model.
-
-These papers motivate experiments, not a model switch. Existing cached detections
-provide an inexpensive first check of whether temporal sampling can be reduced
-without unacceptable loss. New video encoders, resolution changes and detector
-variants will be scored under the same held-out-game protocol and full cost model.
-
-## Primary objective clarified by the user
-
-The primary metric is **event recall with any positive temporal overlap**,
-matched one-to-one: aim for 95–98% of GT plays found. Report each game's recall
-alongside the aggregate. The secondary metric is timestamp quality on matched
-plays: start/end MAE, 90th-percentile error, both boundaries within ±0.5/1/2 seconds,
-mean temporal IoU, extra included footage and truncated play time. Precision,
-false clips and strict-IoU results remain visible to discourage recall gaming.
-Touching endpoints without positive-duration overlap does not count as detection.
-
-This refinement follows the initial strict-IoU screen; its results are retained,
-not retrospectively relabeled. Selection now uses development precision among
-candidates meeting 95% aggregate event recall, or maximum recall if none qualify.
-A below-target result is not an accepted model. Per-game failures remain explicit.
-
-## First screening results
-
-Copied legacy 5 fps detections; five development games, grouped by match day.
-The actual detector identity of legacy caches remains unauthenticated. Field
-masks use copied polygons and read-only reference/midpoint frames. Duplicate
-W3_SAI-DUC caches were required to have identical detection arrays. Timestamps
-were rebuilt from the corrected review's source order.
-
-| HGB settings | Sampling | Development F1, IoU≥0.5 |
-| --- | ---: | ---: |
-| Existing hyperparameters, refitted |5fps|93.45%|
-| Compact/regularized |5fps|90.91%|
-| Existing hyperparameters, refitted |2.5fps|91.14%|
-| Compact/regularized |2.5fps|89.17%|
-| Existing hyperparameters, refitted |1fps|55.49%|
-| Compact/regularized |1fps|49.16%|
-
-On 173 reserved GD4 ranges, the 5 fps refitted candidate found 171 with positive
-overlap: 98.84% recall, 93.44% precision, 12 extra predictions. On those matches,
-start MAE was 0.274 s and end MAE 0.614 s; 78.36% had both boundaries within 1 s.
-The 1 fps candidate found 152/173: 87.86% recall and 80.0% precision, with worse
-boundaries. These measurements use the same reference detections and do not
-establish a speedup or accuracy for a smaller detector.
-
-Development is harder: the 5 fps candidate's aggregate event recall was 94.57%,
-and the weakest game's recall was 81.67%. The held-out GD4 result therefore does
-not establish that the user's recall target is met across all games. Additional
-training/calibration must address that failure rather than hiding it in averages.
-
-## Active next experiments
-
-- Add balanced class weighting to focus HGB learning on relatively rare play
-  frames; default production training behavior remains unchanged.
-- Save out-of-fold probabilities for threshold/hysteresis calibration using
-  development games only. Reserved game features need not be read in this mode.
-- Generate fresh development detections for YOLO11s at 960 px and YOLO26n at 1280 px,
-  at 5 fps, CUDA FP16/batch 16, with exact weight identities and new private caches.
-  Refit the decision model for each detector: do not assume reference-detector
-  features transfer unchanged. Use subsampling to test lower temporal rates.
-- Inspect frame-based tracker gates/confirmation/smoothing as a possible cause of
-  low-rate quality loss. No tracker changes have been deployed.
-- Read full TSM/MoViNets/ActionFormer papers. TSM's implementation discussion
-  highlights memory-movement costs despite low arithmetic overhead; MoViNet's
-  streaming buffers address activation memory; ActionFormer's experiments use
-  pretrained video features, whose extraction cost must be included here.
-
-All candidates and probability arrays remain private experiment artifacts.
-No production classifier, cached detections or edited review has been replaced.
-
-## Broader model families and current evidence
-
-The project is not committed to person detection. The comparison now includes a
-**motion-only model** (small-frame optical-flow statistics, no person detector)
-and a **direct S3D video model** (pretrained spatiotemporal convolutions with a
-new binary/temporal decision head). MoViNet/TSM remain literature-backed next
-candidates, not models already validated in this experiment. TorchVision's
-[S3D implementation](https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.video.s3d.html)
-provides a distinct, reproducible non-YOLO baseline using Kinetics400 weights.
-
-Initial synthetic S3D feature timing on the local machine: a 16-frame 112 px clip
-took 64 ms on CPU (eight threads, batch 1); 224 px took 248 ms. These numbers exclude
-decoding, normalization and the temporal/binary head. They justify testing the
-112px alternative, but do not establish full-pipeline realtime performance or
-play accuracy. The private development extraction uses shared decoding for both
-motion statistics and S3D logits, so its timings are not isolated model benchmarks.
-
-A qualitative audit found an input failure in the weakest game: several GT plays
-had people detected in raw boxes but **zero people admitted by the static field
-mask**. A camera-homography diagnostic on one such frame retained 11 players where
-the existing mask retained 0, using 316 matches and 92.4% RANSAC inliers. This is one
-private diagnostic, not a validated camera-correction feature. It explains why
-threshold reduction alone cannot recover every play. Saved polygons remain intact.
-
-Threshold/class-weight calibration on development data raised overall overlap
-recall toward 98%, but still failed the 95% minimum on the weakest game and often
-added many false clips. Those results are not accepted candidates. New visual
-features and camera-robust region handling must address missing information.
-
-Split clarification: GD4 remains excluded from training, but its baseline results
-have already been inspected and that use is recorded. HON/PAN remain entirely
-untouched confirmation games while downloading. Further threshold calibration
-reads development out-of-fold probabilities only and rejects reserved files.
-Experimental feature schemas cannot be exported as ordinary production packs.
-
-The camera experiment now recomputes tracking features using a union of the
-original region and accepted reference projections at five fixed, label-independent
-times per source. It preserves the original polygons and compares on development
-games only. Fresh YOLO11s 960 px detections have also completed on all five
-development games; YOLO26n 1280 px extraction continues. These known-weight
-datasets replace ambiguous legacy-cache provenance in subsequent comparisons.
-Each comparison now has its own probability directory so independent experiments
-cannot accidentally overwrite or mix calibration inputs.
-
-Extraction can now run motion-only without importing Torch, or S3D-only without
-computing optical flow. `--decoder cpu` explicitly disables GPU decoding; this
-is required for honest CPU-only measurements. These modes avoid charging a
-candidate for work belonging to another model. Feature-extraction timings still
-exclude model loading and the final temporal head until an end-to-end benchmark
-includes those stages.
-
-An additional non-person candidate combines motion and S3D features: motion
-provides a 5 Hz clock for boundaries, while the nearest 1 Hz S3D sample supplies
-visual context. Fusion requires identical source identities, labels and splits;
-it rejects clocks farther apart than one right-hand sampling interval. Only
-development arrays are read. It is evaluated independently rather than assumed
-to outperform either component.
-
-HON/PAN downloads are now complete. Their labels and footage remain unused for
-selection; they are available for additional confirmation after candidate lock.
-They share the W3 match day with a development game, so GD4 remains the separate
-match-day holdout rather than claiming all confirmation games have unseen venues.
-
-### Development screening update
-
-Whole-day out-of-fold scores at the original default decision threshold:
-
-| Candidate | Event recall | Weakest-game recall | Precision |
-| --- | ---: | ---: | ---: |
-| Fresh YOLO11s 960, original regions, 5 Hz | 93.83% | 81.67% | 90.69% |
-| Fresh YOLO11s 960, camera-region union, 5 Hz | 94.57% | 85.00% | 91.63% |
-| Motion statistics, compact head, 5 Hz | 61.48% | 18.99% | 68.22% |
-| Broad-region motion, compact head, 5 Hz | 55.80% | 20.25% | 64.57% |
-| Motion + frozen S3D112 logits, compact head, 5 Hz | 46.17% | 23.23% | 71.10% |
-
-None meets the target. The costly balanced-head extension of the last row was
-stopped after its complete compact-head result; it has no validated result.
-All extracted features and complete candidate outputs were retained. These
-negative results reject these specific frozen-feature configurations, not video
-models in general. The direct S3D-only comparison continues separately.
-
-The next person-feature ablation jointly removes the field mask and lowers
-minimum player height from 3% to 1.5% of image height. It reuses existing private
-detections rather than decoding/detecting the footage again. If promising, the
-two changes must be separated before making a causal claim or choosing defaults.
-
-An initial CUDA-resize compatibility probe produced the expected 15 RGB frames
-from three seconds of footage without errors. This establishes compatibility
-only; throughput and equivalence to the current decoder remain unverified.
-[X3D's official model zoo](https://github.com/facebookresearch/pytorchvideo/blob/main/docs/source/model_zoo.md)
-also provides a smaller video-model candidate, including an optimized CPU model.
-Its published benchmarks are not Scout play accuracy or end-to-end speed evidence.
-
-### Proposal and preprocessing experiments
-
-On the fixed development folds, camera-union YOLO11s with a compact head,
-threshold 0.1, 0.6 s smoothing and a 4 s minimum proposal duration reaches
-**395/ 405 event hits (97.53%), minimum game 95%, precision 78.69%**. Refining
-proposal boundaries using their own peak improves boundary p90 to about 1.25 s
-and mean IoU to 0.838, while preserving those event counts. This is a development
-selection score, not a final confirmation result. The extra 107 clips are still
-too many to declare a finished improvement. All tested durations, peak filters
-and boundary refinements are recorded in private calibration reports.
-
-Two targeted changes follow from the error analysis:
-
-- A dynamic-region variant interpolates reference-projected field polygons
-  between seven fixed keyframes, filters boxes in source coordinates, and falls
-  back to the original region if all projections fail. This avoids admitting
-  everyone inside the union of every camera position at every time. Saved field
-  files remain unchanged.
-- A sparse-sampling tracker ablation expresses association gates, smoothing,
-  track lifetime and confirmation in elapsed time. The current tracker uses
-  some frame-based settings: two confirmations take 0.4 s at 5 Hz but 2 s at
-  1 Hz. The ablation exactly preserves the 5 Hz settings and tests 1/2.5 Hz
-  features from existing detections. It is not enabled in production.
-
-The pre-scaled YOLO26n 640 experiment resizes on CUDA before RGB transfer, then
-maps boxes back to original source geometry before field filtering and tracking.
-It keeps its own caches and experimental schema. Some extraction segments exceed
-15x realtime, but shared workload, cold-start effects and excluded final-head
-cost mean these are not accepted end-to-end benchmarks. GT quality is still under
-evaluation; CPU-only acceleration remains to be measured on a selected pipeline.
-
-Validation at this stage: full local check passed 278 tests (four skips) and
-source/wheel packaging passed; focused research checks also pass. Those
-checks establish code/fixture behavior, not real Windows GPU performance or
-the accuracy/speed targets.
-
-### Fixed candidate and full-pipeline confirmation
-
-The next candidate is locked before its reserved-game run: **YOLO26n 1280,
-2.5 Hz, dynamic field regions, time-scaled tracking, reference HGB head**.
-Its development selection uses threshold 0.2, minimum proposal duration 3 s,
-0.2 s smoothing, and half-peak boundary refinement with 0.2 s padding.
-Development overlap recall is **395/ 405 (97.53%)**, weakest game **95%**,
-precision **88.37%**, boundary p90 **1.287 s**, and mean IoU **0.825**.
-
-The head is exported once as numeric trees inside a research-specific wrapper.
-Both backends use that exact head. The wrapper locks source/GT/split identity,
-detector weight hash, sampling, feature order and temporal offsets; ordinary
-production classifier loading rejects it. Reserved arrays never enter fitting.
-Full-game confirmation joins features in original source order before temporal
-prediction, rather than treating each camera file as an independent game.
-
-Three 180 s Linux timing windows measured **7.62x CPU** including detector loading,
-CPU-only decoding, camera correction, tracking, features, prediction and
-postprocessing. OpenVINO explicitly reported CPU execution and CUDA was disabled.
-GPU aggregate timing was **13.40x** including cold initialization; the two later
-windows measured **15.29x/15.39x**. Two windows were before the first marked play,
-so these are timing evidence, not quality evidence. Full reserved games now test
-active play, quality and longer-run throughput together.
-
-The 640 px YOLO26n candidate was rejected: default-threshold recall fell to
-82.47% at 5 Hz. Calibration recovered high overlap recall only with about 55%
-precision. This directly argues against selecting resolution on speed alone.
-Frozen S3D112 also failed: direct linear-head recall was 50.86%; its completed
-balanced tree head reached 32.84%. These are specific negative configurations,
-not a rejection of every video architecture.
-
-GPU confirmation is now complete on both reserved games: **169/173 hits
-(97.69% recall), 90.86% precision, boundary p90 1.402 s, mean IoU 0.834**, with
-minimum-game recall 97.67%. The complete 124.2 minutes processed at **17.26x
-realtime including loading**. CPU confirmation has also completed using the identical fixed numeric head. Final reserved full-game results:
-
-| Runtime | Hits / GT | Recall | Precision | Boundary p90 | Realtime including loading |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| GPU, CUDA FP16 | 169 / 173 | 97.69% | 90.86% | 1.402 s | 17.26x |
-| CPU, OpenVINO FP32 + CPU decode | 168 / 173 | 97.11% | 89.84% | 1.642 s | 7.59x |
-
-Each run processes the complete 124.2 minutes. Minimum per-game recall is 97.67%
-on GPU and 96.51% on CPU. Both boundaries fall within one second for 71.0%/67.3%
-of matched plays respectively. This exposes the timestamp trade-off; high event
-recall is not a claim of frame-accurate cuts. These measurements meet the stated
-prototype recall and speed aims on the local Linux hardware.
-
-Native integration now provides the version-two pack/profile path described in
-[model packs](model-packs.md). It preserves legacy defaults and model semantics;
-activating a new profile is explicit. Compatibility review found an initialization
-fallback gap; the fix also carries the effective backend across `run` stages and
-reuses only complete matching cache sets for standalone segmentation. Regression
-tests cover both automatic fallback and explicit-GPU errors.
-
-The full suite passed 300 tests (two skips) using the isolated OpenVINO environment;
-source/wheel checks passed. HON/PAN, which were never used for model selection,
-are now copied into a separate native-worker confirmation workspace. Only new
-private fields/reviews/configuration/caches are written there; source video links
-remain read-only inputs. Native-worker confirmation on those games remains pending.
-
-### Native confirmation and revised priority
-
-The complete additional native-worker run used HON/PAN only after locking the
-head and thresholds. It processed 141.8 minutes per backend, including worker
-startup, source probing, detection, camera features, numeric classification and
-review creation; video export encoding is excluded.
-
-| Runtime / game | Hits / GT | Recall | Precision | Realtime |
-| --- | ---: | ---: | ---: | ---: |
-| CUDA / HON | 74 / 77 | 96.10% | 81.32% | 16.02x |
-| CUDA / PAN | 74 / 78 | 94.87% | 81.32% | 16.05x |
-| CPU / HON | 73 / 77 | 94.81% | 76.04% | 7.31x |
-| CPU / PAN | 70 / 78 | 89.74% | 81.40% | 7.41x |
-
-This exposes a CPU quality shortfall. Across all four confirmation games the GPU
-reaches 96.65% recall / 86.14% precision at 16.58x, but CPU reaches only 94.82%
-recall / 84.28% precision at 7.47x. The earlier two-game success does not establish
-that the integrated candidate meets the complete quality aim. It remains an
-evaluation candidate, not an accepted final model. Original integrity checks
-passed for nine games: SHA-256 of 109 review/field/copied-cache files and size /
-mtime of 41 source videos; full video hashes were not computed.
-
-The user clarified the objective after these runs: **maximize precision while
-still requiring at least 95% recall**. Recall above that floor is secondary to
-reducing false clips. Continue reporting each game's results, strict IoU and
-boundary errors. Model fitting and parameter selection remain restricted to the
-five development games; the four confirmation games remain outside training.
-No confirmation labels may be used to choose the best threshold. Repeated
-confirmation after engineering changes must be disclosed rather than called a
-new blind test. A label-independent CPU/GPU input/feature parity investigation
-and development-only precision-constrained comparison are the next steps.
-
-### Precision-first context and derived-feature study
-
-Development-only comparisons retain day-grouped folds over the original five
-games. Longer context adds no frame inference: it reads already computed player
-observations. The new optional `play-context-v1` recipe adds active/sprint/fast
-player fractions, formation density, activity rise/drop, spread growth, motion
-disorder and relative span change. Four-second neighbor means repeat observed
-edges and ignore missing samples. Raw observations and saved fields are unchanged.
-
-| Development recipe / context | Precision | Recall | Minimum game recall |
-| --- | ---: | ---: | ---: |
-| Raw / original short context | 88.74% | 97.28% | 95.00% |
-| Raw / wide context | 94.20% | 96.30% | 95.00% |
-| Raw / formation context | 94.47% | 97.04% | 95.00% |
-| Derived / formation context | 93.82% | 97.53% | 95.00% |
-| Derived / wide context | 95.16% | 97.04% | 95.29% |
-
-Wide offsets are -10,-6,-3,-1,0,1,3,6,10 seconds; formation offsets are
--12,-8,-5,-3,-1,0,1,2,3,5,8. Each row calibrates only development out-of-fold
-probabilities. The selected derived/wide operating point is threshold .1,
-smoothing .2 s, proposal minimum 3 s, peak filter .8, relative refinement .5,
-padding .2 s. These are selection scores, not final generalization claims.
-The candidate must be frozen before repeated confirmation; previous confirmation
-results remain documented. Native CPU/GPU development-feature collection is
-also running to investigate extraction-domain differences without fitting on
-confirmation labels.
-
-The recipe is opt-in and versioned with its classifier. Tests cover neighbor
-windows, missing/empty player cases, bounded offset metadata, PKL/JSON prediction
-equivalence, and incompatible recipe/column rejection. The full suite passes 306
-tests with two native-platform skips; package/source checks pass. Independent
-review and a focused follow-up on older-PKL rejection found no remaining defects.
-New-model quality and throughput confirmation remains pending.
-
-The derived/wide head is now frozen as candidate0.3, with separately saved
-versioned PKL and numeric JSON artifacts; neither replaces an original model.
-Optional `freeze-reviewed-candidate.py --pickle-out NEW_PATH` writes the same
-fitted head, refuses existing files, and uses exclusive publication.
-Repeated four-game scoring reuses the already generated raw detector/camera/
-tracker features; this is a quality comparison, not a new throughput measurement.
-
-| Candidate0.3 runtime | Hits / GT | Recall | Precision | False clips | Boundary p90 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| CUDA features | 319 / 328 | 97.26% | 93.27% | 23 | 1.396 s |
-| CPU features | 318 / 328 | 96.95% | 93.81% | 21 | 1.356 s |
-
-CPU false clips fell from 58 to 21 while missed plays fell from 17 to 10, across
-the same four untrained games. PAN remains weak: 93.59% GPU / 92.31% CPU recall;
-all other games reach at least 97.40% GPU / 97.67% CPU except HON at97.40% CPU.
-Thus aggregate recall meets the floor, but the improvement is not uniform and
-new-profile application timing is not yet established. Native extraction of the
-original five development games continues; these features can test whether
-matching the application's input path improves transfer without fitting on PAN.
-
-### Selected precision-constrained operating point
-
-A fair comparison evaluated the original-trained head, a native-trained head and
-an equal-logit pool on the same native development inputs, holding out whole days.
-Development selected the original-trained head with threshold .1, smoothing .2 s,
-minimum proposal 4 s, peak filter .6, relative refinement .5 and padding .2 s.
-The final head is not an ensemble. The private provenance receipt distinguishes
-fitting features from the native development features used for calibration.
-Both PKL and numeric JSON contain the same classifier; a new private pack carries
-its complete feature and postprocessing configuration.
-
-| Repeated four-game validation | Hits / GT | Recall | Precision | False clips | Boundary p90 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| GPU features | 324 / 328 | 98.78% | 92.05% | 28 | 1.400 s |
-| CPU features | 322 / 328 | 98.17% | 92.53% | 26 | 1.395 s |
-
-Every validation game reaches at least 96.15% recall on both backends. The higher
-aggregate-precision candidate0.3 failed the per-game recall floor on PAN, so it is
-not the selected profile. Compared with the first integrated candidate, CPU false
-clips fell from 58 to 26 and missed plays from 17 to 6. All four games remain outside
-fitting/calibration, but repeated model acceptance checks mean this is not an
-unbiased new final test. HON/PAN share a match day with development DUC.
-
-GPU native development extraction completed all five games. CPU extraction was
-stopped cleanly after two completed development games to free resources; it was
-not used to fit the selected classifier and is not reported as a complete CPU
-training dataset. Live native-worker timing/quality confirmation of the selected
-pack is now running on PAN, with fresh private detection caches. CPU automatic
-selection is exercised with CUDA disabled; video encoding is outside timing.
-
-The first selected-pack live run correctly rejected an obsolete CLI feature-name
-check after detection. Its elapsed time is discarded. The CLI check now uses the
-model's expanded feature names and stored offsets; the PKL/JSON regression test
-also exercises the actual CLI segmentation entry. The full suite again passes 306
-tests (two platform skips), package checks pass, and the cached real-worker smoke
-finishes successfully. Fresh-cache timing is restarted after those checks.
-
-### Completed local acceptance
-
-Fresh-cache native-worker confirmation on the full 64.27-minute PAN game now
-passes, including automatic runtime selection, source probing, decoding,
-detection, adaptive fields, derived features, numeric classification and review
-creation. CPU selection is automatic with CUDA disabled; a live decoder snapshot
-also confirms that no CUDA decode flags are present.
-
-| Selected profile / native worker | Full-game elapsed | Realtime | Hits / GT | Recall | Precision |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| GPU, automatic CUDA | 243.16 s | 15.86x | 75 / 78 | 96.15% | 85.23% |
-| CPU, automatic OpenVINO fallback | 584.86 s | 6.59x | 75 / 78 | 96.15% | 85.23% |
-
-These are successful fresh-cache runs after the CLI compatibility fix. Failed
-attempts and cached smoke runs are excluded from timing. Progress-only detector
-rates around 7.4x exclude later stages; 6.59x is the actual complete CPU result.
-MP4 export encoding and one-time model-pack installation are outside this timing.
-The earlier four-game table measures quality using fixed previously extracted
-observations; the PAN native run independently reproduces its expected play hits.
-
-Final split: five development games / 405 GT intervals, four validation games /
-328 intervals, nine games /733 intervals total. The selected profile clears the
-95% recall floor in every measured validation game while prioritizing precision.
-The local Linux speed targets are also met on the i7-11700F / RTX 3060 Ti. These
-results establish the tested hardware/data scope, not a guarantee for every CPU
-or future game. Actual Windows GPU hardware remains unverified.
-
-Original integrity checks pass again for all nine games: 109 snapshotted state
-file hashes and 41 video size/mtime identities. All generated reviews, caches,
-weights, model packs and application settings remain in private experiment
-workspaces. The final persistent evaluation app contains its own source snapshot,
-model store, library, copied fields and video links; a fresh PAN copy can be
-processed without replacing a saved review. Both PKL and JSON are supplied, and
-`--cpu` selects CPU-only processing in the private launcher.
-
-The full local suite passes 306 tests with two platform-specific skips; package
-checks pass. Native Linux Qt/X11 initialization, the private source/model-store
-selection and an OpenVINO CPU pack probe pass. This GUI smoke does not establish
-real Qt playback/audio or Windows/macOS hardware behavior. No private trained
-models or GT have been published, and no release has been tagged.
-
-Focused implementation history for this work:
-`6f6dd2a` metrics/splits; `c05d023` camera comparison; `ecaaf27` CPU-only video
-experiments; `66925dd` alternative/fused feature screening; `abf2d57` temporal
-regions/tracking; `d0cc1ed` frozen-head confirmation; `e950e59` reserved GPU result;
-`7a7291b` native automatic GPU/CPU profiles; `fdc70ba` native shortfall and revised
-objective; `0c5a871` derived features/context; `c046712` protected PKL export;
-`0262d94` CLI profile compatibility. Validation and limitations are recorded above.
-
-### Additional frozen-model validation, 7 November
-
-The [complete-pipeline comparison](play-approach-comparison-2026-11-07.md) tests
-three interchangeable model families and a newly identified NT17-SAI GT game.
-NT17-SAI remains outside training/calibration: the accepted unchanged profile
-reaches **133/135 hits, 98.52% recall, 95.68% precision, six extra clips and
-1.561-second boundary p90** on GPU-derived inputs. The temporal transformer is
-worse, and S3D/MobileNet alternatives fail the recall requirement. The default
-pack is retained. New-game CPU quality and native Windows hardware remain
-unverified; the report separates these limits from successful local runtime tests.
+# Model evaluation and improvement protocol
+
+Current results: [model status](model-status.md). Completed experiments and
+negative results: [research ledger](research-ledger.md). This page defines the
+protocol; it is not a chronological work log.
+
+## Goals and data
+
+Precision is primary; aim 95–98% event precision/recall with at least 95% recall in
+every measured game. Aim 95% of all GT plays with both cuts within ±1s; misses fail.
+Early starts/late ends are preferable to cut-in, but overlong padding is not a
+substitute for timing accuracy. CPU 5–10× / GPU ≈15× are complete-pipeline goals.
+Use no audio-assisted features. Reviewed GT is useful but imperfect; it labels
+play intervals, not person bounding boxes.
+
+The established split has five development games / 405 plays (GD1 TIG–THU,
+W2 CON/VET, W3 DUC, GD3 INV), four confirmation games / 328 plays (GD4 CON/RAI,
+W3 HON/PAN). Hold out whole match days inside development; W2 games share a fold.
+HON/PAN share W3 with DUC, and confirmation has been inspected repeatedly:
+this is not a blind unseen-day test. Historical NT17 measurements exist, but its
+videos are now placeholders and cannot establish fresh media-backed validation.
+
+## Before fitting
+
+1. Snapshot authoritative current reviews, field polygons, source ordering,
+   size/mtime identities and cache hashes read-only into a new isolated study.
+   Preserve point markers, original files, models and state. Skip missing,
+   changing or Nextcloud placeholder videos; do not silently hydrate them.
+2. Record unverifiable legacy cache identities. Rebuild global timestamps from
+   the reviewed source order; do not inherit stale cache timeline offsets.
+3. Fit scalers, feature selection and classifiers on training folds only. Never
+   randomly split neighboring frames. Nested upstream fits must exclude the
+   outer validation day and the inner sample's own day.
+4. Preserve exact source boundaries for sequence/pool windows; record any
+   alignment tolerance. The source-join correction in the ledger is a required
+   regression case for future pooled features.
+
+## Selection, measurement and promotion
+
+- Select architecture, thresholds and postprocessing using development OOF
+  predictions; write the frozen selection before loading confirmation arrays.
+- Compare identical games/GT with one-to-one positive-overlap matching and
+  IoU≥.5. Report precision, recall, false/missed plays, per-game recall, joint
+  boundary success over all GT, separate starts/ends, MAE/p90 and extra/lost
+  action. [Boundary quality](boundary-quality.md) defines all costs/denominators.
+- Recompute tracking/features when changing sample rate. A lower resolution,
+  detector, quantization or decoder needs fresh detections and quality scoring;
+  thinning old observations does not prove another detector's quality.
+- Time startup, decode, detector, features, classifier, refinement and review
+  writing end to end. Report downloads/exports, cold startup and MP4 encoding
+  separately. Head-only latency is not realtime processing speed.
+- Retain configurations, fold membership, seeds, dependency/source versions,
+  hashes, predictions, failed attempts and candidate checkpoints. A compact
+  rejection ledger prevents duplicate trials without discarding raw evidence.
+- Before promotion, check numeric/ONNX parity, source-time conventions, cache
+  identity, CPU fallback and standalone compatibility. New source/feature
+  contracts need explicit validation. Keep rollback/manual choices intact.
+- Require fresh independent game/day confirmation for a generalization claim.
+  Repeatedly selecting on inspected confirmation is adaptive research, not a
+  new held-out guarantee. Never promote merely because an architecture is newer.
+
+## Tools
+
+| Task | Entry point |
+| --- | --- |
+| Reviewed snapshots and interval scoring | `scripts/evaluate-reviewed-games.py`, `scout/model_evaluation.py` |
+| Threshold calibration | `scripts/calibrate-play-thresholds.py` |
+| Controlled feature extraction/fusion | `scripts/extract-video-features.py`, `scripts/combine-video-features.py`, `scripts/prepare-camera-region-features.py` |
+| Freeze and verify decision candidate | `scripts/freeze-reviewed-candidate.py`, `scripts/evaluate-frozen-candidate.py` |
+| Classifier comparison | [classifier benchmark](classifier-benchmark.md) |
+| Full approach comparison/recipes | `scripts/compare-play-approaches.py`, `scripts/build-play-pipelines.py` |
+| Boundary comparison/plots | `scripts/report-classifier-benchmark.py`, `scripts/compare-boundary-approaches.py` |
+| Complete runtime benchmarks | `scripts/benchmark-reviewed-pipeline.py`, `scripts/benchmark-boundary-pipeline.py` |
+
+All experimental outputs belong outside original game folders. No GT,
+footage, caches or private experiment environments belong in release packages.

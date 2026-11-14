@@ -1,4 +1,6 @@
-# Saved visual boundary refiner — 13 November 2026
+# Current model and measured results
+
+Status: 14 November 2026. This page is the canonical release/model summary.
 
 Scout Studio 1.0.3 packages the frozen visual boundary-window candidate as
 `scout-reviewed-precision@0.5.0`. The prior 0.4.0 pack remains immutable and is
@@ -102,6 +104,9 @@ metadata format. Actual NVIDIA performance on a physical Windows machine
 remains unverified by GPU-less hosted tests.
 
 The model research continued separately with
-[feature pools](visual-feature-pool-2026-11-13.md) and
-[compact neural boundary heads](neural-boundary-context-2026-11-14.md).
+[feature pools and compact neural heads](research-ledger.md).
 Those candidates do not replace the frozen release model.
+
+For rejected approaches, corrected historical results and experiment paths, use
+the [research ledger](research-ledger.md). Evaluation rules live in
+[model improvement](model-improvement.md); unfinished work is in the [roadmap](future-path.md).

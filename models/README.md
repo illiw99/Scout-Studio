@@ -18,9 +18,10 @@ General YOLO26n weights come from the official Ultralytics asset release, with a
 fixed SHA-256. They are fetched on first detection and cached in OS application
 cache. CPU OpenVINO/ONNX exports are generated once in that cache. First use needs
 internet and the reference/export runtime; subsequent use reuses verified files.
-The normal reference installer includes that runtime, not pretrained weights.
+Current bootstrap installers set up that runtime from pinned upstream packages
+in private Python; generic pretrained weights are not bundled.
 The experimental inference-only build needs an imported ready-to-run CPU pack.
 
 Classifier inputs depend on the exact detector, sampler, derived features and
 postprocessing settings. Copying the JSON alone into an arbitrary older pipeline
-does not reproduce the reported quality. See docs/model-inventory.md.
+does not reproduce the reported quality. See the [model inventory](../docs/model-inventory.md).

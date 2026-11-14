@@ -30,8 +30,8 @@ to evolve through testing and feedback.
 - Import camera files and browse matches in a local library.
 - Draw field regions, detect plays, and review all footage between them.
 - Move and resize plays with frame snapping, automatic saves, and undo.
-- Use Shotcut-style controls, a zoomable timeline, and resizable video windows.
-- Export MP4 clips with a custom `<N>` filename pattern and a live preview.
+- Use Shotcut-style controls, a zoomable timeline, and a resizable video pane.
+- Export MP4 clips with a custom `<N>` filename pattern and fixed pre/post padding.
 - Run processing through one background queue while continuing to review.
 
 ## Start Scout Studio
@@ -60,9 +60,11 @@ Then open **Scout Studio** from Applications. You can also use `scout-studio` or
 `./start-studio.sh`. See the [installation guide](docs/installation.md) for
 platform notes, command-line-only installs, and optional NVIDIA decoding.
 
-The source checkout includes a trained play classifier in `models/play.pkl`.
-The first person-detection run may download YOLO weights. Releases separate
-application code from trained models, footage, and your library data.
+The default uses a bundled numeric HGB classifier and visual boundary heads in
+`models/`, with a matching versioned pipeline. Generic person-detector weights
+download on first use. Installers fetch processing dependencies from upstream
+into private Python environments; footage and your library remain separate.
+See [current model results](docs/model-status.md) and the [documentation index](docs/README.md).
 
 ## Documentation
 
@@ -72,7 +74,9 @@ application code from trained models, footage, and your library data.
 | [Installation](docs/installation.md) | Source setup, optional desktop dependency, FFmpeg, and CUDA |
 | [Command-line workflow](docs/cli.md) | Detection, MLT reviews, clips, statistics, renaming, and training |
 | [Development](docs/development.md) | Project layout, tests, package builds, and contribution workflow |
-| [Future path](docs/future-path.md) | Proposed architecture, smaller inference runtime, model packs, and tested release promotion |
+| [Model status](docs/model-status.md) | Current defaults, measured quality/speed and release evidence |
+| [Research ledger](docs/research-ledger.md) | Completed experiments, rejected approaches and evidence locations |
+| [Future path](docs/future-path.md) | Remaining work and promotion gates |
 | [Code map](docs/code-map.md) | Find the source responsible for each feature |
 | [Change history](CHANGELOG.md) | Features and maintenance changes |
 

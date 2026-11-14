@@ -22,7 +22,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = {
     'pyproject.toml', 'README.md', 'LICENSE', 'MANIFEST.in', 'AGENTS.md',
-    'packaging/bootstrap-uv.json', 'start-studio.sh', 'CHANGELOG.md', 'CONTRIBUTING.md', '.editorconfig', '.gitattributes',
+    'docs/research/approaches-2026-11-07.json', 'packaging/bootstrap-uv.json', 'start-studio.sh', 'CHANGELOG.md', 'CONTRIBUTING.md', '.editorconfig', '.gitattributes',
 }
 SOURCE_SUFFIXES = {
     'scout': {'.py', '.svg', '.ico'}, 'docs': {'.md'}, 'tests': {'.py'},
@@ -134,6 +134,7 @@ def check(root: Path = ROOT) -> None:
             validate_members(names, wheel=False)
             assert {'LICENSE', 'README.md', 'scripts/check-package.py',
                     'tests/test_packaging.py', 'packaging/launcher.py', 'packaging/bootstrap-uv.json',
+                    'docs/research/approaches-2026-11-07.json',
                     'models/scout-reviewed-precision/0.5.0/classifier.json',
                     'packaging/scout-studio.spec', '.github/workflows/installers.yml', 'scout/py.typed',
                     '.github/workflows/promote-installers.yml', 'scripts/release-candidate.py',

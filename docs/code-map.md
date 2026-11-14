@@ -16,10 +16,10 @@ when moving responsibilities; read only paths relevant to the task.
 | Exchangeable person-detector contract, named/revisioned adapter registry and normalized predictions | `scout/detector_adapters.py`, `tests/test_detector_adapters.py` |
 | Explicit CPU graph runtimes, preprocessing/NMS and managed detector exports | `scout/inference.py`, `tests/test_inference.py` |
 | Windows GPU availability and faster detector candidates | `docs/detection-performance.md` |
-| Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `scripts/prepare-scaled-detector-features.py`, `docs/detector-benchmark-2026-11-05.md` |
+| Isolated model/runtime speed comparisons and local measurements | `scripts/benchmark-detectors.py`, `scripts/prepare-scaled-detector-features.py`, `docs/research-ledger.md` |
 | Offline Studio defaults and approved standalone model/media inputs | `scout/model_defaults.py`, `docs/default-model.md`, `tests/test_model_defaults.py`, `tests/test_default_profile.py` |
 | Complete exchangeable play pipelines, visual encoders and bounded runtime benchmark | `scout/play_approaches.py`, `scout/video_encoders.py`, `scout/pipeline_benchmark.py`, `docs/play-pipelines.md` |
-| Game-grouped temporal training and alternative-approach comparison | `scout/temporal_training.py`, `scripts/compare-play-approaches.py`, `scripts/build-play-pipelines.py`, `docs/play-approach-comparison-2026-11-07.md` |
+| Game-grouped temporal training and alternative-approach comparison | `scout/temporal_training.py`, `scripts/compare-play-approaches.py`, `scripts/build-play-pipelines.py`, `docs/research-ledger.md` |
 | Versioned trained decision catalogue and distribution | `scout/model_catalog.py`, `models/catalog.json`, `docs/model-inventory.md`, `tests/test_model_catalog.py` |
 | Immutable inference packs, compatibility checks and activation rollback | `scout/model_packs.py`, `tests/test_model_packs.py`, `docs/model-packs.md` |
 | Manual release checks and verified installer staging | `scout/updates.py`, `tests/test_updates.py`, `docs/updates.md` |
@@ -30,9 +30,9 @@ when moving responsibilities; read only paths relevant to the task.
 | Frozen research heads, complete-pipeline timing and reserved full-game confirmation | `scripts/freeze-reviewed-candidate.py`, `scripts/benchmark-reviewed-pipeline.py`, `scripts/evaluate-frozen-candidate.py`, `tests/test_reviewed_game_evaluation.py` |
 | Native adaptive-field profiles, resized decode/cache coordinates and verified GPU references | `scout/cli.py`, `scout/detect.py`, `scout/media.py`, `scout/inference.py`, `tests/test_decode_profile.py`, `tests/test_reference_assets.py` |
 | Trained classifier, derived play features, evaluation and parameter tuning | `scout/model.py`, `scout/model_features.py`, `scout/evaluate.py`, `scout/tune.py` |
-| Game-grouped HGB/MLP/AdaBoost/forest comparison and timestamp metrics | `scripts/benchmark-classifiers.py`, `tests/test_classifier_benchmark.py`, `docs/classifier-options-2026-11-10.md` |
+| Game-grouped HGB/MLP/AdaBoost/forest comparison and timestamp metrics | `scripts/benchmark-classifiers.py`, `tests/test_classifier_benchmark.py`, `docs/classifier-benchmark.md` |
 | Joint one-second boundary targets, directional costs and saved-approach plots | `docs/boundary-quality.md`, `scripts/report-classifier-benchmark.py`, `scripts/compare-boundary-approaches.py` |
-| Frozen visual boundary-window scoring and real-media speed checks | `scout/boundary_runtime.py`, `scripts/export-boundary-refiner.py`, `scripts/benchmark-boundary-pipeline.py`, `docs/visual-refiner-2026-11-13.md`, `tests/test_boundary_runtime.py` |
+| Frozen visual boundary-window scoring and real-media speed checks | `scout/boundary_runtime.py`, `scripts/export-boundary-refiner.py`, `scripts/benchmark-boundary-pipeline.py`, `docs/model-status.md`, `tests/test_boundary_runtime.py` |
 | NumPy-only exported classifier inference and numerical/boundary checks | `scout/classifier_runtime.py`, `tests/test_classifier_runtime.py` |
 | MP4 cuts, fixed pre/post export padding, cross-source clips, audio and encoding | `scout/cut.py`, `scout/desktop/export_dialog.py`, `scout/desktop/review.py` |
 | Export filename patterns and native naming preview | `scout/clip_names.py`, `scout/desktop/export_dialog.py` |
@@ -53,7 +53,7 @@ when moving responsibilities; read only paths relevant to the task.
 | Native theme, application identity and app icons | `scout/desktop/theme.py`, `scout/desktop/icons.py`, `scout/desktop/identity.py`, `scout/desktop/scout.svg`, `scout/desktop/scout.ico`, `scripts/build-icons.py` |
 | Native first-launch engine setup, downloads and verified cache | `scout/processing_runtime.py`, `scout/pip_runtime.py`, `scout/desktop/runtime_setup.py`, `docs/runtime-delivery.md` |
 | Pinned upstream engine recipes, small installers and engine catalogues | `scripts/build-runtime.py`, `packaging/runtime-worker.spec`, `docs/runtime-delivery-contract.md` |
-| Frozen runtime profile and reduced-bundle validation | `scout/runtime.py`, `tests/test_runtime_profile.py`, `docs/runtime-validation-2026-11-05.md` |
+| Frozen runtime profile and reduced-bundle validation | `scout/runtime.py`, `tests/test_runtime_profile.py`, `docs/maintenance-history.md` |
 | Packaging, entry points, dependencies and release contents | `pyproject.toml`, `MANIFEST.in`, `LICENSE` |
 | Temporary source/wheel builds and artifact validation | `scripts/check-package.py`, `tests/test_packaging.py` |
 | Standalone installer builds, disk-image retries, install checks and tag releases | `packaging/`, `scripts/build-installers.py`, `scripts/test-installer.py`, `tests/test_installer_build.py`, `.github/workflows/installers.yml` |
@@ -82,6 +82,5 @@ by Git. Tests use temporary fixtures; do not validate by modifying a real librar
 Read README only for setup and operational details. The existing CLI setup helper
 in `scout/pick.py` is separate from the native desktop workflow.
 
-Latest visual pool and interaction ablations: `docs/visual-feature-pool-2026-11-13.md`.
-
-Compact recurrent/convolution boundary-head screen: `docs/neural-boundary-context-2026-11-14.md`.
+Current accuracy/speed and remaining goals: `docs/model-status.md`, `docs/future-path.md`.
+Completed experiments and rejections: `docs/research-ledger.md`.

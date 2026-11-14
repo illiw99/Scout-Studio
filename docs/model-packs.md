@@ -8,7 +8,7 @@ jobs. Running jobs keep their selected version. The default reference detector
 and experimental faster CPU profile remain available.
 
 An experimental inference-only installer can use these packs without Torch or
-training libraries; see [runtime validation](runtime-validation-2026-11-05.md).
+training libraries; see [runtime validation](maintenance-history.md).
 No production baseline pack is included yet. A baseline needs reviewed model
 hashes, redistribution permission, source/license attribution and held-out-game
 quality approval. Synthetic test graphs are never distributed as production

@@ -20,15 +20,17 @@ processing engine appropriate for the computer. See [automatic setup](runtime-de
 
 Windows and macOS installers currently have no publisher signing certificate or
 Apple notarization. Their security systems may warn or block launch. Only allow
-an installer you obtained from this repository's release and whose SHA-256 matches
-`SHA256SUMS.txt`. Managed computers may require administrator approval. CI checks
+an installer you obtained from this repository's release and whose SHA-256 matches the GitHub asset digest and embedded tested-installer
+evidence in its release notes. Managed computers may require administrator approval. CI checks
 installation and playback; it does not establish SmartScreen reputation or
 Gatekeeper approval. macOS builds target the listed GitHub runner's OS generation;
 older macOS versions are not verified.
 
-Releases also include `release-manifest.json`, identifying the source commit,
-build run/attempt, dependency versions and installed-app checks for each installer.
-Checksums and recorded build/test identities do not replace publisher signatures.
+Current releases contain exactly the four installers. Their release notes embed
+compact tested identities; detailed build/install reports remain in Actions.
+Older releases used separate manifest/checksum attachments. These identities do
+not replace publisher signatures. Studio 1.0.2 and earlier need a one-time manual
+installer download to upgrade to this metadata format.
 
 New installations keep the game index in Qt's standard local application-data
 directory, independently of the launch directory. Remembered libraries and
@@ -147,17 +149,17 @@ After [building the packages](development.md#build-packages), install the wheel
 into the target environment, adding `[desktop]` for the native app:
 
 ```bash
-python -m pip install './dist/scout_flag-1.0.0-py3-none-any.whl[desktop]'
+python -m pip install './dist/scout_flag-1.0.3-py3-none-any.whl[desktop]'
 scout-studio
 ```
 
-The wheel is an installable Python package, not a standalone executable or a
-published PyPI release. Models, detector weights, and match data are separate.
-A wheel installation can review and export existing libraries; model-based
-detection requires a classifier configured through `model_path` in the library's
-`scout.json`. Source checkouts include `models/play.pkl`; it is deliberately
-excluded from redistributable archives. The rules segmenter is available without
-a trained play classifier.
+The wheel is a Python package, not a standalone executable or a published PyPI
+release. It includes allowlisted project-trained decision models and matching
+configuration. Generic detector weights and match data remain separate. Review
+and export need no detector; model-based detection also needs the reference or
+exported-inference dependencies. The retired `models/play.pkl` is not required.
+Custom trusted classifiers remain configurable through `model_path`; the rules
+segmenter can generate proposals without trained play weights.
 
 For approved offline default models and matching standalone media engines, see
 [default-model deployment](default-model.md). Studio chooses the active/bundled

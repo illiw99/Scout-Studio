@@ -28,3 +28,5 @@ include models/person-transformer/1.0.0/head.onnx
 include packaging/bootstrap-uv.json
 include models/scout-reviewed-precision/0.5.0/manifest.json
 include models/scout-reviewed-precision/0.5.0/classifier.json
+
+include docs/research/approaches-2026-11-07.json

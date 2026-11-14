@@ -67,105 +67,70 @@ python -m build
 This writes the wheel and source archive to `dist/`. Version metadata comes from
 `scout.__version__`; update it in one place when preparing an actual release.
 `MANIFEST.in` specifies source archive contents. Wheels contain Python code,
-Qt SVG assets, the typing marker, and package metadata.
+Qt assets, the typing marker, package metadata and explicitly allowlisted
+project-trained decision models.
 
-Models, YOLO weights, footage, fields, saved libraries, local configuration,
+Generic detector weights, arbitrary model files, footage, fields, saved libraries, local configuration,
 credentials, caches, and generated exports are excluded. A wheel is a Python
 package, not a standalone operating-system installer. Do not publish artifacts
 without explicit authorization.
 
 ## Build standalone installers and releases
 
-Linux CI installs CPU-only PyTorch before application dependencies to avoid
-downloading CUDA libraries on hosted test runners. Desktop regression tests need
-the PulseAudio client library (`libpulse0`) even with Qt's offscreen backend;
-installer build runners also install ALSA (`libasound2`).
+The **Standalone installers** workflow builds Windows x64, Linux x64 and both
+Mac architectures on PRs, `main` pushes and manual dispatch. Release CI uses
+`bootstrap`: native Qt/media support, our decision models and small hash-pinned
+engine recipes. Processing packages are fetched upstream into private Python;
+they are not frozen into large release runtime archives. See the
+[delivery contract](runtime-delivery-contract.md) and [lock regeneration](../packaging/locks/README.md).
 
-The installer spec explicitly collects TorchVision's native operator libraries,
-including modern `_C_stable` and `image_stable` extension names. Python import
-analysis alone misses these dynamically loaded files. The installed-app smoke
-check executes native NMS; failures print their JSON report and retain a
-`smoke-process.log` diagnostic artifact.
-
-The **Standalone installers** GitHub workflow runs on pull requests, pushes to
-`main` and manual dispatch. It builds Windows x64, Ubuntu x64,
-macOS Apple Silicon and macOS Intel independently using Python 3.12 and
-PyInstaller. Python, Qt, detection dependencies and FFmpeg are included; user
-data, detector weights and trained classifiers are excluded.
-
-Each installer is downloaded into a fresh runner with no checkout or application
-dependencies. CI installs it, launches the installed executable from a temporary
-working directory, verifies dependency imports, synthetic video generation and
-decoding, clip export, CLI child dispatch, the native window and video playback,
-then uninstalls it. Linux uses Xvfb. JSON reports and installer logs are retained
-as diagnostic artifacts. Builds also run the source regression suite on Linux.
-macOS builds first exercise disk-image creation with a tiny fixture. Packaging
-retries `hdiutil create` up to five times for `Resource busy` errors, keeping a
-log per attempt. Other failures stop immediately. A successful image must pass
-`hdiutil verify` before replacing the final installer. Disk-image logs are
-uploaded even when a macOS build fails.
-
-For a local build on the target operating system, use a separate build environment:
+On the target OS, use a disposable isolated build environment and the platform's
+hash-pinned dependency snapshot. Follow `.github/workflows/installers.yml` for
+exact prerequisites (Inno Setup, `dpkg-deb` or `hdiutil`; Linux Qt/PulseAudio/ALSA
+libraries). Build all native recipes before freezing:
 
 ```bash
-python -m pip install -r packaging/build-requirements.txt
-python -m pip install '.[desktop]'
-python scripts/build-installers.py
+python scripts/build-runtime.py --engine-id linux-x86_64-cpu --output-dir dist/installers
+python scripts/build-runtime.py --engine-id linux-x86_64-cuda --output-dir dist/installers
+python scripts/build-installers.py --runtime-profile bootstrap --runtime-files dist/installers
 ```
 
-Use the workflow's CPU Torch and Intel macOS compatibility constraints when
-reproducing a CI build. Windows needs Inno Setup, Linux `dpkg-deb`, and macOS
-`hdiutil`. Outputs are in `dist/installers/`. `scripts/test-installer.py` changes
-system installation state: run it only on disposable CI machines. It takes the
-downloaded installer artifact directory and does not need the source package.
+Use matching Windows engine ids, or the single native macOS id. `reference`
+and `inference` remain explicit developer build profiles. `test-installer.py`
+changes system installation state: run only on disposable machines. CI downloads
+candidates into fresh runners without the checkout, installs upstream recipes,
+then tests GUI/playback/export/worker/probes, upgrade and uninstall preservation.
+Hosted tests cannot establish physical Windows GPU speed or every codec/display.
+macOS retries only `hdiutil` resource-busy errors, verifies the final image and
+retains disk-image logs. Native NMS checks catch missing dynamic TorchVision libs.
 
-Candidate builds write `candidate.json`, recording the commit, repository,
-workflow run/attempt, platform, version, resolved dependency versions, build OS,
-Python version, minimum OS where established, model-pack status and signing
-status. SHA-256 and size checks bind the installer, build metadata and test
-helpers. Installed-app checks verify that candidate before installation. A
-`test-result.json` binds the candidate and smoke report only after the test
-command completes installation, exercise and uninstall successfully. Tested
-candidate artifacts are retained for 90 days (subject to repository retention
-limits); raw build artifacts are retained for 30 days.
+Candidate manifests bind version, commit, repository, workflow run/attempt,
+platform, dependency/build metadata, installer/helper hashes and installed-test
+evidence. Raw build artifacts last 30 days, tested candidates 90 days subject to
+repository retention. The upgrade baseline defaults to pinned 1.0.2; repository
+variables can override it. CI authenticates the fixed baseline release API lookup
+without forwarding tokens on redirects. See [upgrade policy](updates.md).
 
-To release, update `scout.__version__` and the changelog, merge/push that commit
-to `main`, and wait for its complete **Standalone installers** run to succeed.
-Then deliberately push the matching tag, for example `v1.0.0`, pointing to that
-**same commit**. The separate **Promote tested installers** workflow reads GitHub
-run/job/artifact metadata and selects the newest successful push-to-main build
-for that exact commit and repository. PR and manual-dispatch builds cannot be
-promoted. Manual runs remain useful for build diagnostics.
+For release, update `scout.__version__`/changelog, push the commit to `main`, wait
+for its complete four-build/four-installed-test run, then push the authorized
+version tag at that same commit. Promotion selects only a successful push-to-main
+run for that exact repository/commit. PR/manual builds cannot be promoted.
+Current-attempt job/step evidence must be complete; a partial rerun is insufficient.
+Expired artifacts require rebuilding/retesting; tag promotion never rebuilds.
 
-Promotion requires successful build, manifest, actual installed-app test,
-evidence-recording and upload steps on all four platforms in the selected run's
-current attempt. Re-run **all jobs** when retrying a candidate: a partial rerun
-does not establish a complete current-attempt release. If the main build is still
-running, retry the failed promotion after it completes. Reruns replace that
-run's old candidate artifacts; run-attempt checks reject mixed evidence.
-Expired candidates must be rebuilt and retested before promotion; the tag
-workflow never rebuilds.
+Promotion uses the tagged verifier, treats downloaded helpers as data, validates
+all hashes/test bindings and publishes exactly four unchanged installers. Compact
+candidate evidence lives in release notes, matched by the updater to GitHub asset
+digests. No checksum/manifest/runtime attachments or support releases are needed.
+Old releases retain their original metadata. Existing Studio ≤1.0.2 needs a manual
+installer download once for the metadata transition. Only promotion has repository
+write permission; creating a tag still requires user authorization.
 
-The promotion job executes its verifier from the tagged source checkout and
-treats downloaded artifact helpers as data. It checks all candidate identities,
-installer/helper hashes, smoke checks, test-evidence bindings and tag/version
-agreement before assembling output. It copies the unchanged installers and
-rechecks their hashes, then publishes those four files, `SHA256SUMS.txt` and
-`release-manifest.json`. Existing output directories are rejected. There are no
-build, dependency-installation or signing steps in promotion. Only that job has
-repository write permission; creating a tag still publishes automatically when
-verification succeeds. Do not push release tags without authorization.
-
-Local promotion logic is checked with temporary fake installers and reports in
-`tests/test_release_candidate.py`; those checks do not install anything or call
-GitHub. Real hosted workflow, installation and release execution must still be
-verified on GitHub. Candidate builds now install full transitive, hash-pinned
-platform sets from `packaging/locks/` into fresh Python3.12 virtual environments;
-application installation disables dependency resolution and build isolation.
-Headless OpenCV is restored from its hashed pin after removing the overlapping
-Qt distribution. See [lock regeneration](../packaging/locks/README.md).
-Upgrade tests remain roadmap work. The Windows
-minimum supported desktop OS is not yet established and is recorded as null.
+`tests/test_release_candidate.py` and related fixture tests exercise rejection
+paths without installing applications. Real native build/install/upgrade results
+are linked from [model status](model-status.md); do not describe local offscreen
+coverage as platform/hardware evidence. Minimum supported Windows/macOS versions
+remain incompletely established.
 
 Windows code signing and Apple Developer signing/notarization are not configured.
 Add those credentials and signing steps before distributing to environments that

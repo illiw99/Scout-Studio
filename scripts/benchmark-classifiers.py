@@ -4,7 +4,7 @@
 Input: an isolated approach-study manifest.json and person/<game>.npz (t, X,
 names). X contains expanded, excluded features before temporal window stacking.
 Never opens footage, reviews, production caches or pickles. Outputs are research
-evidence, not automatically installable models. See docs/classifier-options-2026-11-10.md.
+evidence, not automatically installable models. See docs/classifier-benchmark.md.
 """
 from __future__ import annotations
 

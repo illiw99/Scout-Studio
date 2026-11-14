@@ -9,7 +9,7 @@ arbitrary Python imports or downloads weights during inference.
 The existing accepted pipeline remains the default. Three experimental recipes
 can be imported separately: person features plus a temporal transformer, S3D video
 features plus a temporal head, and MobileNet frame features plus a temporal head.
-See [the comparison](play-approach-comparison-2026-11-07.md) before choosing them.
+See [the comparison](research-ledger.md) before choosing them.
 They have **not** earned promotion over the default.
 
 ## Studio and CLI
@@ -40,7 +40,7 @@ python -m scout --source-dir /recordings/game \
   --device cpu --threads 4 --source-index 0 --offset 480 --seconds 180
 ```
 
-Use `--model-pack scout-reviewed-precision@0.3.0` instead of `--play-pipeline` to
+Use `--model-pack scout-reviewed-precision@0.5.0` instead of `--play-pipeline` to
 measure the accepted baseline. Benchmarks include model loading, bounded decoding,
 features, interval generation and review writing, with fresh private caches. They
 exclude interpreter imports and MP4 encoding; measure external command wall time
