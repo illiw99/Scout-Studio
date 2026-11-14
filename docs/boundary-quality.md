@@ -62,3 +62,39 @@ and global temporal context for proposal refinement, and
 [TriDet](https://arxiv.org/abs/2303.07347), which models relative boundary
 distributions. Scout experiments inspired by them are not reproductions of
 their published benchmarks.
+
+## Protective boundaries versus exact timing
+
+The released 0.5.0 refiner ranks candidates by learned probability of a nearby
+boundary, with a tiny preference for smaller shifts. The 4× directional cost above
+is an evaluation/selection measure; it is not an explicit asymmetry in that
+released candidate-scoring rule. Learned asymmetric targets/quantile heads and
+bounded protective margins are distinct experiments, not interchangeable claims.
+
+A 14 November development-selected calibration used 176 pre/post combinations on the
+frozen refiner's nested predictions, then scored four confirmation games. It
+preserved original predicted cores and bounded margins at video ends/neighboring
+gaps. No model training, audio or production default changes were involved.
+
+| Policy, pre/post seconds | Both cuts ±1 s / all GT | One-sided 1 s coverage / all GT | Lost action seconds / matched play | Extra context seconds / matched play |
+| --- | ---: | ---: | ---: | ---: |
+| Released,0/0 |73.48%|82.93%|0.595|0.415|
+| Timing-guarded,0.2/0.2 |72.87%|85.67%|0.428|0.647|
+| Protective4×,0.2/0.6 |68.60%|91.16%|0.290|0.910|
+| Protective8×/16×,0.3/0.8 |59.45%|91.77%|0.224|1.144|
+
+All retain event P92.05/R98.78 and minimum-game recall 96.15%. One-sided coverage
+means neither late start nor early end exceeds 1 s; it does not require symmetric
+closeness or guarantee zero cropped action. Misses fail both coverage measures.
+More padding can improve protection while worsening strict timing. Neither metric
+should be relabeled as the other. Export padding remains separately configurable.
+
+The timing-guarded policy was selected with ≤1 percentage-point development joint
+loss,≤1.5 s mean extra context and≤0.03 mean IoU loss. Protective policies allowed
+≤2 s extra/≤0.05 IoU loss. All required ≥95% per-game development recall and no event
+precision decrease. The 4/8/16× cost choices were frozen before confirmation scoring.
+The study reuses inspected validation games; it is not fresh blind confirmation.
+Details: sibling `PlayChop-Experiments/protective-boundary-policy-2026-11-14/`
+contains `PROTOCOL.md`, `driver.py`, frozen selection, all configurations and
+`results/{report,summary}.json`. New defaults require a deliberate quality/safety
+tradeoff; these margins are not a trained boundary-accuracy improvement.

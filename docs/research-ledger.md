@@ -39,6 +39,7 @@ No audio-assisted approach is eligible. Clip export audio is unaffected.
 | Six proposal verifiers, 21 thresholds each | Selected threshold kept every proposal; no precision gain under the 95% per-game development recall floor | Reject unchanged; no confirmation threshold cherry-picking |
 | Eight end-only long-pool head settings | Selected joint 74.39%; no major gain from depth/tolerance/regularization/iterations | Retain the original small head as reference |
 | Compact neural boundary heads | Selected soft-GRU joint 72.87%, below HGB73.48 | Not promoted; small screen, not exhaustive NN optimization |
+| Protective margin calibration (14 November) | Pre0.2/post0.6 halves mean lost action, but joint timing falls73.48→68.60%; gentle0.2/0.2 gives72.87% | Safety/context tradeoff, not learned timing gain; [details](boundary-quality.md#protective-boundaries-versus-exact-timing) |
 | Audio features | Explicitly disallowed; derived arrays/checkpoints removed | Do not retry without a changed user instruction |
 
 ## Classifier and full temporal-head comparison — 10 November
